@@ -10,17 +10,17 @@ p {
   margin-top: 0;
 }
 h1 {
-  font-size: 21px;
+  font-size: var(--font-21);
   font-weight: 600;
   letter-spacing: -0.4px;
   margin-bottom: 4px;
 }
 h2 {
-  font-size: 17px;
+  font-size: var(--font-17);
   font-weight: 600;
 }
 small {
-  font-size: 11px;
+  font-size: var(--font-11);
 }
 .app-shell {
   display: grid;
@@ -43,11 +43,11 @@ small {
   margin: 0 8px 28px;
 }
 .brand strong {
-  font-size: 19px;
+  font-size: var(--font-19);
   letter-spacing: -0.7px;
 }
 .brand-caption {
-  font-size: 10px;
+  font-size: var(--font-10);
   max-width: 65px;
   line-height: 1.2;
 }
@@ -67,7 +67,7 @@ small {
 .sidebar nav small {
   display: block;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--font-10);
   letter-spacing: 0.9px;
   margin: 20px 12px 8px;
 }
@@ -101,7 +101,7 @@ small {
   color: var(--muted);
 }
 .sidebar-bottom select {
-  font-size: 12px;
+  font-size: var(--font-12);
   padding: 5px;
 }
 .workspace {
@@ -150,7 +150,7 @@ small {
   margin-bottom: 28px;
 }
 .eyebrow {
-  font-size: 10px;
+  font-size: var(--font-10);
   letter-spacing: 1.1px;
   color: var(--muted);
   margin-bottom: 8px;
@@ -188,7 +188,7 @@ small {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-  font-size: 12px;
+  font-size: var(--font-12);
 }
 .connection {
   display: flex;
@@ -215,7 +215,7 @@ small {
   flex-wrap: wrap;
 }
 .runtime button {
-  font-size: 11px;
+  font-size: var(--font-11);
   padding: 5px 7px;
 }
 .runtime-message {
@@ -241,10 +241,10 @@ small {
   flex-wrap: wrap;
 }
 .gallery-banner strong {
-  font-size: 12px;
+  font-size: var(--font-12);
 }
 .gallery-banner label {
-  font-size: 12px;
+  font-size: var(--font-12);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -279,7 +279,7 @@ small {
   }
   .sidebar nav button {
     padding: 8px;
-    font-size: 12px;
+    font-size: var(--font-12);
   }
   .toolbar {
     flex-wrap: wrap;
@@ -314,14 +314,14 @@ small {
   min-height: 0;
 }
 .count {
-  font-size: 12px;
+  font-size: var(--font-12);
   margin: 4px 0 0;
 }
 .view-mode {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--font-12);
   color: var(--muted);
 }
 .view-mode select {
@@ -357,7 +357,7 @@ small {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--font-12);
   margin: 12px 0;
 }
 .check-field {
@@ -365,7 +365,7 @@ small {
   align-items: center;
   gap: 8px;
   margin: 12px 0;
-  font-size: 13px;
+  font-size: var(--font-13);
 }
 .check-field input,
 input[type="checkbox"],
@@ -381,7 +381,7 @@ input[type="radio"] {
   gap: 12px;
   align-items: center;
   margin: 0 0 16px;
-  font-size: 12px;
+  font-size: var(--font-12);
   padding: 8px 12px;
   background: var(--raised);
   border-radius: 6px;
@@ -397,14 +397,14 @@ input[type="radio"] {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
-  font-size: 12px;
+  font-size: var(--font-12);
 }
 .selection-toolbar small:last-child {
   flex-basis: 100%;
   color: var(--muted);
 }
 .selection-toolbar button {
-  font-size: 11px;
+  font-size: var(--font-11);
 }
 .list-heading {
   display: grid;
@@ -412,7 +412,7 @@ input[type="radio"] {
   gap: 16px;
   padding: 0 94px 12px 12px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-11);
 }
 .list-heading label {
   display: flex;
@@ -465,7 +465,7 @@ input[type="radio"] {
   background: none;
 }
 .filename {
-  font-size: 13px;
+  font-size: var(--font-13);
   font-weight: 600;
   max-width: 100%;
   overflow: hidden;
@@ -476,7 +476,7 @@ input[type="radio"] {
   text-decoration: line-through;
 }
 .row-subtitle {
-  font-size: 11px;
+  font-size: var(--font-11);
   color: var(--muted);
   max-width: 100%;
   overflow: hidden;
@@ -487,12 +487,12 @@ input[type="radio"] {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 11px;
+  font-size: var(--font-11);
   font-variant-numeric: tabular-nums;
 }
 .row-progress small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--font-10);
 }
 .row-progress progress {
   width: 100%;
@@ -520,13 +520,13 @@ progress::-moz-progress-bar {
   text-align: center;
 }
 .row-speed {
-  font-size: 12px;
+  font-size: var(--font-12);
   font-variant-numeric: tabular-nums;
 }
 .row-speed small {
   display: block;
   margin-top: 4px;
-  font-size: 10px;
+  font-size: var(--font-10);
   color: var(--muted);
 }
 .row-action {
@@ -564,12 +564,12 @@ progress::-moz-progress-bar {
   width: 100%;
   justify-content: flex-start;
   border: 0;
-  font-size: 12px;
+  font-size: var(--font-12);
   padding: 7px;
 }
 .row-details {
   padding: 4px 24px 20px 68px;
-  font-size: 12px;
+  font-size: var(--font-12);
 }
 .metadata {
   display: grid;
@@ -582,7 +582,7 @@ progress::-moz-progress-bar {
 }
 .metadata dt {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-11);
   margin-bottom: 4px;
 }
 .metadata dd {
@@ -630,7 +630,7 @@ form > details summary {
   margin-bottom: 16px;
 }
 .modal header h2 {
-  font-size: 19px;
+  font-size: var(--font-19);
   margin-bottom: 0;
 }
 .modal header > button {
@@ -639,11 +639,11 @@ form > details summary {
   padding: 4px;
 }
 .modal p {
-  font-size: 13px;
+  font-size: var(--font-13);
   line-height: 1.6;
 }
 .modal .eyebrow {
-  font-size: 10px;
+  font-size: var(--font-10);
   margin-bottom: 6px;
 }
 .dialog-actions {
@@ -663,7 +663,7 @@ form > details summary {
 .pending,
 .sample-note {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-12);
   background: var(--raised);
   border-radius: 6px;
   padding: 12px;
@@ -671,7 +671,7 @@ form > details summary {
 }
 .error-text {
   color: var(--danger);
-  font-size: 12px;
+  font-size: var(--font-12);
 }
 .error-text:empty {
   display: none;
@@ -694,7 +694,7 @@ form > details summary {
 }
 .settings-layout nav button {
   justify-content: flex-start;
-  font-size: 12px;
+  font-size: var(--font-12);
   border: 0;
   background: none;
 }
@@ -703,7 +703,7 @@ form > details summary {
   font-weight: 600;
 }
 .settings-layout h3 {
-  font-size: 15px;
+  font-size: var(--font-15);
 }
 .settings-layout fieldset {
   border: 0;
@@ -715,7 +715,7 @@ form > details summary {
   list-style: none;
   padding: 0;
   flex-wrap: wrap;
-  font-size: 12px;
+  font-size: var(--font-12);
   color: var(--muted);
   margin: 20px 0;
 }
@@ -765,11 +765,11 @@ form > details summary {
   margin-right: 8px;
 }
 .gallery-banner button {
-  font-size: 11px;
+  font-size: var(--font-11);
   padding: 5px 7px;
 }
 .gallery-banner select {
-  font-size: 12px;
+  font-size: var(--font-12);
   padding: 4px;
 }
 @media (max-width: 1120px) {
@@ -828,7 +828,7 @@ form > details summary {
     padding: 8px 16px;
   }
   .row-subtitle {
-    font-size: 10px;
+    font-size: var(--font-10);
   }
   .metadata {
     gap: 12px;
@@ -850,7 +850,7 @@ form > details summary {
     padding: 20px;
   }
   .runtime-actions button {
-    font-size: 10px;
+    font-size: var(--font-10);
   }
 }
 @media (max-width: 620px) {
@@ -898,6 +898,6 @@ form > details summary {
     padding: 12px;
   }
   .filters > summary {
-    font-size: 12px;
+    font-size: var(--font-12);
   }
 }

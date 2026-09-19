@@ -1,4 +1,16 @@
 :root {
+  --font-10: 11px;
+  --font-11: 12px;
+  --font-12: 13px;
+  --font-13: 14px;
+  --font-14: 15px;
+  --font-15: 16px;
+  --font-16: 17px;
+  --font-17: 18px;
+  --font-19: 20px;
+  --font-21: 22px;
+  --font-22: 23px;
+  line-height: 1.45;
   color-scheme: light;
   --bg: #f6f7f8;
   --surface: #fbfbfc;
@@ -10,7 +22,7 @@
   --danger: #b42318;
   --success: #18704a;
   font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
-  font-size: 14px;
+  font-size: var(--font-14);
 }
 :root[data-theme="dark"] {
   color-scheme: dark;

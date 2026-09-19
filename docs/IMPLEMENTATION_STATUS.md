@@ -122,3 +122,9 @@ Defectos corregidos y comprobados: expansión manual se perdía al filtrar hasta
 **Confirmado por el propietario:** únicamente reconexión tras iniciar runtime manualmente (transición anterior), y cierre de la ventana anterior para permitir recompilar. No atribuirle aprobación estética, navegadores o DPI.
 
 **Pendiente de esta entrega:** revisión visual del propietario y CI del HEAD de su PR; ninguna descarga se puede iniciar. **Pendientes posteriores:** integrar motor/datos/acciones en 03–12 según inventario, bandeja y configuración de X, instalador/actualizador, Windows 10, otras familias de navegador, menú nativo de extensión, accesibilidad exhaustiva, DPI real y rendimiento a escala. No se ha iniciado fase 03. Ver [ADR-010](decisions/010-interfaz-y-galeria.md).
+
+## Transición solicitada a fase 03
+
+Confirmación del propietario limitada a temas claro/oscuro, filas expandibles con información y gráfica, Nueva descarga y Configuración: base visual aceptada. Se pidió únicamente subir moderadamente todo el texto; decoración posterior. No equivale a aprobar accesibilidad/DPI/compatibilidad. PR #2 seguía abierta con CI de d9289d8 aprobada; el nuevo ajuste requiere sus propios checks antes de fusionar. Motor 03 no se incorpora a PR #2.
+
+Ajuste tipográfico: +1 px en toda la escala mediante tokens compartidos, sin zoom ni cambio de paleta. Build, test:ui y Check.ps1 -Integration aprobados; capturas auténticas actualizadas, incluida revisión de galería pequeña y diálogos. La aprobación de CI anterior no se atribuye a este nuevo commit. SIGUIENTE_PASO de transición: comprobar su HEAD, fusionar únicamente PR #2 cuando cumpla condiciones y continuar 03 en rama independiente/dependiente explícita.
