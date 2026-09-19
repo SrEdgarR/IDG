@@ -54,3 +54,7 @@ No hay comandos de setup, desarrollo, formato, lint, tests o build de IDG. En 01
 Leer [AGENTS](../AGENTS.md), [GitHub](GITHUB_WORKFLOW.md), [arquitectura](ARCHITECTURE.md), [ADR](decisions/README.md), [trazabilidad](TRACEABILITY.md) y [plan de pruebas](TEST_PLAN.md). Fases posteriores: rama por tarea y PR, sin merge automático.
 
 En 01 crear el esqueleto mínimo y probar handshake Chromium/Firefox, registro reversible del host y carga local de extensión. Estos pasos aún no están probados. No usar IDs, firmas ni credenciales ficticios en producción.
+
+### Comandos disponibles durante el primer incremento de fase 01
+
+Con Cargo en PATH (o su ruta de usuario): `cargo test -p idg-protocol`, `cargo fmt --all`, `cargo run -p idg-protocol --bin export-types`. Todavía no hay una aplicación iniciable en este incremento.

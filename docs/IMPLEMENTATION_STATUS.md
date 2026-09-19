@@ -61,3 +61,7 @@ Aún no existe evidencia de ejecución del programa. Nada en este archivo certif
 ## SIGUIENTE_PASO
 
 Ejecutar únicamente [prompts/01_esqueleto_y_puente.md](../prompts/01_esqueleto_y_puente.md) en una nueva tarea y rama por fase. Primero comprobar/preparar Rust MSVC, C++/SDK, pnpm y WebView2 con autorización para cualquier instalación del sistema; fijar paquetes/lockfiles y probar el puente mínimo real en Chromium y Firefox. No avanzar a fase 02.
+
+## Fase 01 — en curso
+
+Primer incremento: workspace Rust 1.98.1, protocolo v1 y tipos TypeScript generados. `cargo test -p idg-protocol`: 4 pruebas pasadas (framing fragmentado/EOF, límites/truncamiento, escritura y JSON/IDs inválidos). La prueba inicial falló por funciones aún no implementadas; se corrigió además la llamada de generación para la API actual ts-rs 12. Runtime, escritorio y navegadores todavía pendientes. Rust instalado por usuario con autorización, sin modificar PATH global. Build Tools autorizado, instalación en curso; WebView2 153.0.4234.32 presente.
