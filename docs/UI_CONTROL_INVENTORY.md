@@ -60,7 +60,7 @@ Leer [INTERFAZ.md](INTERFAZ.md) y [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md). Al imple
 | CTL-052 | Actualización | Más tarde / Actualizar y reiniciar | Aceptar instalación verificada o posponer | UpdateCoordinator | Firma válida y usuario acepta | Rechazo/fallo/descargas activas seguros | 13 | PLANIFICADO |
 | CTL-053 | Bandeja | Abrir/nueva/pausar/reanudar/AutoPick | Controlar runtime desde bandeja | Tray commands | Runtime accesible | Estado sincronizado con ventana | 05,07 | PLANIFICADO |
 | CTL-054 | Bandeja | Salir | Detener aplicación tras advertir | ShutdownRuntime | Confirmación aplicable | No reactivar host en bucle | 05,13 | PLANIFICADO |
-| CTL-055 | Extensión | Estado/badge/icono | Reflejar conexión y trabajos reales | Runtime events | Handshake real | Sin timer ficticio ni datos stale como actuales | 01,07,08 | PLANIFICADO |
+| CTL-055 | Extensión | Estado/badge/icono | Reflejar conexión y trabajos reales | Runtime events | Handshake real | Sin timer ficticio ni datos stale como actuales | 01,07,08 | EN_CURSO: conexión VERIFICADA en 01; badge/trabajos pendientes |
 | CTL-056 | Extensión | AutoPick global/por sitio | Cambiar modo efectivo | UpdateSettings | Permisos válidos | Reconexión y opción persistente | 07,08 | PLANIFICADO |
 | CTL-057 | Extensión | Controles de trabajos/Abrir IDG | Actuar sobre mismo trabajo del escritorio | Native commands | Host disponible | Error si app ausente; no éxito ficticio | 07,08 | PLANIFICADO |
 | CTL-058 | Extensión | Usar navegador | Conservar vía funcional sin recaptura | ReleaseCapture | Captura no comprometida | POST/blob/no transferible con fallback | 07,08 | PLANIFICADO |
@@ -76,3 +76,17 @@ Leer [INTERFAZ.md](INTERFAZ.md) y [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md). Al imple
 Un aviso de éxito, un `onClick` vacío o un cambio cosmético no acredita el control. La fase 02 puede construir componentes en galería; las fases de integración conectan acciones reales. En la versión utilizable no se presentan controles ficticios como capacidades disponibles.
 
 No omitir estados de error, foco/teclado, loading, cancelación, permisos o ausencia de runtime. Las acciones que eliminan del disco requieren comprobaciones distintas de las que quitan una entrada del historial.
+
+## Controles del esqueleto de desarrollo — fase 01
+
+Estos controles auxiliares no sustituyen CTL-001 a CTL-065 ni adelantan la UI completa.
+
+| Control | Efecto real | Comprobación |
+|---|---|---|
+| Escritorio: estado/PID/clientes | Snapshot del runtime por backend Tauri | test-desktop.mjs; captura visual revisada |
+| Escritorio: Reconectar | Aborta conexión anterior y abre handshake/suscripción | Desconexión y reconexión en test-desktop |
+| Escritorio: Comprobar conexión | Ping real con respuesta correlacionada | test-desktop |
+| Escritorio: Detener motor | Shutdown afecta a todos los clientes, sin relanzamiento | test-desktop y test-runtime |
+| Extensión: estado y Reconectar | Handshake/suscripción por Native Messaging; error al faltar host | test-chromium y test-firefox; host desregistrado probado en Chromium |
+
+Semántica accesible, estados ocupados/deshabilitados y foco CSS presentes. Recorrido manual exhaustivo con teclado, DPI y lector de pantalla pendiente; no se declara accesibilidad completa.

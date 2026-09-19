@@ -48,6 +48,13 @@ pub struct Snapshot {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct ConnectionState {
+    pub connected: bool,
+    pub snapshot: Option<Snapshot>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Payload {
     Hello {

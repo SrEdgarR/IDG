@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/idg-protocol"]
+members = ["crates/idg-core", "crates/idg-protocol", "crates/idg-platform-windows", "crates/idg-runtime", "crates/idg-native-host", "apps/desktop/src-tauri"]
 resolver = "3"
 
 [workspace.package]

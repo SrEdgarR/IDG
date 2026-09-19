@@ -1,0 +1,22 @@
+{
+  "name": "idg",
+  "private": true,
+  "version": "0.1.0",
+  "license": "GPL-3.0-only",
+  "packageManager": "pnpm@12.4.2",
+  "engines": {
+    "node": ">=24.14.0 <25"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @idg/desktop tauri dev",
+    "build": "pnpm --filter @idg/desktop build",
+    "desktop:build": "pnpm --filter @idg/desktop tauri build --debug --no-bundle",
+    "check": "pnpm --filter @idg/desktop check && pnpm --filter @idg/extension check",
+    "extension:build": "pnpm --filter @idg/extension build",
+    "test": "node scripts/test-runtime.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0",
+    "selenium-webdriver": "4.49.0"
+  }
+}

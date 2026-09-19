@@ -5,3 +5,4 @@ export type Snapshot = { runtime_id: string, process_id: number, sequence: numbe
 export type Payload = { "kind": "hello", capabilities: Array<Command>, snapshot: Snapshot, } | { "kind": "pong" } | { "kind": "snapshot", snapshot: Snapshot, } | { "kind": "subscribed", snapshot: Snapshot, } | { "kind": "stopping" } | { "kind": "error", code: ErrorCode, };
 export type Request = { version: number, id: string, command: Command, };
 export type Response = { version: number, id: string, payload: Payload, };
+export type ConnectionState = { connected: boolean, snapshot: Snapshot | null, error: string | null, };

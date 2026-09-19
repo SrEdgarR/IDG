@@ -14,3 +14,5 @@ Fecha: 2026-09-19. Aceptadas como diseño de la fase 00; ninguna implica impleme
 | [008](008-recuperacion.md) | Checkpoints y finalización segura | Fallos de proceso/disco en 03/04 |
 
 Implementar solo el mínimo pedido en [fase 01](../../prompts/01_esqueleto_y_puente.md), sin anticipar el motor ni la interfaz completa. Pruebas detalladas: [TEST_PLAN](../TEST_PLAN.md).
+
+Concreción y evidencia de fase 01: [ADR-009](009-esqueleto-verificado.md).

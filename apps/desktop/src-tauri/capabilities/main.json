@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "Solo eventos de conexión en la ventana local de IDG.",
+  "windows": ["main"],
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten", "allow-connect-runtime", "allow-ping-runtime", "allow-shutdown-runtime"]
+}

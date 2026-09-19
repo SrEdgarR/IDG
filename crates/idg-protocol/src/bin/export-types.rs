@@ -1,4 +1,4 @@
-use idg_protocol::{Command, ErrorCode, Payload, Request, Response, Snapshot};
+use idg_protocol::{Command, ConnectionState, ErrorCode, Payload, Request, Response, Snapshot};
 use ts_rs::TS;
 
 fn main() {
@@ -10,6 +10,7 @@ fn main() {
         Payload::decl(&config),
         Request::decl(&config),
         Response::decl(&config),
+        ConnectionState::decl(&config),
     ]
     .into_iter()
     .map(|line| format!("export {line}\n"))

@@ -2,9 +2,9 @@
 
 ## Disponibilidad actual
 
-**Este kit no incluye un instalador ni una extensión lista para usar.** Su contenido es la base documental para desarrollar el programa. Esta guía se actualizará al existir artefactos verificados.
+**Este kit no incluye un instalador ni una extensión lista para usar.** Incluye un esqueleto de desarrollo que comprueba conexiones reales, todavía sin descargas. Esta guía se actualizará al existir artefactos verificados.
 
-La plataforma objetivo es Windows 10 y Windows 11, inicialmente x64. La compatibilidad exacta, dependencias y versión mínima se indicarán a partir de las pruebas de cada publicación. No se han ejecutado pruebas del programa por el hecho de preparar este kit.
+La plataforma objetivo es Windows 10 y Windows 11, inicialmente x64. La compatibilidad exacta, dependencias y versión mínima se indicarán a partir de las pruebas de cada publicación. El esqueleto se ejecutó en Windows 11 x64; Windows 10 y la distribución final siguen pendientes.
 
 ## Instalación para usuarios — cuando exista una versión publicada
 
@@ -25,7 +25,7 @@ Elegir carpeta de descarga; decidir si se organiza por tipos; conectar la extens
 
 ## Extensión de desarrollo
 
-Una extensión local no equivale a una publicación oficial. Las instrucciones para cargarla y los permisos necesarios se incorporarán a [DESARROLLO.md](DESARROLLO.md) cuando exista el código y se haya probado cada navegador. No recomendar a usuarios finales pasos de desarrollo como si fueran la instalación normal.
+Una extensión local no equivale a una publicación oficial. Las instrucciones probadas de carga local y registro reversible están en [DESARROLLO.md](DESARROLLO.md). No recomendar a usuarios finales pasos de desarrollo como si fueran la instalación normal.
 
 ## Actualizar y desinstalar
 
@@ -35,6 +35,6 @@ La documentación final debe describir cómo desinstalar la aplicación y la ext
 
 ## Resolver problemas
 
-Mientras no exista una versión ejecutable, informa el archivo o fase de desarrollo implicada. Después de publicar, cada problema debe indicar Windows, versión de IDG, navegador, pasos y error visible, sin incluir cookies, credenciales o enlaces privados.
+Para el esqueleto de desarrollo, informa el comando y la fase implicada. Después de publicar, cada problema debe indicar Windows, versión de IDG, navegador, pasos y error visible, sin incluir cookies, credenciales o enlaces privados.
 
 Consulta [estado de implementación](IMPLEMENTATION_STATUS.md) para saber qué está realmente disponible.

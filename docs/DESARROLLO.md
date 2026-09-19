@@ -1,60 +1,104 @@
 # Desarrollo de IDG
 
-Guía para programar IDG; la [instalación para usuarios](INSTALACION.md) está separada. La fase 00 contiene documentación: no hay aplicación compilable, paquetes, lockfiles ni scripts de setup/build/lint/tests del producto.
+La fase 01 contiene un esqueleto ejecutable de conexión. No descarga archivos. La [instalación para usuarios](INSTALACION.md) sigue pendiente de una publicación; cargar esta extensión local es una prueba de desarrollo.
 
-## Entorno inspeccionado el 2026-09-19
+## Entorno y versiones comprobados
 
-| Componente | Observado | Decisión para fase 01 |
-|---|---|---|
-| Windows | Windows 11 Pro, 10.0.26200, 64 bits | Objetivo Windows 10/11 x64; programa sin comprobar |
-| Git / GitHub | Git y GCM disponibles, cuenta SrEdgarR autenticada; gh ausente | API oficial y Git/GCM; identidad solo local |
-| Node.js / npm | v24.14.0 / 11.9.0 | Línea Node 24 LTS; npm no será segundo gestor |
-| pnpm | No encontrado en PATH | Fijar pnpm 12.4.2 como único gestor JS |
-| Rust/Cargo | No encontrados en PATH ni rustc en ubicación convencional del usuario | Rust 1.98.1, target x86_64-pc-windows-msvc |
-| C++/SDK | vswhere no devolvió instalación con VC.Tools.x86.x64 | Verificar/preparar Desktop development with C++ y Windows SDK |
-| WebView2 | No comprobado en esta fase documental | Verificar runtime y registrar versión antes de Tauri |
+El 2026-09-19: Windows 11 Pro 10.0.26200 x64, AMD Ryzen 7 5700X, Rust/Cargo 1.98.1 MSVC, Build Tools 2022 17.14.41 con C++/Windows SDK, WebView2 153.0.4234.32, Node 24.14.0, npm 11.9.0 y pnpm 12.4.2. Firefox 156.0 instalado por el propietario; Chrome for Testing 153.0.8010.12 en perfil separado. No se ha comprobado Windows 10 ni otros navegadores.
 
-No se instalaron componentes del sistema. Prepararlos requiere consentimiento según AGENTS.md. Estas limitaciones no bloquean documentación/Git; sí condicionan el build de fase 01.
+Rust y Build Tools se instalaron con consentimiento; no se cambió PATH global ni se desactivaron protecciones. Rust está en `%USERPROFILE%\.cargo\bin`. El wrapper pnpm presente en PATH devolvía 11.19.0; los comandos usan explícitamente `npx --yes pnpm@12.4.2`.
 
-## Versiones y requisitos contrastados
+Versiones exactas y transitivas en Cargo.lock/pnpm-lock.yaml. Principales: Tauri 2.11.5 (CLI 2.11.4/API JS 2.11.1), React 19.3.0, TypeScript 7.0.2, Vite 8.3.0, Tokio 1.53.1 y ts-rs 12.0.1. La combinación fue resuelta, compilada y ejecutada; no implica compatibilidad universal. Las fuentes oficiales están en [ADR-009](decisions/009-esqueleto-verificado.md).
 
-Conservar Rust + Tauri **2** + React/TypeScript + WebExtensions, SQLite local y GPL-3.0-only. [ADR-001](decisions/001-plataforma.md) registra la elección.
+## Preparar y compilar
 
-El [manifiesto stable oficial de Rust](https://static.rust-lang.org/dist/channel-rust-stable.toml) consultado indica **1.98.1**, fechado 2026-09-03. Toolchain y MSRV inicial de proyecto: 1.98.1, edición 2024. El MSRV es una política conservadora pendiente de build, no una medición del compilador mínimo posible. En 01 crear rust-toolchain.toml y declarar rust-version, comprobando dependencias.
+Instala previamente [Rust MSVC](https://rustup.rs/), [C++/SDK y WebView2 requeridos por Tauri](https://v2.tauri.app/start/prerequisites/) y Node 24. No omitas comprobaciones de firma ni cambies la política de seguridad de PowerShell para ejecutar scripts.
 
-[Node.js](https://nodejs.org/en/about/previous-releases) documenta la línea 24 LTS. [pnpm](https://pnpm.io/installation) admite Node 24 y Windows x64; el [registro de pnpm](https://registry.npmjs.org/pnpm/12.4.2) confirmó 12.4.2. pnpm no se ejecutó ni resolvió paquetes. Fijar packageManager y pnpm-lock.yaml con la primera instalación real, sin package-lock.json paralelo.
-
-[Tauri](https://v2.tauri.app/start/prerequisites/) requiere herramientas C++ y WebView2 en Windows; usar Rust MSVC. En 01 fijar versiones estables exactas compatibles de Tauri 2, React, TypeScript y herramientas frontend al resolver el esqueleto. No hay dependencias instaladas para certificar esa combinación. Comprometer Cargo.lock y el lockfile JS entonces; no crear módulos vacíos en 00.
-
-## Comprobaciones disponibles
-
-Desde la raíz, estos comandos existen y se ejecutaron durante la preparación documental:
+Desde la raíz en PowerShell 7:
 
 ```powershell
-git status --short --branch
-git remote -v
-git diff --cached --check
+$env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
+rustup show
 node --version
-npm.cmd --version
+npx --yes pnpm@12.4.2 --version
+npx --yes pnpm@12.4.2 install --frozen-lockfile
+cargo build --locked -p idg-runtime -p idg-native-host -p idg-platform-windows
+npx --yes pnpm@12.4.2 desktop:build
+npx --yes pnpm@12.4.2 extension:build
 ```
 
-Para comparar commit local y main publicado después del push:
+`desktop:build` genera un ejecutable debug con frontend integrado, sin instalador. No basta compilar el HTML ni abrirlo en el navegador. Mantén los tres ejecutables junto a `idg-probe.exe` en `target/debug`: la autenticación del pipe verifica sus rutas. `0.1.0` es una versión interna de paquetes, no una release publicada.
+
+## Abrir y usar el esqueleto
+
+En una terminal desde la raíz:
 
 ```powershell
-git rev-parse HEAD
-git ls-remote origin refs/heads/main
+.\target\debug\idg-runtime.exe
 ```
 
-La fase 00 revisa enlaces Markdown locales, continuidad CTL-001 a CTL-065, trazabilidad y patrones de secretos sobre el contenido a versionar. Los resultados están en [IMPLEMENTATION_STATUS](IMPLEMENTATION_STATUS.md). Una búsqueda de patrones no garantiza ausencia absoluta de secretos.
+En otra terminal:
 
-No hay comandos de setup, desarrollo, formato, lint, tests o build de IDG. En 01 documentarlos solo después de crear y ejecutar sus scripts. Separar pruebas portables del core, navegador, WebView y programa Windows real.
+```powershell
+.\target\debug\idg-desktop.exe
+```
 
-## Continuación
+La ventana muestra **Conectado** tras un handshake real. **Comprobar conexión** envía ping; **Reconectar** sustituye la conexión; **Detener motor** cierra el runtime y desconecta todos los clientes. Cerrar la ventana conserva el runtime. Inícialo otra vez manualmente y pulsa Reconectar. Sin runtime muestra Desconectado; ningún cliente lo relanza automáticamente.
 
-Leer [AGENTS](../AGENTS.md), [GitHub](GITHUB_WORKFLOW.md), [arquitectura](ARCHITECTURE.md), [ADR](decisions/README.md), [trazabilidad](TRACEABILITY.md) y [plan de pruebas](TEST_PLAN.md). Fases posteriores: rama por tarea y PR, sin merge automático.
+Para desarrollo con recarga: inicia el runtime por separado y ejecuta `npx --yes pnpm@12.4.2 dev`. `npx --yes pnpm@12.4.2 build` solo construye frontend. El ejecutable `idg-probe.exe ping` comprueba estado y `idg-probe.exe shutdown` solicita salida explícita.
 
-En 01 crear el esqueleto mínimo y probar handshake Chromium/Firefox, registro reversible del host y carga local de extensión. Estos pasos aún no están probados. No usar IDs, firmas ni credenciales ficticios en producción.
+## Extensiones de desarrollo y host
 
-### Comandos disponibles durante el primer incremento de fase 01
+Después de compilar host y extensión:
 
-Con Cargo en PATH (o su ruta de usuario): `cargo test -p idg-protocol`, `cargo fmt --all`, `cargo run -p idg-protocol --bin export-types`. Todavía no hay una aplicación iniciable en este incremento.
+```powershell
+.\scripts\Register-NativeHost.ps1
+```
+
+Registra solo `io.github.sredgarr.idg.dev` bajo HKCU, para Chrome/Chromium/Edge y Firefox. Los manifiestos quedan en `.local/native-host`, con ruta absoluta y allowlist exacta. El script rechaza un registro del mismo nombre perteneciente a otra ubicación; no reemplaza otras instalaciones. Ejecuta este registro otra vez si mueves el repositorio, retirando primero el registro desde su ubicación original.
+
+Chromium: abre `chrome://extensions` (Edge: `edge://extensions`), activa el modo de desarrollo y carga **descomprimida** `apps/extension/build/chromium`. Abre la extensión IDG desde el menú de extensiones. El ID de desarrollo estable es `keopaccdnmianljlfkpinbkfppcpfdlk`.
+
+Firefox: abre `about:debugging#/runtime/this-firefox`, elige **Cargar complemento temporal** y selecciona `apps/extension/build/firefox/manifest.json`. Abre IDG desde el menú de extensiones. Su ID es `idg-dev@sredgarr.github.io`; se retira al cerrar el perfil. No se deshabilita la firma de extensiones. Ambos IDs son de desarrollo, no de tienda.
+
+El popup muestra Conectado solo tras handshake/suscripción. Reconectar repite ese intercambio. Cierra y vuelve a abrir el popup: recibe un snapshot nuevo del mismo motor. No captura enlaces, páginas ni descargas; su único permiso es `nativeMessaging`.
+
+Retirada reversible:
+
+```powershell
+.\scripts\Unregister-NativeHost.ps1
+```
+
+Retira únicamente los registros que todavía apuntan a esta copia; conserva manifiestos y archivos. Quita la extensión local desde el navegador. Puedes volver a registrarla. Los scripts admiten `-Browser Chromium` o `-Browser Firefox`. La prueba de registro/desregistro y host ausente pasó aquí. Al entregar se retiran los registros usados por las pruebas: regístralos para tu prueba manual.
+
+## Comprobaciones reproducibles
+
+Cierra los runtimes de IDG que hayas iniciado antes de ejecutar las pruebas: estas rechazan una instancia previa y administran solo la suya.
+
+```powershell
+.\scripts\Check.ps1
+```
+
+Ejecuta formato Rust, Clippy sin warnings, seis tests Rust, regeneración/consistencia de tipos, comprobación TS, builds y pruebas de procesos/seguridad. Comandos individuales: `cargo fmt --all -- --check`, `cargo clippy --locked --workspace --all-targets -- -D warnings`, `cargo test --locked --workspace`, `cargo run --locked -p idg-protocol --bin export-types`, `npx --yes pnpm@12.4.2 check`, `node scripts/test-runtime.mjs`.
+
+Para integración real (Firefox instalado y host registrado):
+
+```powershell
+$env:PLAYWRIGHT_BROWSERS_PATH = "$PWD/tools/browsers"
+npx --yes pnpm@12.4.2 exec playwright install chromium
+.\scripts\Register-NativeHost.ps1
+.\scripts\Check.ps1 -Integration
+.\scripts\Unregister-NativeHost.ps1
+```
+
+También puedes ejecutar `node scripts/test-desktop.mjs`, `node scripts/test-chromium.mjs` y `node scripts/test-firefox.mjs` individualmente. Firefox permite una ruta alternativa en `IDG_FIREFOX_BINARY`. Selenium Manager obtiene geckodriver oficial. Los perfiles son temporales/aislados; no se usan tus sesiones. Las capturas reales quedan en `artifacts/` y no se suben.
+
+La prueba Tauri abre una ventana real con WebView2 y depuración local mediante una variable limitada al proceso de prueba; no añade un servidor TCP al IPC del producto. La prueba Firefox habilita el contexto de automatización del navegador mediante `--allow-system-access` solo en ese proceso aislado, para abrir la página propia del complemento. No cambia preferencias globales, firma o protecciones del perfil personal. Las pruebas de navegador son headless y ejercitan la página del popup con Native Messaging real; no certifican el gesto manual del menú de la barra.
+
+CI: `.github/workflows/check.yml` separa core/protocolo en Linux y build/pruebas de procesos en Windows. No ejecuta la matriz gráfica/de navegadores. Consulta el resultado remoto antes de declararla aprobada. No publica instaladores ni releases.
+
+## Límites y diagnóstico
+
+No hay motor de descargas, DB, bandeja, autoinicio, AutoPick ni interfaz de fase 02. Los estados de conexión no se persisten. El pipe admite 16 clientes simultáneos, frames de 256 KiB y plazos de cinco segundos. La suscripción usa una conexión dedicada y snapshots completos, por lo que un salto de secuencia no exige reconstruir deltas. Un proceso malicioso con control del mismo usuario y capacidad de reemplazar binarios no queda aislado por este mecanismo.
+
+Ante Desconectado: comprueba el runtime con `idg-probe.exe ping`, que los binarios estén juntos, registro/ID correctos y que el complemento se haya reconstruido. No pegues credenciales ni rutas privadas en issues. Estado, evidencias y pendientes en [IMPLEMENTATION_STATUS](IMPLEMENTATION_STATUS.md).
