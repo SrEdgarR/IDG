@@ -64,7 +64,19 @@ try {
       .locator("#status")
       .filter({ hasText: /^Conectado$/ })
       .waitFor();
-    await page.screenshot({ path: "artifacts/chromium-connected.png" });
+    await page.screenshot({
+      animations: "disabled",
+      path: "artifacts/chromium-connected.png",
+    });
+    await mkdir("artifacts/ui-02", { recursive: true });
+    await page.setViewportSize({ width: 360, height: 700 });
+    for (const colorScheme of ["light", "dark"]) {
+      await page.emulateMedia({ colorScheme });
+      await page.screenshot({
+        animations: "disabled",
+        path: `artifacts/ui-02/popup-${colorScheme}.png`,
+      });
+    }
     assert.ok(
       (await page.locator("#detail").innerText()).includes(
         String(original.process_id),

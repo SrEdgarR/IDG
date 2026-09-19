@@ -52,6 +52,13 @@ try {
     .getByRole("status")
     .filter({ hasText: /^Desconectado$/ })
     .waitFor();
+  await page.getByRole("button", { name: "Reconectar", exact: true }).click();
+  await page
+    .getByText(
+      "No se pudo conectar con el motor. Comprueba que esté iniciado",
+      { exact: true },
+    )
+    .waitFor();
   runtime = spawn(path.join(root, "target/debug/idg-runtime.exe"), [], {
     windowsHide: true,
     stdio: "ignore",
@@ -74,7 +81,30 @@ try {
   await page
     .getByText("El motor respondió al ping.", { exact: true })
     .waitFor();
-  await page.screenshot({ path: "artifacts/desktop-connected.png" });
+  await page.screenshot({
+    animations: "disabled",
+    path: "artifacts/desktop-connected.png",
+  });
+  await mkdir("artifacts/ui-02", { recursive: true });
+  for (const theme of ["light", "dark"]) {
+    await page.getByLabel("Tema", { exact: true }).selectOption(theme);
+    await page.screenshot({
+      animations: "disabled",
+      path: `artifacts/ui-02/app-${theme}.png`,
+    });
+  }
+  assert.equal(await page.locator(".download-row").count(), 0);
+  await page
+    .getByRole("button", { name: "Nueva descarga", exact: true })
+    .click();
+  await page
+    .getByRole("dialog", { name: "Nueva descarga", exact: true })
+    .waitFor();
+  await page.screenshot({
+    animations: "disabled",
+    path: "artifacts/ui-02/app-new-download.png",
+  });
+  await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Detener motor" }).click();
   await page
     .getByRole("status")

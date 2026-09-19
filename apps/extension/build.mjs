@@ -19,6 +19,10 @@ for (const browser of ["chromium", "firefox"]) {
       new URL(`./src/${name}`, import.meta.url),
       new URL(name, output),
     );
+  await copyFile(
+    new URL("../../packages/ui/tokens.css", import.meta.url),
+    new URL("tokens.css", output),
+  );
   const manifest = {
     manifest_version: 3,
     name: "IDG — Puente de desarrollo",

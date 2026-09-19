@@ -4,18 +4,52 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>IDG · conexión de desarrollo</title>
+    <link rel="stylesheet" href="tokens.css" />
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
     <main>
-      <h1>IDG <small>Desarrollo</small></h1>
-      <h2 id="status" role="status">Desconectado</h2>
-      <p id="detail">Comprobando el host local…</p>
-      <button id="reconnect" type="button">Reconectar</button>
-      <p>
-        Fase 01: conexión únicamente. AutoPick y descargas todavía no están
-        disponibles.
-      </p>
+      <header>
+        <strong>IDG</strong><small>EXTENSIÓN DE DESARROLLO</small>
+      </header>
+      <section aria-label="Conexión con el motor">
+        <h1 id="status" role="status">Desconectado</h1>
+        <p id="detail">Comprobando el host local…</p>
+        <button id="reconnect" type="button">Reconectar</button>
+      </section>
+      <section>
+        <h2>Captura de descargas</h2>
+        <label for="autopick">AutoPick</label
+        ><select id="autopick" disabled aria-describedby="pending">
+          <option>Preguntarme · pendiente</option>
+          <option>Siempre usar IDG</option>
+          <option>Usar el navegador</option>
+        </select>
+        <p id="pending">
+          La captura se integrará en fases 07/08. Esta extensión no lee tus
+          páginas.
+        </p>
+        <label class="site"
+          ><input
+            type="checkbox"
+            disabled
+            aria-describedby="pending"
+          />Excepción para el sitio actual</label
+        >
+      </section>
+      <section>
+        <h2>Descargas</h2>
+        <p>
+          El motor de descargas aún no está disponible. No hay trabajos que
+          mostrar.
+        </p>
+      </section>
+      <footer>
+        <button disabled aria-describedby="open-pending">Abrir IDG</button
+        ><small id="open-pending"
+          >Apertura desde la extensión: pendiente de integración.</small
+        >
+      </footer>
     </main>
     <script src="popup.js"></script>
   </body>
