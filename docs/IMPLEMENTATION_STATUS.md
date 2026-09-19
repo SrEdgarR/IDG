@@ -1,6 +1,6 @@
 # Estado de implementación
 
-Estado actual: **fase 02 aceptada visualmente e integrada; fase 03 implementada, con pruebas locales de HTTP/HTTPS, recuperación y regresiones. Preparando publicación y CI del commit correspondiente**.
+Estado actual: **fase 02 aceptada visualmente e integrada; fase 03 implementada y publicada en PR #3, con pruebas locales de HTTP/HTTPS, recuperación y regresiones. CI remoto pendiente de conclusión**.
 No marcar una fila completada solo por generar archivos. Completar evidencia conforme se ejecute cada fase.
 
 Estados: PLANIFICADO, EN_CURSO, IMPLEMENTADO_NO_VERIFICADO, VERIFICADO, BLOQUEADO, DIFERIDO.
@@ -150,3 +150,9 @@ La evidencia local se refiere al conjunto de implementación de fase 03, cuyo SH
 Comprobaciones ejecutadas: `Check.ps1 -Integration` aprobado (23 pruebas Rust, tres de modelo UI, build/TS, procesos, galería y Tauri/Chromium/Firefox). Después se añadieron una prueba de Last-Modified y apagado activo, y se endureció la sintaxis de ETag/clasificación de disco lleno: `Check.ps1` aprobado sobre ese código final, 24 pruebas Rust y regresiones IPC/HTTP. No se presenta esa última ejecución sin -Integration como otra prueba gráfica completa. Servidor standalone `node fixtures/http/server.mjs 8787` comprobado. Los subcomandos CLI documentados se ejecutaron desde la suite Node; un recorrido adicional con lanzamiento desde PowerShell fue rechazado por la revisión automática, sin motivo específico, y no se cuenta como ejecutado. Registro del host de pruebas retirado al terminar.
 
 Revisión de diff/secretos/enlaces: 155 archivos, 134 enlaces locales válidos, sin patrones de secretos detectados; no se incluyen DB, parciales, perfiles o claves TLS privadas. Inventario actualizado: 501 crates/55 paquetes JS. Esta búsqueda no es una auditoría absoluta de seguridad.
+
+### Publicación y evidencia vinculada
+
+Implementación probada: `b949ffffc47f1988a4455a412c76d39b03ad294c`. Push a `origin/feat/03-motor-http` correcto y SHA remoto comprobado; [PR #3](https://github.com/SrEdgarR/IDG/pull/3) abierta hacia main, sin fusionar. El cierre que agrega este registro solo modifica documentación; no representa una nueva prueba completa del producto.
+
+CI observado para b949ffff: [run de push 35474606199](https://github.com/SrEdgarR/IDG/actions/runs/35474606199), ui aprobado, portable/windows en curso; [run de PR 35474637478](https://github.com/SrEdgarR/IDG/actions/runs/35474637478), ui/portable en curso y Windows en cola. No se declaran aprobados ni se atribuyen estos runs al commit documental posterior. Consultar el HEAD actual de PR #3 antes de integrar; su CI sigue siendo condición pendiente. No se promete seguimiento en segundo plano.
