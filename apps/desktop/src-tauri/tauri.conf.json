@@ -3,10 +3,28 @@
   "productName": "IDG",
   "version": "0.1.0",
   "identifier": "io.github.sredgarr.idg.dev",
-  "build": { "beforeDevCommand": "pnpm dev", "devUrl": "http://127.0.0.1:1420", "beforeBuildCommand": "pnpm build", "frontendDist": "../dist" },
-  "app": {
-    "windows": [{ "label": "main", "title": "IDG — Internet Download Genious (desarrollo)", "width": 760, "height": 580, "minWidth": 440, "minHeight": 480 }],
-    "security": { "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost; style-src 'self'; script-src 'self'" }
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
   },
-  "bundle": { "active": false }
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "IDG — Internet Download Genious (desarrollo)",
+        "width": 1180,
+        "height": 760,
+        "minWidth": 600,
+        "minHeight": 480
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost; style-src 'self'; script-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": false
+  }
 }

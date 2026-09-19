@@ -97,3 +97,5 @@ Sobre 9bbdc40 se recompilaron los ejecutables y se realizó interacción real au
 Confirmación comunicada por el propietario: Reconectar funciona después de iniciar manualmente idg-runtime.exe. Reconectar no debe iniciar el motor. Esta confirmación no aprueba navegadores, accesibilidad u otras pruebas no mencionadas. No hay defecto bloqueante conocido en el esqueleto; se conserva la matriz ampliada pendiente. La autorización de fusión se limita a PR #1; PR de fase 02 requiere revisión y no tiene autorización de fusión.
 
 Este cierre cambia solo documentación: lectura de CI del SHA exacto, revisión de evidencia y enlaces/diff; no se afirma una nueva ejecución completa de -Integration.
+
+Fase 02 EN_CURSO: primer incremento de AppShell y tokens compartidos, modo Sistema inicial y conexión Tauri conservada. Comprobación TS y build frontend pasados. Rama feat/02-interfaz depende temporalmente del cierre documental 8740322 de fase 01; no se fusionará PR #1 sin su CI correspondiente. Diálogos/filas/galería aún en construcción.
