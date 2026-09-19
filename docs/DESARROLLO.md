@@ -79,7 +79,7 @@ Cierra los runtimes de IDG que hayas iniciado antes de ejecutar las pruebas: est
 .\scripts\Check.ps1
 ```
 
-Ejecuta formato Rust, Clippy sin warnings, seis tests Rust, regeneración/consistencia de tipos, comprobación TS, builds y pruebas de procesos/seguridad. Comandos individuales: `cargo fmt --all -- --check`, `cargo clippy --locked --workspace --all-targets -- -D warnings`, `cargo test --locked --workspace`, `cargo run --locked -p idg-protocol --bin export-types`, `npx --yes pnpm@12.4.2 check`, `node scripts/test-runtime.mjs`.
+Ejecuta formato Rust, Clippy sin warnings, seis tests Rust, tres tests del modelo de presentación, regeneración/consistencia de tipos, comprobación TS, builds y pruebas de procesos/seguridad. Comandos individuales: `cargo fmt --all -- --check`, `cargo clippy --locked --workspace --all-targets -- -D warnings`, `cargo test --locked --workspace`, `cargo run --locked -p idg-protocol --bin export-types`, `npx --yes pnpm@12.4.2 check`, `node scripts/test-runtime.mjs`.
 
 Para integración real (Firefox instalado y host registrado):
 
@@ -91,14 +91,46 @@ npx --yes pnpm@12.4.2 exec playwright install chromium
 .\scripts\Unregister-NativeHost.ps1
 ```
 
-También puedes ejecutar `node scripts/test-desktop.mjs`, `node scripts/test-chromium.mjs` y `node scripts/test-firefox.mjs` individualmente. Firefox permite una ruta alternativa en `IDG_FIREFOX_BINARY`. Selenium Manager obtiene geckodriver oficial. Los perfiles son temporales/aislados; no se usan tus sesiones. Las capturas reales quedan en `artifacts/` y no se suben.
+También puedes ejecutar `node scripts/test-desktop.mjs`, `node scripts/test-chromium.mjs` y `node scripts/test-firefox.mjs` individualmente. Firefox permite una ruta alternativa en `IDG_FIREFOX_BINARY`. Selenium Manager obtiene geckodriver oficial. Los perfiles son temporales/aislados; no se usan tus sesiones. Las capturas reales quedan en `artifacts/`; solo una selección revisada y saneada se versiona en `docs/images`.
 
 La prueba Tauri abre una ventana real con WebView2 y depuración local mediante una variable limitada al proceso de prueba; no añade un servidor TCP al IPC del producto. La prueba Firefox habilita el contexto de automatización del navegador mediante `--allow-system-access` solo en ese proceso aislado, para abrir la página propia del complemento. No cambia preferencias globales, firma o protecciones del perfil personal. Las pruebas de navegador son headless y ejercitan la página del popup con Native Messaging real; no certifican el gesto manual del menú de la barra.
 
-CI: `.github/workflows/check.yml` separa core/protocolo en Linux y build/pruebas de procesos en Windows. No ejecuta la matriz gráfica/de navegadores. Consulta el resultado remoto antes de declararla aprobada. No publica instaladores ni releases.
+CI: `.github/workflows/check.yml` conserva portable (core/protocolo en Linux) y windows (compilación/pruebas de procesos). Añade ui (galería Playwright headless, modelo de presentación y aislamiento del bundle). CI no ejecuta Tauri/WebView2 ni Native Messaging en navegadores; esos requieren las pruebas locales con -Integration. Consulta el resultado remoto antes de declararla aprobada. No publica instaladores ni releases.
 
 ## Límites y diagnóstico
 
-No hay motor de descargas, DB, bandeja, autoinicio, AutoPick ni interfaz de fase 02. Los estados de conexión no se persisten. El pipe admite 16 clientes simultáneos, frames de 256 KiB y plazos de cinco segundos. La suscripción usa una conexión dedicada y snapshots completos, por lo que un salto de secuencia no exige reconstruir deltas. Un proceso malicioso con control del mismo usuario y capacidad de reemplazar binarios no queda aislado por este mecanismo.
+No hay motor de descargas, DB, bandeja, autoinicio ni AutoPick. La interfaz de fase 02 conserva su lista vacía real; las acciones futuras están deshabilitadas y explicadas. Los estados de conexión no se persisten. El pipe admite 16 clientes simultáneos, frames de 256 KiB y plazos de cinco segundos. La suscripción usa una conexión dedicada y snapshots completos, por lo que un salto de secuencia no exige reconstruir deltas. Un proceso malicioso con control del mismo usuario y capacidad de reemplazar binarios no queda aislado por este mecanismo.
 
 Ante Desconectado: comprueba el runtime con `idg-probe.exe ping`, que los binarios estén juntos, registro/ID correctos y que el complemento se haya reconstruido. No pegues credenciales ni rutas privadas en issues. Estado, evidencias y pendientes en [IMPLEMENTATION_STATUS](IMPLEMENTATION_STATUS.md).
+
+
+## Galería de interfaz (fase 02)
+
+Después del setup anterior, desde la raíz:
+
+```powershell
+npx --yes pnpm@12.4.2 gallery
+```
+
+Abre http://127.0.0.1:1421/gallery.html. Este comando se comprobó con Vite; la prueba automatizada usa el mismo entry en un puerto libre. El banner identifica muestras de 0/1/3/20 archivos. No conecta al runtime ni descarga nada. El servidor queda limitado a loopback; Ctrl+C lo detiene. Abrir index.html muestra la interfaz normal, que necesita Tauri para conectar.
+
+Prueba filtros y Limpiar, selección, menú de fila, expansión automática/manual, Nueva descarga y las superficies del banner. Actualizar muestra cambia una medida solo al pulsarlo; no hay temporizador de progreso. Conflicto, asistente, colas, reglas, multimedia, recuperación y ventanas auxiliares son componentes de muestra. Mini ventana y zona de arrastre necesitan activación local; no crean ventanas del sistema ni vigilan el portapapeles. Los diálogos explican qué acciones necesitan backend y no muestran éxitos falsos.
+
+Sistema es el tema inicial. Tema y vista de filas se conservan localmente por origen; no guardan URLs, credenciales ni trabajos. La configuración real del motor sigue pendiente. Una elección manual de expansión prevalece durante la sesión, incluso al filtrar y volver. 1–3 filas se expanden automáticamente si cabe el presupuesto de espacio; 4+ empiezan compactas. Los detalles técnicos se abren aparte. Lista paginada de 50 filas como límite de renderizado; no hay API de historial aún.
+
+Para repetir las pruebas visuales sin runtime:
+
+```powershell
+$env:PLAYWRIGHT_BROWSERS_PATH = "$PWD/tools/browsers"
+npx --yes pnpm@12.4.2 exec playwright install chromium
+npx --yes pnpm@12.4.2 build
+npx --yes pnpm@12.4.2 test:ui
+```
+
+Tres tests del modelo + Playwright: filtros combinados, selección, menús, validación, Tab/Escape/retorno de foco, estabilidad con scroll no nulo al actualizar muestras, override al redimensionar, tema Sistema, movimiento reducido y preferencia de vista tras recarga. Prueba también conflicto, orden local de cola, previsualización de regla y modal multimedia anidado. Verifica que dist no contenga gallery.html ni los marcadores/nombres de fixtures.
+
+Capturas automáticas en artifacts/ui-02: matriz claro/oscuro × normal 1180×900/pequeña 720×640 × 0/1/3/20, nueve superficies y DPR 1.5/2 emulado (27 capturas). La política de tres filas expandidas se prueba con altura 1100; con menos espacio permanecen compactas. DPR emulado no certifica el escalado de Windows. -Integration añade aplicación Tauri real y extensiones reales; el popup se abre como página de extensión, no por su menú nativo.
+
+Selección pública de capturas: [aplicación clara](images/fase02-app-light.png), [oscura](images/fase02-app-dark.png), [galería clara](images/fase02-gallery-light.png), [galería oscura pequeña](images/fase02-gallery-dark-small.png), [Nueva descarga](images/fase02-new-download.png), [Configuración](images/fase02-settings.png), [asistente](images/fase02-wizard.png), [conflicto](images/fase02-conflict.png), [multimedia](images/fase02-media.png), [popup claro](images/fase02-popup-light.png), [popup oscuro](images/fase02-popup-dark.png). Las capturas de galería no representan descargas reales.
+
+Pendiente de revisión humana: apariencia en tu monitor, lector de pantalla y DPI real 150/200. Se mantienen Windows 10, otros navegadores y el recorrido del menú nativo de extensión de la matriz anterior. No son evidencia de fallos ni de aprobación.
