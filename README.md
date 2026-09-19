@@ -2,7 +2,7 @@
 
 Un proyecto de gestor de descargas **gratuito y open source para Windows 10 y Windows 11**, pensado para descargar y organizar archivos con una interfaz sencilla y moderna.
 
-> **Estado actual: interfaz de desarrollo (fase 02).** La ventana tiene temas Sistema/Claro/Oscuro, navegación, filtros y diálogos. La conexión al runtime local sigue siendo real. Todavía no descarga archivos y no hay instalador, versión publicada ni extensión en tiendas.
+> **Estado actual: motor HTTP/HTTPS de desarrollo (fase 03).** Ya descarga archivos reales y permite probar pausa, reanudación segura y recuperación mediante una utilidad para desarrolladores. La ventana conserva temas, filtros y diálogos, pero todavía no permite iniciar ni gestionar esas descargas. No hay instalador, versión publicada ni extensión en tiendas.
 
 ## ¿Qué es IDG?
 
@@ -35,7 +35,7 @@ Este es el flujo previsto, no una afirmación de que ya esté disponible:
 
 | Área | Qué se pretende ofrecer | Estado del kit |
 |---|---|---|
-| Descargas | HTTP/HTTPS, segmentación adaptable, recuperación, límites, colas y horarios; FTP en una fase posterior | Planificado |
+| Descargas | HTTP/HTTPS, segmentación adaptable, recuperación, límites, colas y horarios; FTP en una fase posterior | Motor secuencial HTTP/HTTPS probado por utilidad de desarrollo; integración visual y demás funciones pendientes |
 | Interfaz | Sidebar, temas suaves claro/oscuro/sistema, búsqueda, filtros, acciones masivas y gráficas dentro de las filas | Interfaz y galería de componentes implementadas; acciones de descarga pendientes |
 | Navegadores | Extensión para Chrome, Edge, Firefox y otros navegadores contemplados en la matriz de pruebas; sin Safari | Puente real probado en Chrome for Testing y Firefox; captura pendiente |
 | Multimedia | Detección de contenido compatible sin DRM, selección de calidad, audio y procesamiento con FFmpeg | Planificado |
@@ -77,3 +77,5 @@ El proyecto se distribuye bajo **GPL-3.0-only**, únicamente la versión 3; cons
 ![Aplicación Tauri real en tema oscuro](docs/images/fase02-app-dark.png)
 
 Capturas auténticas en Windows 11. La lista vacía es real: todavía no hay motor de descargas. Las filas, gráficas, conflictos y opciones futuras se revisan en una **galería de desarrollo separada**, con muestras identificadas; no se guardan en el historial ni se incluyen en la compilación de producción. Consulta [cómo abrir la galería y las capturas de sus pantallas](docs/DESARROLLO.md#galería-de-interfaz-fase-02).
+
+Para desarrolladores: [recorrido del archivo de prueba](docs/HTTP_DEVELOPMENT.md), con inicio, pausa, reanudación y comprobación de SHA-256. Es una prueba del motor, no una aplicación final para usuarios.

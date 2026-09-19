@@ -1,0 +1,185 @@
+//! Only the runtime owns this store. Entire job payloads are DPAPI-protected.
+use idg_core::download::{Checkpoint, Job};
+use idg_protocol::DownloadError;
+use rusqlite::{Connection, params};
+use std::path::Path;
+mod protection;
+
+pub struct Store {
+    connection: Connection,
+}
+pub struct LoadedJobs {
+    pub jobs: Vec<Job>,
+    pub unavailable: Vec<(String, DownloadError)>,
+}
+impl Store {
+    pub fn open(path: &Path) -> Result<Self, DownloadError> {
+        let mut connection = Connection::open(path).map_err(|_| DownloadError::Storage)?;
+        connection
+            .busy_timeout(std::time::Duration::from_secs(2))
+            .map_err(|_| DownloadError::Storage)?;
+        connection
+            .pragma_update(None, "journal_mode", "WAL")
+            .map_err(|_| DownloadError::Storage)?;
+        connection
+            .pragma_update(None, "synchronous", "FULL")
+            .map_err(|_| DownloadError::Storage)?;
+        let tx = connection
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .map_err(|_| DownloadError::Storage)?;
+        tx.execute_batch(
+            "CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY)",
+        )
+        .map_err(|_| DownloadError::Storage)?;
+        let version: u32 = tx
+            .query_row(
+                "SELECT COALESCE(MAX(version),0) FROM schema_migrations",
+                [],
+                |r| r.get(0),
+            )
+            .map_err(|_| DownloadError::Storage)?;
+        match version {
+            0 => tx
+                .execute_batch(include_str!("../migrations/001.sql"))
+                .map_err(|_| DownloadError::Storage)?,
+            1 => {}
+            _ => return Err(DownloadError::Storage),
+        }
+        tx.commit().map_err(|_| DownloadError::Storage)?;
+        Ok(Self { connection })
+    }
+    pub fn load(&self) -> Result<LoadedJobs, DownloadError> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT id, protected_job FROM downloads ORDER BY rowid")
+            .map_err(|_| DownloadError::Storage)?;
+        let blobs = statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, Vec<u8>>(1)?))
+            })
+            .map_err(|_| DownloadError::Storage)?;
+        let mut jobs = Vec::new();
+        let mut unavailable = Vec::new();
+        for blob in blobs {
+            let (id, blob) = blob.map_err(|_| DownloadError::Storage)?;
+            let result = protection::decrypt(&blob).and_then(|mut clear| {
+                let result =
+                    serde_json::from_slice::<Job>(&clear).map_err(|_| DownloadError::Storage);
+                clear.fill(0);
+                result.and_then(|job| {
+                    if job.id == id {
+                        Ok(job)
+                    } else {
+                        Err(DownloadError::Storage)
+                    }
+                })
+            });
+            match result {
+                Ok(job) => jobs.push(job),
+                Err(error) => unavailable.push((id, error)),
+            }
+        }
+        Ok(LoadedJobs { jobs, unavailable })
+    }
+}
+impl Checkpoint for Store {
+    fn save(&mut self, job: &Job) -> Result<(), DownloadError> {
+        let mut bytes = serde_json::to_vec(job).map_err(|_| DownloadError::Storage)?;
+        let encrypted = protection::encrypt(&bytes);
+        bytes.fill(0);
+        let encrypted = encrypted?;
+        self.connection.execute("INSERT INTO downloads(id,protected_job) VALUES(?1,?2) ON CONFLICT(id) DO UPDATE SET protected_job=excluded.protected_job",params![job.id,encrypted]).map_err(|_|DownloadError::Storage)?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn migration_is_idempotent() {
+        let store = Store::open(Path::new(":memory:")).unwrap();
+        let n: u32 = store
+            .connection
+            .query_row("SELECT COUNT(*) FROM schema_migrations", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 1);
+    }
+    #[test]
+    fn interrupted_migration_rolls_back_and_reopens() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("migration.sqlite3");
+        {
+            let mut c = Connection::open(&path).unwrap();
+            let tx = c.transaction().unwrap();
+            tx.execute_batch("CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY); CREATE TABLE downloads(id TEXT PRIMARY KEY, protected_job BLOB NOT NULL); INSERT INTO schema_migrations VALUES(1)").unwrap();
+        }
+        drop(Store::open(&path).unwrap());
+        drop(Store::open(&path).unwrap());
+    }
+    #[test]
+    fn future_schema_and_locked_db_are_not_overwritten() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("locked.sqlite3");
+        drop(Store::open(&path).unwrap());
+        let other = Connection::open(&path).unwrap();
+        other
+            .execute_batch("BEGIN IMMEDIATE; UPDATE schema_migrations SET version=2;")
+            .unwrap();
+        assert!(matches!(Store::open(&path), Err(DownloadError::Storage)));
+        other.execute_batch("COMMIT").unwrap();
+        assert!(matches!(Store::open(&path), Err(DownloadError::Storage)));
+        let version: u32 = other
+            .query_row("SELECT MAX(version) FROM schema_migrations", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(version, 2);
+    }
+    #[cfg(windows)]
+    #[test]
+    fn dpapi_roundtrip_is_not_plaintext() {
+        let secret = b"https://example.org/private?token=fixture";
+        let sealed = protection::encrypt(secret).unwrap();
+        assert!(!sealed.windows(secret.len()).any(|w| w == secret));
+        assert_eq!(protection::decrypt(&sealed).unwrap(), secret);
+    }
+    #[cfg(windows)]
+    #[test]
+    fn corrupt_job_is_isolated_without_overwriting_its_blob() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = Store::open(Path::new(":memory:")).unwrap();
+        let input = idg_protocol::NewDownload {
+            url: "https://example.org/file".into(),
+            directory: dir.path().to_string_lossy().into(),
+            name: "safe.bin".into(),
+            expected_sha256: None,
+            conflict: idg_protocol::ConflictPolicy::Reject,
+        };
+        let job = idg_core::download::create_job("safe", input).unwrap();
+        store.save(&job).unwrap();
+        store
+            .connection
+            .execute(
+                "INSERT INTO downloads VALUES('corrupt', ?1)",
+                params![b"broken".as_slice()],
+            )
+            .unwrap();
+        let loaded = store.load().unwrap();
+        assert_eq!(loaded.jobs.len(), 1);
+        assert_eq!(loaded.jobs[0].id, "safe");
+        assert_eq!(
+            loaded.unavailable,
+            vec![("corrupt".into(), DownloadError::SecretUnavailable)]
+        );
+        let blob: Vec<u8> = store
+            .connection
+            .query_row(
+                "SELECT protected_job FROM downloads WHERE id='corrupt'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(blob, b"broken");
+    }
+}

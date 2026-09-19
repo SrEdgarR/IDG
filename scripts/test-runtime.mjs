@@ -109,6 +109,11 @@ try {
   )
     await sleep(20);
   assert.equal(JSON.parse(bytes.subarray(4).toString()).payload.kind, "hello");
+  assert.ok(!JSON.parse(bytes.subarray(4).toString()).payload.capabilities.includes('get_download_capabilities'));
+  bytes = Buffer.alloc(0);
+  host.stdin.write(frame({ version: 1, id: "forbidden-download", command: { list_downloads: { offset: 0 } } }));
+  await exited(host);
+  assert.deepEqual(JSON.parse(bytes.subarray(4).toString()).payload, { kind: "error", code: "unauthorized" });
   host.stdin.end();
   assert.equal(await exited(host), 0);
   assert.equal(JSON.parse(probe()).runtime_id, initial.runtime_id);

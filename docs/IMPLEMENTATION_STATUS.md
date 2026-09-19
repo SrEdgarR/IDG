@@ -1,6 +1,6 @@
 # Estado de implementación
 
-Estado actual: **fase 01 integrada en main; fase 02 implementada y verificada localmente dentro de su alcance visual, pendiente de revisión del propietario y del resultado remoto del HEAD final**.
+Estado actual: **fase 02 aceptada visualmente e integrada; fase 03 implementada, con pruebas locales de HTTP/HTTPS, recuperación y regresiones. Preparando publicación y CI del commit correspondiente**.
 No marcar una fila completada solo por generar archivos. Completar evidencia conforme se ejecute cada fase.
 
 Estados: PLANIFICADO, EN_CURSO, IMPLEMENTADO_NO_VERIFICADO, VERIFICADO, BLOQUEADO, DIFERIDO.
@@ -13,9 +13,9 @@ Estados: PLANIFICADO, EN_CURSO, IMPLEMENTADO_NO_VERIFICADO, VERIFICADO, BLOQUEAD
 | UI-01 a UI-08 | 02, 05, 14, 15 | EN_CURSO; capa visual 02 VERIFICADA localmente | App, DownloadList, Dialogs, Settings, galería y tokens; pruebas UI y Tauri. Backend de descargas, accesibilidad exhaustiva y rendimiento final pendientes. |
 | WIN-01 a WIN-06 | 05, 06, 08, 12, 13 | PLANIFICADO | — |
 | WIN-07 | 13, 15 | PLANIFICADO | — |
-| DL-01 HTTP/HTTPS | 03, 04 | PLANIFICADO | — |
+| DL-01 HTTP/HTTPS | 03, 04 | VERIFICADO (secuencial local 03) | core/download, tests/http.rs y test-http-runtime; segmentación 04 pendiente. |
 | DL-01 FTP/FTPS | 11 | PLANIFICADO | — |
-| DL-02 a DL-07 | 03, 04, 05 | PLANIFICADO | — |
+| DL-02 a DL-07 | 03, 04, 05 | EN_CURSO | Persistencia, pausa/reanudación y validación secuencial por IPC verificadas; UI y fases posteriores pendientes. |
 | DL-08 a DL-10 | 04, 05, 06, 11 | PLANIFICADO | — |
 | ORG-01 a ORG-03 | 06, 07 | PLANIFICADO | — |
 | ORG-04 a ORG-06 | 06, 12 | PLANIFICADO | — |
@@ -84,7 +84,7 @@ Comprobación visual: captura auténtica del WebView2 revisada, estado/PID y con
 
 ## SIGUIENTE_PASO
 
-Revisar la interfaz y las capturas de fase 02 en su PR hacia main. Consultar CI del SHA exacto antes de autorizar su integración. No fusionar automáticamente y no iniciar fase 03. Conservar pendientes de compatibilidad y conectar acciones de descarga solo en las fases asignadas.
+Revisar la PR de fase 03 y CI de su HEAD exacto antes de autorizar integración. No fusionar automáticamente ni iniciar fase 04. Usar el recorrido HTTP de desarrollo para revisión del propietario; conservar pendientes de matriz ampliada y conexión visual.
 
 Revisión final local: 112 archivos inspeccionados, 106 enlaces Markdown locales válidos y cero patrones de tokens/claves privadas/URLs con credenciales. Revisión estática independiente sin hallazgos bloqueantes; precisó que el test Tauri termina el proceso y no pulsa la X (recorrido manual pendiente ya indicado). Diff sin errores de whitespace. Los binarios, perfiles, herramientas descargadas y capturas están excluidos; solo se versiona la clave pública de identidad Chromium.
 
@@ -128,3 +128,25 @@ Defectos corregidos y comprobados: expansión manual se perdía al filtrar hasta
 Confirmación del propietario limitada a temas claro/oscuro, filas expandibles con información y gráfica, Nueva descarga y Configuración: base visual aceptada. Se pidió únicamente subir moderadamente todo el texto; decoración posterior. No equivale a aprobar accesibilidad/DPI/compatibilidad. PR #2 seguía abierta con CI de d9289d8 aprobada; el nuevo ajuste requiere sus propios checks antes de fusionar. Motor 03 no se incorpora a PR #2.
 
 Ajuste tipográfico: +1 px en toda la escala mediante tokens compartidos, sin zoom ni cambio de paleta. Build, test:ui y Check.ps1 -Integration aprobados; capturas auténticas actualizadas, incluida revisión de galería pequeña y diálogos. La aprobación de CI anterior no se atribuye a este nuevo commit. SIGUIENTE_PASO de transición: comprobar su HEAD, fusionar únicamente PR #2 cuando cumpla condiciones y continuar 03 en rama independiente/dependiente explícita.
+
+## Cierre autorizado de fase 02
+
+Confirmación humana limitada a temas claro/oscuro, expansión de filas, Nueva descarga y Configuración. No extiende aprobación a otras pruebas. Ajuste solicitado +1 px mediante tokens compartidos, sin zoom ni cambios de paleta; commit 06e87b6e043ba970ec7316f704da680124190ed9, build/test:ui/Check -Integration aprobados. CI de ese SHA: [PR run 35473020703](https://github.com/SrEdgarR/IDG/actions/runs/35473020703) y [push run 35473019922](https://github.com/SrEdgarR/IDG/actions/runs/35473019922), ui/portable/windows aprobados. PR #2 fusionada con autorización expresa y comprobación de HEAD/conflictos; merge 244407faf89efd0baad1f0f9eb155676439cbbf4.
+
+## Fase 03 — motor secuencial
+
+Rama feat/03-motor-http. Implementación en core/download, runtime/downloads, idg-storage, protocolo compartido y CLI existente idg-probe. [ADR-011](decisions/011-http-secuencial.md) registra decisiones; [recorrido reproducible](HTTP_DEVELOPMENT.md) separa utilidad técnica de aplicación final. No se avanza a fase 04 ni se conectan botones prematuramente.
+
+- VERIFICADO automáticamente en Windows 11: HTTP/HTTPS real local, bytes recibidos/durables separados, pausa/cancelación, Range/If-Range y hash, tamaño desconocido, HEAD no necesario, enlace de un uso, errores de representación/recurso, checkpoint SQLite/DPAPI y recuperación. Muerte real del runtime propio durante 8 MiB; reinicio pausado, Range desde checkpoint y cantidad exacta restante, hash final esperado.
+- VERIFICADO automáticamente: publicación bloqueada mediante handle Windows real; conserva final y reintenta sin GET. Fallos de disco lleno y guardado final son inyectados, no equivalen a llenar disco/corte eléctrico real. Migraciones y blob corrupto se prueban por separado.
+- Interacción real automatizada: regresiones Tauri/WebView2 y Native Messaging Chromium/Firefox mediante páginas de extensión. No es revisión humana del motor ni prueba del menú nativo del popup.
+- Confirmado por el usuario: únicamente aceptación visual de fase 02 descrita arriba. Revisión manual del motor PENDIENTE.
+- DIFERIDO: segmentación 04, conexión visual de trabajos 05, colas/organización, captura, multimedia y distribución. Matriz Windows 10, accesibilidad exhaustiva, DPI real y navegadores adicionales sigue PENDIENTE.
+
+Errores detectados en revisión y corregidos: una señal Run redundante podía abortar un GET; destino alternativo no persistido antes de mover; fallo del último guardado podía perder el estado recuperable; admisión durante apagado; falta de anuncio de capacidades; un blob corrupto bloqueaba trabajos sanos. Se conservan pruebas de regresión pertinentes. El parcial recién creado se retira si falla su primera persistencia; no se toca un final.
+
+La evidencia local se refiere al conjunto de implementación de fase 03, cuyo SHA se registra al publicar. CI de fase 02 no se atribuye al motor nuevo. Sin promesas de aceleración, estabilidad universal o protección frente a control malicioso de la propia cuenta Windows.
+
+Comprobaciones ejecutadas: `Check.ps1 -Integration` aprobado (23 pruebas Rust, tres de modelo UI, build/TS, procesos, galería y Tauri/Chromium/Firefox). Después se añadieron una prueba de Last-Modified y apagado activo, y se endureció la sintaxis de ETag/clasificación de disco lleno: `Check.ps1` aprobado sobre ese código final, 24 pruebas Rust y regresiones IPC/HTTP. No se presenta esa última ejecución sin -Integration como otra prueba gráfica completa. Servidor standalone `node fixtures/http/server.mjs 8787` comprobado. Los subcomandos CLI documentados se ejecutaron desde la suite Node; un recorrido adicional con lanzamiento desde PowerShell fue rechazado por la revisión automática, sin motivo específico, y no se cuenta como ejecutado. Registro del host de pruebas retirado al terminar.
+
+Revisión de diff/secretos/enlaces: 155 archivos, 134 enlaces locales válidos, sin patrones de secretos detectados; no se incluyen DB, parciales, perfiles o claves TLS privadas. Inventario actualizado: 501 crates/55 paquetes JS. Esta búsqueda no es una auditoría absoluta de seguridad.

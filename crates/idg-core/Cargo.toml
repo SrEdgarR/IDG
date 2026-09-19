@@ -7,3 +7,14 @@ license.workspace = true
 
 [dependencies]
 idg-protocol.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+reqwest.workspace = true
+sha2.workspace = true
+httpdate = "=1.0.3"
+
+[dev-dependencies]
+tempfile = "=3.27.0"
+rcgen = { version = "=0.14.10", default-features = false, features = ["aws_lc_rs"] }
+tokio-rustls = "=0.26.5"

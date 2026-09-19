@@ -1,4 +1,6 @@
 #[cfg(windows)]
+mod downloads;
+#[cfg(windows)]
 mod server;
 
 #[cfg(windows)]

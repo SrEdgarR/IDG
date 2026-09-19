@@ -79,3 +79,24 @@ Comprobar los enlaces Markdown locales y que docs/README destaque INTERFAZ, DESI
 La fase 00 confirma cuenta/destino, protección de archivos ajenos, ausencia de secretos en lo subido, rama main y SHA remoto real. Las fases siguientes registran rama/commit/push; un fallo de acceso no se comunica como éxito. Comprobar que ningún prompt conserva una prohibición general de push que contradiga la autorización limitada a IDG.
 
 El README separa usuario y desarrollador, estado previsto y verificado, instalador real y kit de prompts. No contiene enlaces a versiones/tiendas inexistentes ni capturas fabricadas. Cuando exista una release autorizada, probar los pasos de instalación con ese artefacto y actualizar la guía en el mismo incremento.
+
+## Evidencia y reproducción de fase 03
+
+| Comprobación | Ejecución y alcance |
+|---|---|
+| HTTP real, tamaño conocido/desconocido, cero/un byte, HEAD denegado | Tests Rust con TCP local y fixture Node; se usa GET único sin sondeo HEAD |
+| 206/If-Range y hash; 200 ignorado, rango inválido, ETag cambiado, 416 exacto/incorrecto | Tests Rust y suite IPC; no concatenan representaciones inválidas |
+| Pausa/cancelación y recuperación | Transferencia real, checkpoint y descarte de cola no confirmada; cancelación conserva temporal |
+| Muerte de proceso | test-http-runtime mata su propio runtime tras >=1 MiB, reinicia pausado y verifica Range = bytes durables y cuerpo = bytes restantes; SHA-256 final con referencia |
+| TLS | Servidor HTTPS real, certificado efímero solo confiado dentro del test; cliente normal rechaza certificado no confiable, sin modificar raíces del equipo |
+| Hash erróneo | No publica ni reemplaza el final existente |
+| Archivo bloqueado Windows | Handle real impide reemplazar; publish_pending; tras liberarlo publica sin otro GET |
+| Disco lleno | Fallo de escritura inyectado (OS 112 Windows/28 Linux), sin confirmar bytes; NO se llenó un disco ni se probó apagado físico |
+| Persistencia | Migración idempotente, rollback transaccional, versión futura/DB bloqueada, DPAPI real y blob corrupto aislado |
+| Publicación/DB | Fallo de checkpoint final inyectado y repetido tras mover; reconciliación por tamaño/hash sin GET |
+| IPC | Capacidades por rol, eventos con secuencia, idempotencia, busy ante segunda transferencia; host sin permiso de trabajos |
+| Regresión | Check.ps1 -Integration: formato, Clippy, Rust, TS/build, runtime, UI, ventana Tauri y páginas reales de extensiones Chromium/Firefox |
+
+CI portable ejecuta core/protocolo/storage en Linux (DPAPI y bloqueo de archivo Windows se excluyen por plataforma). CI Windows ejecuta Check.ps1 e incluye fixture HTTP y prueba de proceso; CI ui cubre galería. Ningún workflow certifica la matriz gráfica Windows/navegadores de -Integration. Referencias de runs/SHA en IMPLEMENTATION_STATUS.
+
+Pendiente: Windows 10, navegadores de consumo adicionales, gesto del popup desde menú nativo, accesibilidad exhaustiva/DPI real, archivos enormes y perfiles de rendimiento, cortes eléctricos físicos y almacenamiento externo/red. No son afirmaciones de éxito ni razón para activar funciones de fases 04+. No hay segmentación, colas, captura o multimedia en esta prueba.

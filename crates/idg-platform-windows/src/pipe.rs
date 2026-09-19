@@ -158,6 +158,13 @@ pub fn verify_client(pipe: &NamedPipeServer) -> io::Result<()> {
         &["idg-desktop.exe", "idg-native-host.exe", "idg-probe.exe"],
     )
 }
+pub fn is_development_probe(pipe: &NamedPipeServer) -> bool {
+    let mut pid = 0;
+    if checked(unsafe { GetNamedPipeClientProcessId(pipe.as_raw_handle(), &mut pid) }).is_err() {
+        return false;
+    }
+    verify_process(pid, &["idg-probe.exe"]).is_ok()
+}
 
 pub async fn connect() -> io::Result<NamedPipeClient> {
     let name = pipe_name()?;

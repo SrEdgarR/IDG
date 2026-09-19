@@ -2,7 +2,7 @@
 
 ## Disponibilidad actual
 
-**Este kit no incluye un instalador ni una extensión lista para usar.** Incluye un esqueleto de desarrollo que comprueba conexiones reales, todavía sin descargas. Esta guía se actualizará al existir artefactos verificados.
+**Este proyecto no incluye un instalador ni una extensión lista para usar.** Incluye una interfaz de desarrollo y un motor HTTP/HTTPS probado mediante utilidad técnica; la ventana todavía no gestiona descargas. El [recorrido para desarrolladores](HTTP_DEVELOPMENT.md) permite probar archivos locales controlados. Esta guía se actualizará al existir artefactos verificados.
 
 La plataforma objetivo es Windows 10 y Windows 11, inicialmente x64. La compatibilidad exacta, dependencias y versión mínima se indicarán a partir de las pruebas de cada publicación. El esqueleto se ejecutó en Windows 11 x64; Windows 10 y la distribución final siguen pendientes.
 

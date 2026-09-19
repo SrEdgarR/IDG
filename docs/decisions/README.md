@@ -18,3 +18,5 @@ Implementar solo el mínimo pedido en [fase 01](../../prompts/01_esqueleto_y_pue
 Concreción y evidencia de fase 01: [ADR-009](009-esqueleto-verificado.md).
 
 - [ADR-010 — Interfaz y galería aislada](010-interfaz-y-galeria.md): presentación, preferencias visuales y frontera con el runtime.
+
+- [ADR-011 — HTTP secuencial y checkpoints protegidos](011-http-secuencial.md): transferencia real, seguridad de reanudación, DPAPI/SQLite, publicación e IPC de desarrollo.

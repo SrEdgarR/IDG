@@ -23,6 +23,57 @@ async fn run() -> std::io::Result<()> {
         return Err(io::Error::other("handshake"));
     };
     match mode.as_str() {
+        "add" | "status" | "pause" | "resume" | "cancel" | "list" | "capabilities" => {
+            let id = std::env::args().nth(2).unwrap_or_else(|| "list".into());
+            let command = match mode.as_str() {
+                "capabilities" => Command::GetDownloadCapabilities,
+                "add" => {
+                    use std::io::Read;
+                    let mut bytes = Vec::new();
+                    std::io::stdin()
+                        .take((MAX_FRAME + 1) as u64)
+                        .read_to_end(&mut bytes)?;
+                    if bytes.len() > MAX_FRAME {
+                        return Err(io::Error::other("input too large"));
+                    }
+                    let input: NewDownload = serde_json::from_slice(&bytes)
+                        .map_err(|_| io::Error::other("invalid download input"))?;
+                    Command::AddDownload { input }
+                }
+                "status" => Command::GetDownload { job_id: id.clone() },
+                "pause" => Command::PauseDownload { job_id: id.clone() },
+                "resume" => Command::ResumeDownload { job_id: id.clone() },
+                "cancel" => Command::CancelDownload { job_id: id.clone() },
+                _ => Command::ListDownloads {
+                    offset: std::env::args()
+                        .nth(2)
+                        .unwrap_or_default()
+                        .parse()
+                        .unwrap_or(0),
+                },
+            };
+            let response = exchange(&mut pipe, command, &id).await?;
+            println!(
+                "{}",
+                serde_json::to_string(&response.payload).map_err(io::Error::other)?
+            );
+            if matches!(response.payload, Payload::DownloadFailure { .. }) {
+                std::process::exit(2);
+            }
+        }
+        "watch" => {
+            exchange(&mut pipe, Command::Subscribe, "watch").await?;
+            while let Some(bytes) = read_frame(&mut pipe).await? {
+                let response: Response =
+                    serde_json::from_slice(&bytes).map_err(io::Error::other)?;
+                if matches!(response.payload, Payload::DownloadChanged { .. }) {
+                    println!(
+                        "{}",
+                        serde_json::to_string(&response.payload).map_err(io::Error::other)?
+                    );
+                }
+            }
+        }
         "shutdown" => {
             exchange(&mut pipe, Command::Shutdown, "exit").await?;
         }
@@ -32,11 +83,12 @@ async fn run() -> std::io::Result<()> {
             let two = exchange(&mut second, Command::Handshake, "second").await?;
             let Payload::Hello {
                 snapshot: second_snapshot,
-                ..
+                capabilities,
             } = two.payload
             else {
                 return Err(io::Error::other("second handshake"));
             };
+            assert!(capabilities.contains(&Command::GetDownloadCapabilities));
             assert_eq!(snapshot.runtime_id, second_snapshot.runtime_id);
             assert!(second_snapshot.clients >= 2);
             exchange(&mut pipe, Command::Subscribe, "watch").await?;

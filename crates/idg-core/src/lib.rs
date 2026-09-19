@@ -1,5 +1,6 @@
 //! Phase 01 session state machine. No network downloads or desktop dependency.
 use idg_protocol::{Command, ErrorCode, Payload, Request, Response, Snapshot, VERSION};
+pub mod download;
 
 #[derive(Default)]
 pub struct Session {
@@ -32,8 +33,17 @@ impl Session {
             Command::GetSnapshot => Payload::Snapshot { snapshot },
             Command::Subscribe => Payload::Subscribed { snapshot },
             Command::Shutdown => Payload::Stopping,
+            _ => Payload::Error {
+                code: ErrorCode::Unavailable,
+            },
         };
         Response::new(&request.id, payload)
+    }
+}
+
+impl Session {
+    pub fn authorizes(&self, request: &Request) -> bool {
+        self.greeted && request.version == VERSION
     }
 }
 
