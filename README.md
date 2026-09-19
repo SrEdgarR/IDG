@@ -2,7 +2,7 @@
 
 Un proyecto de gestor de descargas **gratuito y open source para Windows 10 y Windows 11**, pensado para descargar y organizar archivos con una interfaz sencilla y moderna.
 
-> **Estado actual: esqueleto de desarrollo (fase 01).** La ventana y las extensiones de prueba se conectan al motor local en Windows 11. Todavía no descarga archivos y no hay instalador, versión publicada ni extensión en tiendas.
+> **Estado actual: interfaz de desarrollo (fase 02).** La ventana tiene temas Sistema/Claro/Oscuro, navegación, filtros y diálogos. La conexión al runtime local sigue siendo real. Todavía no descarga archivos y no hay instalador, versión publicada ni extensión en tiendas.
 
 ## ¿Qué es IDG?
 
@@ -36,7 +36,7 @@ Este es el flujo previsto, no una afirmación de que ya esté disponible:
 | Área | Qué se pretende ofrecer | Estado del kit |
 |---|---|---|
 | Descargas | HTTP/HTTPS, segmentación adaptable, recuperación, límites, colas y horarios; FTP en una fase posterior | Planificado |
-| Interfaz | Sidebar, temas suaves claro/oscuro/sistema, búsqueda, filtros, acciones masivas y gráficas dentro de las filas | Interfaz completa planificada; ventana de conexión comprobada |
+| Interfaz | Sidebar, temas suaves claro/oscuro/sistema, búsqueda, filtros, acciones masivas y gráficas dentro de las filas | Interfaz y galería de componentes implementadas; acciones de descarga pendientes |
 | Navegadores | Extensión para Chrome, Edge, Firefox y otros navegadores contemplados en la matriz de pruebas; sin Safari | Puente real probado en Chrome for Testing y Firefox; captura pendiente |
 | Multimedia | Detección de contenido compatible sin DRM, selección de calidad, audio y procesamiento con FFmpeg | Planificado |
 | Organización y privacidad | Carpetas y reglas, historial, modo privado y funcionamiento local sin cuenta obligatoria | Planificado |
@@ -72,6 +72,8 @@ Consulta el [índice de documentación](docs/README.md), la [guía de instalaci�
 
 El proyecto se distribuye bajo **GPL-3.0-only**, únicamente la versión 3; consulta el [texto completo](LICENSE) y los [avisos de terceros](THIRD_PARTY_NOTICES.md). No se presentan los prompts como una implementación terminada del programa.
 
-![Ventana real de desarrollo mostrando la conexión con el motor](docs/images/fase01-conexion.png)
+![Aplicación Tauri real en tema claro](docs/images/fase02-app-light.png)
 
-Captura de la prueba real en Windows 11. Solo conexión; todavía no hay descargas.
+![Aplicación Tauri real en tema oscuro](docs/images/fase02-app-dark.png)
+
+Capturas auténticas en Windows 11. La lista vacía es real: todavía no hay motor de descargas. Las filas, gráficas, conflictos y opciones futuras se revisan en una **galería de desarrollo separada**, con muestras identificadas; no se guardan en el historial ni se incluyen en la compilación de producción. Consulta [cómo abrir la galería y las capturas de sus pantallas](docs/DESARROLLO.md#galería-de-interfaz-fase-02).

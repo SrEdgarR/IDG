@@ -14,11 +14,13 @@ $types = Get-Content packages/shared-types/protocol.ts -Raw
 Invoke-Checked { cargo run --locked -p idg-protocol --bin export-types }
 if ($types -cne (Get-Content packages/shared-types/protocol.ts -Raw)) { throw 'Tipos generados desactualizados; revisa el diff.' }
 Invoke-Checked { npx --yes pnpm@12.4.2 check }
+Invoke-Checked { node --test scripts/test-ui-model.mjs }
 Invoke-Checked { npx --yes pnpm@12.4.2 extension:build }
 Invoke-Checked { cargo build --locked -p idg-runtime -p idg-native-host -p idg-platform-windows }
 Invoke-Checked { npx --yes pnpm@12.4.2 desktop:build }
 Invoke-Checked { node scripts/test-runtime.mjs }
 if ($Integration) {
+    Invoke-Checked { node scripts/test-ui.mjs }
     # Register explicitly beforehand. No registry mutations are hidden in this check.
     Invoke-Checked { node scripts/test-desktop.mjs }
     Invoke-Checked { node scripts/test-chromium.mjs }

@@ -13,7 +13,9 @@
     "desktop:build": "pnpm --filter @idg/desktop tauri build --debug --no-bundle",
     "check": "pnpm --filter @idg/desktop check && pnpm --filter @idg/extension check",
     "extension:build": "pnpm --filter @idg/extension build",
-    "test": "node scripts/test-runtime.mjs"
+    "test": "node scripts/test-runtime.mjs",
+    "gallery": "pnpm --filter @idg/desktop gallery",
+    "test:ui": "node --test scripts/test-ui-model.mjs && node scripts/test-ui.mjs"
   },
   "devDependencies": {
     "playwright": "1.63.0",

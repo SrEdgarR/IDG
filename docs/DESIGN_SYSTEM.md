@@ -54,3 +54,9 @@ En fase 02 ampliar el inventario inicial `docs/UI_CONTROL_INVENTORY.md`: pantall
 Capturas verificadas, no inventadas, de claro/oscuro con 0, 1, 3 y 20 trabajos; tamaños normal/pequeño; DPI 100/150/200 cuando sea posible. Revisar alineación, overflow, contraste, foco, estados y control de todos los menús. Sin capturas del entorno real, declarar el pendiente.
 
 Si el usuario aporta imágenes posteriormente, inventariar y ubicar cada control visible de la referencia antes de adaptar el diseño; preservar toda la funcionalidad existente. No afirmar haber visto archivos que no están en el repositorio.
+
+## Ajuste aprobado al cerrar fase 02
+
+El propietario aceptó personalmente los temas claro/oscuro, expansión de filas con información y gráfica, Nueva descarga y Configuración. Esta confirmación no acredita accesibilidad exhaustiva, DPI, compatibilidad ni funciones futuras. Iconos y animaciones ornamentales se reservan para pulido posterior.
+
+Se conserva paleta, estructura e interacción. La escala compartida `--font-N` representa el tamaño anterior N más 1 px (base 15 px), aplicada a sidebar, filas, etiquetas, botones, campos, diálogos, Ajustes y popup. Los títulos mantienen su jerarquía; interlineado base 1.45. No se usa zoom ni transform para escalar la aplicación.

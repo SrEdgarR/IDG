@@ -1,6 +1,6 @@
 # Estado de implementación
 
-Estado actual: **fase 01 implementada y verificada localmente en Windows 11 x64, con integración real Tauri/Chromium/Firefox; CI portable y Windows aprobadas para 9bbdc40; transición autorizada a fase 02**.
+Estado actual: **fase 01 integrada en main; fase 02 implementada y verificada localmente dentro de su alcance visual, pendiente de revisión del propietario y del resultado remoto del HEAD final**.
 No marcar una fila completada solo por generar archivos. Completar evidencia conforme se ejecute cada fase.
 
 Estados: PLANIFICADO, EN_CURSO, IMPLEMENTADO_NO_VERIFICADO, VERIFICADO, BLOQUEADO, DIFERIDO.
@@ -10,7 +10,7 @@ Estados: PLANIFICADO, EN_CURSO, IMPLEMENTADO_NO_VERIFICADO, VERIFICADO, BLOQUEAD
 | Repositorio SrEdgarR/IDG, README y primera subida | 00 | VERIFICADO | Repositorio público, main y primer SHA remoto verificados; evidencia debajo. |
 | Plataforma, licencia y límites | 00, 13, 15 | VERIFICADO (documentación 00) | [ADR-001](decisions/001-plataforma.md), [LICENSE](../LICENSE), [Desarrollo](DESARROLLO.md); compatibilidad del binario pendiente de 13/15. |
 | Separación core/runtime/desktop/host y contratos | 00, 01 | VERIFICADO (alcance 01 local) | crates/*, apps/*, scripts/test-*.mjs; [ADR-009](decisions/009-esqueleto-verificado.md). |
-| UI-01 a UI-08 | 02, 05, 14, 15 | PLANIFICADO | — |
+| UI-01 a UI-08 | 02, 05, 14, 15 | EN_CURSO; capa visual 02 VERIFICADA localmente | App, DownloadList, Dialogs, Settings, galería y tokens; pruebas UI y Tauri. Backend de descargas, accesibilidad exhaustiva y rendimiento final pendientes. |
 | WIN-01 a WIN-06 | 05, 06, 08, 12, 13 | PLANIFICADO | — |
 | WIN-07 | 13, 15 | PLANIFICADO | — |
 | DL-01 HTTP/HTTPS | 03, 04 | PLANIFICADO | — |
@@ -30,7 +30,7 @@ Estados: PLANIFICADO, EN_CURSO, IMPLEMENTADO_NO_VERIFICADO, VERIFICADO, BLOQUEAD
 
 ## Registro de fases
 
-Fase 00, 2026-09-19: documentación, licencia íntegra, guías de contribución/seguridad, ADR, [trazabilidad de todos los requisitos](TRACEABILITY.md) y exclusiones preparadas. El ZIP original se conserva local sin versionar; el manifiesto del kit conserva su significado histórico. La fase 01 no se ha ejecutado.
+Fase 00, 2026-09-19: documentación, licencia íntegra, guías de contribución/seguridad, ADR, [trazabilidad de todos los requisitos](TRACEABILITY.md) y exclusiones preparadas. El ZIP original se conserva local sin versionar; el manifiesto del kit conserva su significado histórico. En ese momento todavía no se había ejecutado fase 01.
 
 ### Evidencia de fase 00
 
@@ -60,7 +60,7 @@ La evidencia de fase 01 se limita al entorno registrado; no certifica rendimient
 
 ## Fase 01 — evidencia local, 2026-09-19
 
-Rama: feat/01-esqueleto-y-puente. Base conservada e22c96deb44791da860bdcf36ec0b44911c0b0f1; primer incremento de protocolo 5925e5f publicado. El SHA final y PR se comunican al entregar para evitar autorreferencias. No se avanzó a fase 02.
+Rama: feat/01-esqueleto-y-puente. Base conservada e22c96deb44791da860bdcf36ec0b44911c0b0f1; primer incremento de protocolo 5925e5f publicado. El SHA final y PR se comunican al entregar para evitar autorreferencias. En esa entrega no se avanzó a fase 02.
 
 | Área | Estado | Evidencia real |
 |---|---|---|
@@ -84,11 +84,11 @@ Comprobación visual: captura auténtica del WebView2 revisada, estado/PID y con
 
 ## SIGUIENTE_PASO
 
-Fusionar únicamente PR #1 con autorización expresa del propietario cuando el HEAD documental esté aprobado y sin conflictos. Continuar fase 02 en feat/02-interfaz; si solo falta CI, usar rama dependiente y no fusionar con checks pendientes. Conservar los pendientes de compatibilidad.
+Revisar la interfaz y las capturas de fase 02 en su PR hacia main. Consultar CI del SHA exacto antes de autorizar su integración. No fusionar automáticamente y no iniciar fase 03. Conservar pendientes de compatibilidad y conectar acciones de descarga solo en las fases asignadas.
 
 Revisión final local: 112 archivos inspeccionados, 106 enlaces Markdown locales válidos y cero patrones de tokens/claves privadas/URLs con credenciales. Revisión estática independiente sin hallazgos bloqueantes; precisó que el test Tauri termina el proceso y no pulsa la X (recorrido manual pendiente ya indicado). Diff sin errores de whitespace. Los binarios, perfiles, herramientas descargadas y capturas están excluidos; solo se versiona la clave pública de identidad Chromium.
 
-Publicación verificada: commit de implementación d38fa27d2b643f44e221e42a397fe262295d0b21 coincide con la rama remota. [PR #1](https://github.com/SrEdgarR/IDG/pull/1) abierta hacia main, sin fusionar. pnpm audit --prod no encontró vulnerabilidades conocidas. Captura real saneada en docs/images/fase01-conexion.png. Se corrigió una línea vacía final detectada en el diff de avisos de terceros.
+Publicación verificada: commit de implementación d38fa27d2b643f44e221e42a397fe262295d0b21 coincide con la rama remota. [PR #1](https://github.com/SrEdgarR/IDG/pull/1) entonces abierta hacia main, sin fusionar; integración posterior registrada debajo. pnpm audit --prod no encontró vulnerabilidades conocidas. Captura real saneada en docs/images/fase01-conexion.png. Se corrigió una línea vacía final detectada en el diff de avisos de terceros.
 
 ## Transición autorizada a fase 02
 
@@ -97,3 +97,34 @@ Sobre 9bbdc40 se recompilaron los ejecutables y se realizó interacción real au
 Confirmación comunicada por el propietario: Reconectar funciona después de iniciar manualmente idg-runtime.exe. Reconectar no debe iniciar el motor. Esta confirmación no aprueba navegadores, accesibilidad u otras pruebas no mencionadas. No hay defecto bloqueante conocido en el esqueleto; se conserva la matriz ampliada pendiente. La autorización de fusión se limita a PR #1; PR de fase 02 requiere revisión y no tiene autorización de fusión.
 
 Este cierre cambia solo documentación: lectura de CI del SHA exacto, revisión de evidencia y enlaces/diff; no se afirma una nueva ejecución completa de -Integration.
+
+PR #1 fusionada con autorización del propietario: HEAD documental 87403226a82d482bb8b0a882babe4923d3b65b79 aprobado en [CI de PR](https://github.com/SrEdgarR/IDG/actions/runs/35470825868) y [push](https://github.com/SrEdgarR/IDG/actions/runs/35470824002), jobs portable/windows. Integración verificada: e64d633ead3e52eda7a0c14804e735d47c67d468. La rama fase 02 comenzó dependiente de ese cierre mientras corría CI y conserva toda la historia mediante merge de main. No se autorizó fusionar fase 02.
+
+
+## Fase 02 — interfaz y evidencia local
+
+Implementación en feat/02-interfaz, sobre el esqueleto existente, sin motor de descargas ni cambios del IPC. Fuentes verificadas: 45c45a471b0d20502d104292eab0a18caaa65b9f; integración de main sin cambios de fuentes: 086700682194684ac4bb87496d8231391dfeee62. Check.ps1 -Integration probó esas fuentes; después se ampliaron únicamente las aserciones de resize/persistencia del test y pnpm test:ui volvió a pasar. Cambios posteriores solo documentales no implican una nueva prueba completa.
+
+| Área | Estado y evidencia |
+|---|---|
+| Shell, sidebar exacta, temas, búsqueda/filtros | VERIFICADO automáticamente con TypeScript, tres tests de modelo y test-ui.mjs. Tokens compartidos sin nuevas dependencias. Tema/vista local persistidos; no ajustes del runtime. |
+| Filas/selección/expansión/menús | VERIFICADO en galería: 0/1/3/20, override manual, checkbox y menú no expanden, cambio de muestras conserva selección/foco/scroll, resize mantiene override. Métricas desconocidas explícitas; 60 puntos máximos por sparkline, 50 filas por página. |
+| Diálogos/Ajustes/asistente/colas/reglas/multimedia/auxiliares | Componentes IMPLEMENTADOS; interacciones locales cubiertas según inventario. Operaciones del motor PLANIFICADAS y deshabilitadas. Capturas revisadas no equivalen a probar todos los controles. |
+| Producción sin fixtures | VERIFICADO: entrada normal vacía, prueba del bundle sin entry/marcadores/nombres de galería. La galería usa un entry separado y no invoca Tauri. |
+| Aplicación Windows real | VERIFICADO mediante interacción automatizada en Tauri/WebView2: error útil sin runtime, handshake, ping, shutdown y reconexión; cero filas reales; diálogo y temas capturados. No revisión humana. |
+| Extensiones reales | VERIFICADO con test-chromium y test-firefox después de cambiar estilos: Native Messaging, reapertura de página, desconexión/reconexión sin relanzamiento. No recorrido del menú nativo. Registro de desarrollo propio retirado al finalizar. |
+| Regresión general | Check.ps1 -Integration aprobado: fmt, Clippy -D warnings, seis tests Rust, tres tests UI modelo, tipos regenerados, TS, build frontend/extensión/Tauri, runtime/framing/seguridad, galería y conexiones reales. test-ui se repitió tras ampliar sus aserciones de resize/persistencia. |
+| Evidencia visual | 27 capturas de galería + Tauri y popup claro/oscuro. Vista normal/pequeña revisada, sin overflow horizontal; gráficas visibles en filas pequeñas. DPR 1.5/2 emulado: NO prueba DPI real de Windows. Selección saneada en images/fase02-*.png. |
+| CI | Workflow conserva portable/windows y añade ui headless en Linux. Estado remoto del HEAD final pendiente de consulta en la entrega. CI ui no ejecuta Tauri ni Native Messaging. |
+
+Defectos corregidos y comprobados: expansión manual se perdía al filtrar hasta cero resultados; foco de modal escapaba con Tab; error asíncrono de conexión no mostraba la explicación útil; gráfica quedaba oculta en ventana pequeña. La revisión independiente detectó campos visuales omitidos de Avanzado/Ajustes; añadidos como controles pendientes. La prueba de resize ahora espera el render del evento en vez de leer antes de actualizarse. Capturas se toman tras finalizar transiciones, sin editar imágenes.
+
+**Confirmado por el propietario:** únicamente reconexión tras iniciar runtime manualmente (transición anterior), y cierre de la ventana anterior para permitir recompilar. No atribuirle aprobación estética, navegadores o DPI.
+
+**Pendiente de esta entrega:** revisión visual del propietario y CI del HEAD de su PR; ninguna descarga se puede iniciar. **Pendientes posteriores:** integrar motor/datos/acciones en 03–12 según inventario, bandeja y configuración de X, instalador/actualizador, Windows 10, otras familias de navegador, menú nativo de extensión, accesibilidad exhaustiva, DPI real y rendimiento a escala. No se ha iniciado fase 03. Ver [ADR-010](decisions/010-interfaz-y-galeria.md).
+
+## Transición solicitada a fase 03
+
+Confirmación del propietario limitada a temas claro/oscuro, filas expandibles con información y gráfica, Nueva descarga y Configuración: base visual aceptada. Se pidió únicamente subir moderadamente todo el texto; decoración posterior. No equivale a aprobar accesibilidad/DPI/compatibilidad. PR #2 seguía abierta con CI de d9289d8 aprobada; el nuevo ajuste requiere sus propios checks antes de fusionar. Motor 03 no se incorpora a PR #2.
+
+Ajuste tipográfico: +1 px en toda la escala mediante tokens compartidos, sin zoom ni cambio de paleta. Build, test:ui y Check.ps1 -Integration aprobados; capturas auténticas actualizadas, incluida revisión de galería pequeña y diálogos. La aprobación de CI anterior no se atribuye a este nuevo commit. SIGUIENTE_PASO de transición: comprobar su HEAD, fusionar únicamente PR #2 cuando cumpla condiciones y continuar 03 en rama independiente/dependiente explícita.

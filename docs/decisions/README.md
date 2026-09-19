@@ -16,3 +16,5 @@ Fecha: 2026-09-19. Aceptadas como diseño de la fase 00; ninguna implica impleme
 Implementar solo el mínimo pedido en [fase 01](../../prompts/01_esqueleto_y_puente.md), sin anticipar el motor ni la interfaz completa. Pruebas detalladas: [TEST_PLAN](../TEST_PLAN.md).
 
 Concreción y evidencia de fase 01: [ADR-009](009-esqueleto-verificado.md).
+
+- [ADR-010 — Interfaz y galería aislada](010-interfaz-y-galeria.md): presentación, preferencias visuales y frontera con el runtime.
