@@ -1,6 +1,6 @@
 # Estado de implementación
 
-Estado actual: **fase 02 aceptada visualmente e integrada; fase 03 implementada y publicada en PR #3, con pruebas locales de HTTP/HTTPS, recuperación y regresiones. CI remoto pendiente de conclusión**.
+Estado actual: **fase 03 con CI e integración final comprobados en ed4e72e; cierre documental y transición autorizada a fase 04**.
 No marcar una fila completada solo por generar archivos. Completar evidencia conforme se ejecute cada fase.
 
 Estados: PLANIFICADO, EN_CURSO, IMPLEMENTADO_NO_VERIFICADO, VERIFICADO, BLOQUEADO, DIFERIDO.
@@ -84,7 +84,7 @@ Comprobación visual: captura auténtica del WebView2 revisada, estado/PID y con
 
 ## SIGUIENTE_PASO
 
-Revisar la PR de fase 03 y CI de su HEAD exacto antes de autorizar integración. No fusionar automáticamente ni iniciar fase 04. Usar el recorrido HTTP de desarrollo para revisión del propietario; conservar pendientes de matriz ampliada y conexión visual.
+Comprobar CI del cierre documental de PR #3 y fusionarla solo con checks aprobados y sin conflictos, conforme a autorización expresa. Desarrollar exclusivamente fase 04 en feat/04-segmentacion, inicialmente dependiente de ese cierre si sigue pendiente CI. No fusionar la PR de 04 ni avanzar a 05.
 
 Revisión final local: 112 archivos inspeccionados, 106 enlaces Markdown locales válidos y cero patrones de tokens/claves privadas/URLs con credenciales. Revisión estática independiente sin hallazgos bloqueantes; precisó que el test Tauri termina el proceso y no pulsa la X (recorrido manual pendiente ya indicado). Diff sin errores de whitespace. Los binarios, perfiles, herramientas descargadas y capturas están excluidos; solo se versiona la clave pública de identidad Chromium.
 
@@ -156,3 +156,11 @@ Revisión de diff/secretos/enlaces: 155 archivos, 134 enlaces locales válidos, 
 Implementación probada: `b949ffffc47f1988a4455a412c76d39b03ad294c`. Push a `origin/feat/03-motor-http` correcto y SHA remoto comprobado; [PR #3](https://github.com/SrEdgarR/IDG/pull/3) abierta hacia main, sin fusionar. El cierre que agrega este registro solo modifica documentación; no representa una nueva prueba completa del producto.
 
 CI observado para b949ffff: [run de push 35474606199](https://github.com/SrEdgarR/IDG/actions/runs/35474606199), ui aprobado, portable/windows en curso; [run de PR 35474637478](https://github.com/SrEdgarR/IDG/actions/runs/35474637478), ui/portable en curso y Windows en cola. No se declaran aprobados ni se atribuyen estos runs al commit documental posterior. Consultar el HEAD actual de PR #3 antes de integrar; su CI sigue siendo condición pendiente. No se promete seguimiento en segundo plano.
+
+## Cierre puntual de fase 03 y autorización de transición
+
+HEAD inspeccionado y conservado: `ed4e72e88cd10f493e50984b1a802b3f12e81587`. CI de ese SHA aprobado en ui/portable/windows: [35474676225](https://github.com/SrEdgarR/IDG/actions/runs/35474676225) y [35474674383](https://github.com/SrEdgarR/IDG/actions/runs/35474674383). No se atribuyen esos resultados al commit documental posterior.
+
+Sobre ese mismo HEAD se ejecutó nuevamente `Check.ps1 -Integration`: 24 pruebas Rust, modelo/UI, compilación, tipos, IPC/HTTP y regresiones Tauri/WebView2, Chromium y Firefox aprobadas. Interacciones reales automatizadas; no confirmación humana del motor ni gesto del menú nativo. Antes de registrar se verificó que los cuatro registros de desarrollo estaban ausentes; se crearon para las pruebas y se retiraron al terminar, restaurando ese estado. No se encontraron procesos IDG personales activos ni se usaron perfiles personales. No se repitió ni eludió el recorrido adicional de PowerShell bloqueado anteriormente: permanece no ejecutado.
+
+Precisión de privacidad: los documentos de trabajos se protegen con DPAPI antes de almacenarlos como blobs dentro de SQLite/WAL. Esto **no es cifrado integral del archivo SQLite**: esquema e identificadores quedan visibles. La prueba manual del propietario sigue PENDIENTE. No aparecieron regresiones ni defectos bloqueantes conocidos en este cierre; el cambio es documental, sin reconstruir fase 03. La fusión de PR #3 queda autorizada únicamente tras aprobar el HEAD documental; la PR de fase 04 no tiene autorización de fusión.
