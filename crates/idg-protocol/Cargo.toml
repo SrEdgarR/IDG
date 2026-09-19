@@ -1,0 +1,12 @@
+[package]
+name = "idg-protocol"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+ts-rs.workspace = true

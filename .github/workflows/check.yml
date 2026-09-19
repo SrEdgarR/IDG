@@ -1,0 +1,29 @@
+name: Phase 01 checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  portable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - run: rustup show
+      - run: cargo test --locked -p idg-core -p idg-protocol
+      - run: cargo run --locked -p idg-protocol --bin export-types
+      - run: git diff --exit-code -- packages/shared-types/protocol.ts
+  windows:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.14.0
+          package-manager-cache: false
+      - run: rustup show
+      - run: npx --yes pnpm@12.4.2 install --frozen-lockfile
+      - run: ./scripts/Check.ps1
+        shell: pwsh

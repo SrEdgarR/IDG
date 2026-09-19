@@ -1,6 +1,6 @@
 # Estado de implementación
 
-Estado actual: **fase 00 VERIFICADA (fundaciones documentales y primera subida); aplicación y extensión no implementadas**.
+Estado actual: **fase 01 implementada y verificada localmente en Windows 11 x64, con integración real Tauri/Chromium/Firefox; CI portable y Windows aprobadas para 9bbdc40; transición autorizada a fase 02**.
 No marcar una fila completada solo por generar archivos. Completar evidencia conforme se ejecute cada fase.
 
 Estados: PLANIFICADO, EN_CURSO, IMPLEMENTADO_NO_VERIFICADO, VERIFICADO, BLOQUEADO, DIFERIDO.
@@ -9,7 +9,7 @@ Estados: PLANIFICADO, EN_CURSO, IMPLEMENTADO_NO_VERIFICADO, VERIFICADO, BLOQUEAD
 |---|---|---|---|
 | Repositorio SrEdgarR/IDG, README y primera subida | 00 | VERIFICADO | Repositorio público, main y primer SHA remoto verificados; evidencia debajo. |
 | Plataforma, licencia y límites | 00, 13, 15 | VERIFICADO (documentación 00) | [ADR-001](decisions/001-plataforma.md), [LICENSE](../LICENSE), [Desarrollo](DESARROLLO.md); compatibilidad del binario pendiente de 13/15. |
-| Separación core/runtime/desktop/host y contratos | 00, 01 | PLANIFICADO (implementación) | Decisiones de diseño registradas en [ADR](decisions/README.md); sin código ni pruebas de procesos. |
+| Separación core/runtime/desktop/host y contratos | 00, 01 | VERIFICADO (alcance 01 local) | crates/*, apps/*, scripts/test-*.mjs; [ADR-009](decisions/009-esqueleto-verificado.md). |
 | UI-01 a UI-08 | 02, 05, 14, 15 | PLANIFICADO | — |
 | WIN-01 a WIN-06 | 05, 06, 08, 12, 13 | PLANIFICADO | — |
 | WIN-07 | 13, 15 | PLANIFICADO | — |
@@ -19,7 +19,7 @@ Estados: PLANIFICADO, EN_CURSO, IMPLEMENTADO_NO_VERIFICADO, VERIFICADO, BLOQUEAD
 | DL-08 a DL-10 | 04, 05, 06, 11 | PLANIFICADO | — |
 | ORG-01 a ORG-03 | 06, 07 | PLANIFICADO | — |
 | ORG-04 a ORG-06 | 06, 12 | PLANIFICADO | — |
-| EXT-01 a EXT-08 | 01, 07, 08 | PLANIFICADO | — |
+| EXT-01 a EXT-08 | 01, 07, 08 | EN_CURSO | Puente y estado de conexión verificados en 01; captura/AutoPick y matriz completa PLANIFICADOS. |
 | MEDIA-01 a MEDIA-03 | 09, 10 | PLANIFICADO | — |
 | MEDIA-04 a MEDIA-07 | 10 | PLANIFICADO | — |
 | SEC-01 a SEC-06 | Todas; revisión 12, 15 | PLANIFICADO | — |
@@ -48,7 +48,7 @@ Este registro se guarda en un segundo commit documental después de verificar el
 
 ### Comprobación manual
 
-Abrir el README en GitHub, seguir las guías de instalación/desarrollo y confirmar el aviso de que no hay instalador. Recorrer ADR y trazabilidad; los CTL deben seguir PLANIFICADO. Comparar `git rev-parse HEAD` con `git ls-remote origin refs/heads/main` y comprobar `git status --short --branch` limpio. No hay todavía una aplicación que probar.
+Abrir el README en GitHub, seguir las guías de instalación/desarrollo y confirmar el aviso de que no hay instalador. Recorrer ADR y trazabilidad; los CTL deben seguir PLANIFICADO. Comparar `git rev-parse HEAD` con `git ls-remote origin refs/heads/main` y comprobar `git status --short --branch` limpio. Esta comprobación histórica corresponde a fase 00; para la aplicación actual ver DESARROLLO.
 
 ## Decisiones pendientes de despliegue
 
@@ -56,8 +56,44 @@ Destino creado y verificado: [SrEdgarR/IDG](https://github.com/SrEdgarR/IDG), p�
 
 ## Limitaciones conocidas
 
-Aún no existe evidencia de ejecución del programa. Nada en este archivo certifica velocidad, seguridad, compatibilidad con navegadores o estabilidad de un binario.
+La evidencia de fase 01 se limita al entorno registrado; no certifica rendimiento de descargas, seguridad absoluta, compatibilidad universal ni estabilidad de una release.
+
+## Fase 01 — evidencia local, 2026-09-19
+
+Rama: feat/01-esqueleto-y-puente. Base conservada e22c96deb44791da860bdcf36ec0b44911c0b0f1; primer incremento de protocolo 5925e5f publicado. El SHA final y PR se comunican al entregar para evitar autorreferencias. No se avanzó a fase 02.
+
+| Área | Estado | Evidencia real |
+|---|---|---|
+| Rust y frontend, contratos generados | VERIFICADO | Check.ps1 -Integration pasó: fmt, Clippy -D warnings, seis tests Rust, tipos TS, regeneración estable, builds de tres ejecutables y extensión. |
+| Instancia única y estado | VERIFICADO | test-runtime.mjs/idg-probe: varios clientes con mismo runtime_id, segunda instancia rechazada, snapshots, suscripción, reconexión. |
+| Framing y validación | VERIFICADO | tests/framing.rs y test-runtime: fragmentos, EOF limpio/truncado, tamaño cero/excesivo, JSON inválido, versión incompatible y handshake obligatorio; frame parcial termina dentro del plazo. |
+| Seguridad IPC | VERIFICADO (pruebas locales) | Node no autorizado rechazado sin respuesta; pipe falso del mismo usuario rechazado por probe. DACL SID-only y remote reject en código. Otra cuenta/sesión remota NO EJECUTADA. |
+| Ventana Windows real | VERIFICADO | test-desktop.mjs abrió Tauri/WebView2 y accionó conectar, ping, shutdown y reconectar; captura real revisada. Cierre de proceso conserva runtime. |
+| Chromium real | VERIFICADO (Chrome for Testing) | test-chromium.mjs: página propia del popup → host → pipe → runtime, cierre/reapertura, caída y reconexión; cierre de navegador conserva runtime. |
+| Firefox real | VERIFICADO (156.0) | test-firefox.mjs: addon temporal en perfil separado, mismo recorrido real y salida. |
+| Vida del host | VERIFICADO | test-runtime: EOF del navegador termina host, runtime permanece; cierre runtime termina host incluso con stdin abierto. |
+| Registro reversible/host ausente | VERIFICADO | Unregister → Chromium muestra Desconectado → Register → ambos navegadores conectan. Registros de pruebas retirados al entregar. |
+| CI portable/Windows | VERIFICADO para 9bbdc40 | [PR run 35469726320](https://github.com/SrEdgarR/IDG/actions/runs/35469726320) y [push run 35469724322](https://github.com/SrEdgarR/IDG/actions/runs/35469724322): portable y Windows aprobados. CI no ejecuta ventanas ni navegadores. |
+| Interfaz completa, descargas, persistencia, captura y video | PLANIFICADO | Fuera del alcance de 01. No existen filas, controles o progreso simulados. |
+
+Entorno y versiones: [DESARROLLO](DESARROLLO.md). Rust y Build Tools instalados con autorización. Instalador Firefox bloqueado inicialmente por revisión automática; el propietario lo instaló y después se ejecutó la prueba. No quedan bloqueos de herramientas para las comprobaciones locales de 01.
+
+Fallos resueltos durante desarrollo: API de generación ts-rs actualizada, permisos/build Tauri e icono, configuración pnpm 12 y tipos TS; prueba Chromium corrigió un selector que confundía role=status con heading; Firefox requirió esperar la navegación y usar su contexto de automatización para abrir la página de extensión. El fallo de una prueba no se registró como éxito antes de corregirlo y repetirla.
+
+Comprobación visual: captura auténtica del WebView2 revisada, estado/PID y controles legibles. Automatización en Windows y navegadores reales no equivale a un recorrido manual exhaustivo. Pendiente manual: abrir desde menú de extensiones (las pruebas cargan su página), X de ventana mediante gesto humano, teclado/lector de pantalla/DPI, Windows 10, Chrome de consumo/Edge/Brave/Opera/Vivaldi, privado/múltiples perfiles, usuario distinto y estrés prolongado. La fase no acredita esas matrices futuras del TEST_PLAN.
 
 ## SIGUIENTE_PASO
 
-Ejecutar únicamente [prompts/01_esqueleto_y_puente.md](../prompts/01_esqueleto_y_puente.md) en una nueva tarea y rama por fase. Primero comprobar/preparar Rust MSVC, C++/SDK, pnpm y WebView2 con autorización para cualquier instalación del sistema; fijar paquetes/lockfiles y probar el puente mínimo real en Chromium y Firefox. No avanzar a fase 02.
+Fusionar únicamente PR #1 con autorización expresa del propietario cuando el HEAD documental esté aprobado y sin conflictos. Continuar fase 02 en feat/02-interfaz; si solo falta CI, usar rama dependiente y no fusionar con checks pendientes. Conservar los pendientes de compatibilidad.
+
+Revisión final local: 112 archivos inspeccionados, 106 enlaces Markdown locales válidos y cero patrones de tokens/claves privadas/URLs con credenciales. Revisión estática independiente sin hallazgos bloqueantes; precisó que el test Tauri termina el proceso y no pulsa la X (recorrido manual pendiente ya indicado). Diff sin errores de whitespace. Los binarios, perfiles, herramientas descargadas y capturas están excluidos; solo se versiona la clave pública de identidad Chromium.
+
+Publicación verificada: commit de implementación d38fa27d2b643f44e221e42a397fe262295d0b21 coincide con la rama remota. [PR #1](https://github.com/SrEdgarR/IDG/pull/1) abierta hacia main, sin fusionar. pnpm audit --prod no encontró vulnerabilidades conocidas. Captura real saneada en docs/images/fase01-conexion.png. Se corrigió una línea vacía final detectada en el diff de avisos de terceros.
+
+## Transición autorizada a fase 02
+
+Sobre 9bbdc40 se recompilaron los ejecutables y se realizó interacción real automatizada con la X nativa: escritorio cerrado, runtime con el mismo PID y runtime_id; reapertura conectó sin otra instancia. No fue una revisión humana. Computer Use interrumpió la prueba al no poder determinar con confianza la URL de Chromium: abrir/cerrar/reabrir el popup desde el menú real sigue PENDIENTE DE CONFIRMACIÓN DEL USUARIO. La integración previa de la página del popup mediante automatización permanece válida; no equivale al recorrido de la barra del navegador.
+
+Confirmación comunicada por el propietario: Reconectar funciona después de iniciar manualmente idg-runtime.exe. Reconectar no debe iniciar el motor. Esta confirmación no aprueba navegadores, accesibilidad u otras pruebas no mencionadas. No hay defecto bloqueante conocido en el esqueleto; se conserva la matriz ampliada pendiente. La autorización de fusión se limita a PR #1; PR de fase 02 requiere revisión y no tiene autorización de fusión.
+
+Este cierre cambia solo documentación: lectura de CI del SHA exacto, revisión de evidencia y enlaces/diff; no se afirma una nueva ejecución completa de -Integration.

@@ -55,5 +55,9 @@ Desktop.ini
 *.tmp
 /tmp/
 /downloads/
+/apps/desktop/src-tauri/gen/
+/apps/extension/build/
+/tools/
+/.local/
 *.msi
 *.exe
