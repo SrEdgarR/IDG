@@ -1,0 +1,59 @@
+# Dependencies and generated builds
+**/node_modules/
+**/target/
+**/dist/
+**/.turbo/
+/artifacts/
+/coverage/
+/playwright-report/
+/test-results/
+
+# Local secrets; keep sanitized examples
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+*.key
+*.pfx
+*.p12
+*.pem
+id_rsa
+id_ed25519
+
+# Download/user state; review tracked files separately
+*.idgpart
+*.idgpart.*
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.log
+/runtime-data/
+/private-data/
+
+# Local editor/OS state
+.vs/
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.example.json
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Original kit archive retained locally; extracted sources are versioned
+/IDG_Kit_Astra_v2.zip
+**/.pnpm-store/
+*.sqlite3-wal
+*.sqlite3-shm
+*.dmp
+*.tmp
+/tmp/
+/downloads/
+*.msi
+*.exe
