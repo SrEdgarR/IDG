@@ -1,5 +1,6 @@
 mod files;
 mod http;
+pub mod ranges;
 pub use files::{create_job, recover, validate_input};
 pub use http::{client, transfer};
 use idg_protocol::*;
