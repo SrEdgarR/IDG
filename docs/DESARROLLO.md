@@ -4,7 +4,7 @@ La fase 01 contiene un esqueleto ejecutable de conexión. No descarga archivos. 
 
 ## Entorno y versiones comprobados
 
-El 2026-09-19: Windows 11 Pro 10.0.26200 x64, AMD Ryzen 7 5700X, Rust/Cargo 1.98.1 MSVC, Build Tools 2022 17.14.41 con C++/Windows SDK, WebView2 153.0.4234.32, Node 24.14.0, npm 11.9.0 y pnpm 12.4.2. Firefox 156.0 instalado por el propietario; Chrome for Testing 153.0.8010.12 en perfil separado. No se ha comprobado Windows 10 ni otros navegadores.
+El 2026-09-19: Windows 11 Pro 10.0.26200 x64, AMD Ryzen 7 5700X, 31,9 GiB RAM, Rust/Cargo 1.98.1 MSVC, Build Tools 2022 17.14.41 con C++ y Windows SDK 10.0.19041.0/10.0.26100.0, WebView2 153.0.4234.32, Node 24.14.0, npm 11.9.0 y pnpm 12.4.2. Firefox 156.0 instalado por el propietario; Chrome for Testing 153.0.8010.12 en perfil separado. No se ha comprobado Windows 10 ni otros navegadores.
 
 Rust y Build Tools se instalaron con consentimiento; no se cambió PATH global ni se desactivaron protecciones. Rust está en `%USERPROFILE%\.cargo\bin`. El wrapper pnpm presente en PATH devolvía 11.19.0; los comandos usan explícitamente `npx --yes pnpm@12.4.2`.
 

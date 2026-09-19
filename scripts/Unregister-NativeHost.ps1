@@ -1,3 +1,4 @@
+#Requires -Version 7.0
 [CmdletBinding()]
 param([ValidateSet('Chromium','Firefox')][string[]]$Browser = @('Chromium','Firefox'))
 $ErrorActionPreference = 'Stop'

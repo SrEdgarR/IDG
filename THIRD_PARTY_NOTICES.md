@@ -19,4 +19,3 @@ Principales: Tauri/tauri-build (MIT OR Apache-2.0), Tokio (MIT), Serde/serde_jso
 El inventario de metadatos no sustituye los textos de licencia/NOTICE. Antes de distribuir binarios deben reunirse los avisos del grafo efectivamente enlazado, fuentes y obligaciones de las licencias correspondientes (incluida MPL donde aplique). Esa revisión de empaquetado queda pendiente; aquí se publica fuente y lockfiles, sin una release binaria ni instalador.
 
 El icono de desarrollo es propio y reproducible con scripts/make-dev-icon.mjs. No se añadieron fuentes o imágenes de terceros. Playwright descarga sus navegadores/herramientas solo a tools/browsers, excluido de Git; esto no implementa ni distribuye el motor multimedia de IDG.
-

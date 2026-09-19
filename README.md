@@ -71,3 +71,7 @@ Consulta el [índice de documentación](docs/README.md), la [guía de instalaci�
 ## Licencia
 
 El proyecto se distribuye bajo **GPL-3.0-only**, únicamente la versión 3; consulta el [texto completo](LICENSE) y los [avisos de terceros](THIRD_PARTY_NOTICES.md). No se presentan los prompts como una implementación terminada del programa.
+
+![Ventana real de desarrollo mostrando la conexión con el motor](docs/images/fase01-conexion.png)
+
+Captura de la prueba real en Windows 11. Solo conexión; todavía no hay descargas.

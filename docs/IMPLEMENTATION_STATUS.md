@@ -1,6 +1,6 @@
 # Estado de implementación
 
-Estado actual: **fase 01 implementada y verificada localmente en Windows 11 x64, con integración real Tauri/Chromium/Firefox; CI remota pendiente de primera ejecución**.
+Estado actual: **fase 01 implementada y verificada localmente en Windows 11 x64, con integración real Tauri/Chromium/Firefox; CI portable aprobada; ejecución Windows remota en curso al registrar esta evidencia**.
 No marcar una fila completada solo por generar archivos. Completar evidencia conforme se ejecute cada fase.
 
 Estados: PLANIFICADO, EN_CURSO, IMPLEMENTADO_NO_VERIFICADO, VERIFICADO, BLOQUEADO, DIFERIDO.
@@ -73,7 +73,7 @@ Rama: feat/01-esqueleto-y-puente. Base conservada e22c96deb44791da860bdcf36ec0b4
 | Firefox real | VERIFICADO (156.0) | test-firefox.mjs: addon temporal en perfil separado, mismo recorrido real y salida. |
 | Vida del host | VERIFICADO | test-runtime: EOF del navegador termina host, runtime permanece; cierre runtime termina host incluso con stdin abierto. |
 | Registro reversible/host ausente | VERIFICADO | Unregister → Chromium muestra Desconectado → Register → ambos navegadores conectan. Registros de pruebas retirados al entregar. |
-| CI portable/Windows | IMPLEMENTADO_NO_VERIFICADO | .github/workflows/check.yml; pendiente resultado remoto tras push. No atribuirle las pruebas gráficas locales. |
+| CI portable/Windows | EN_CURSO | Portable aprobada en [run 35469531778](https://github.com/SrEdgarR/IDG/actions/runs/35469531778); Windows sigue ejecutándose al registrar. No atribuirle las pruebas gráficas locales. |
 | Interfaz completa, descargas, persistencia, captura y video | PLANIFICADO | Fuera del alcance de 01. No existen filas, controles o progreso simulados. |
 
 Entorno y versiones: [DESARROLLO](DESARROLLO.md). Rust y Build Tools instalados con autorización. Instalador Firefox bloqueado inicialmente por revisión automática; el propietario lo instaló y después se ejecutó la prueba. No quedan bloqueos de herramientas para las comprobaciones locales de 01.
@@ -87,3 +87,5 @@ Comprobación visual: captura auténtica del WebView2 revisada, estado/PID y con
 Revisar la PR de fase 01 y el resultado de CI, repetir el recorrido manual de DESARROLLO en el equipo del propietario y atender cualquier fallo. No fusionar automáticamente. No iniciar fase 02 sin una nueva indicación; se conserva íntegra su especificación y el inventario de controles pendientes.
 
 Revisión final local: 112 archivos inspeccionados, 106 enlaces Markdown locales válidos y cero patrones de tokens/claves privadas/URLs con credenciales. Revisión estática independiente sin hallazgos bloqueantes; precisó que el test Tauri termina el proceso y no pulsa la X (recorrido manual pendiente ya indicado). Diff sin errores de whitespace. Los binarios, perfiles, herramientas descargadas y capturas están excluidos; solo se versiona la clave pública de identidad Chromium.
+
+Publicación verificada: commit de implementación d38fa27d2b643f44e221e42a397fe262295d0b21 coincide con la rama remota. [PR #1](https://github.com/SrEdgarR/IDG/pull/1) abierta hacia main, sin fusionar. pnpm audit --prod no encontró vulnerabilidades conocidas. Captura real saneada en docs/images/fase01-conexion.png. Se corrigió una línea vacía final detectada en el diff de avisos de terceros.
