@@ -19,6 +19,7 @@ Invoke-Checked { npx --yes pnpm@12.4.2 extension:build }
 Invoke-Checked { cargo build --locked -p idg-runtime -p idg-native-host -p idg-platform-windows }
 Invoke-Checked { npx --yes pnpm@12.4.2 desktop:build }
 Invoke-Checked { node scripts/test-runtime.mjs }
+Invoke-Checked { node scripts/test-http-runtime.mjs }
 if ($Integration) {
     Invoke-Checked { node scripts/test-ui.mjs }
     # Register explicitly beforehand. No registry mutations are hidden in this check.

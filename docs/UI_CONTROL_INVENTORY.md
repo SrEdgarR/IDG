@@ -167,3 +167,7 @@ Las rutas siguientes son relativas a apps/desktop/src salvo extension (apps/exte
 ### Superficies UX
 
 UX-01 asistente (galería); UX-02 shell real y estados; UX-03 filas (galería); UX-04 diálogo real sin envío; UX-05 conflicto (galería); UX-06 colas/reglas (galería, importación futura); UX-07 Ajustes real con disponibilidad explícita; UX-08 popup real, captura futura; UX-09 componente multimedia (galería); UX-10 errores/avisos (galería y error de conexión real); UX-11 componentes opcionales (galería). La bandeja/gestión de X pertenece a sus fases y no se simula.
+
+## Transición de fase 03
+
+No se habilitan nuevos controles gráficos. El backend de iniciar/pausar/reanudar/cancelar existe y se prueba por `idg-probe`, sin declarar VERIFICADO el recorrido de los botones correspondientes. Nueva descarga, acciones de fila/masivas y configuración del motor conservan la disponibilidad explícita de fase 02; conexión, ping y reconexión sí se vuelven a probar. Las filas de muestra permanecen exclusivamente en la galería. El cierre autorizado de fase 02 aumentó 1 px la escala tipográfica compartida, sin cambiar layout, paleta ni zoom.

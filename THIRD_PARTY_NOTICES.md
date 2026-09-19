@@ -19,3 +19,7 @@ Principales: Tauri/tauri-build (MIT OR Apache-2.0), Tokio (MIT), Serde/serde_jso
 El inventario de metadatos no sustituye los textos de licencia/NOTICE. Antes de distribuir binarios deben reunirse los avisos del grafo efectivamente enlazado, fuentes y obligaciones de las licencias correspondientes (incluida MPL donde aplique). Esa revisión de empaquetado queda pendiente; aquí se publica fuente y lockfiles, sin una release binaria ni instalador.
 
 El icono de desarrollo es propio y reproducible con scripts/make-dev-icon.mjs. No se añadieron fuentes o imágenes de terceros. Playwright descarga sus navegadores/herramientas solo a tools/browsers, excluido de Git; esto no implementa ni distribuye el motor multimedia de IDG.
+
+## Dependencias de fase 03
+
+Inventario regenerado: 501 crates y 55 paquetes JS, cero entradas sin licencia declarada. Añadidos reqwest 0.13.5 (MIT OR Apache-2.0), rusqlite 0.40.2 (MIT), httpdate 1.0.3 (MIT OR Apache-2.0); sha2 0.10.9 reutilizado (MIT OR Apache-2.0). rcgen 0.14.10 (MIT OR Apache-2.0) y tokio-rustls 0.26.5 (MIT OR Apache-2.0) sirven pruebas HTTPS; tempfile 3.27.0 (MIT OR Apache-2.0) sirve directorios aislados. Origen crates.io y licencias transitivas en DEPENDENCIES.json. SQLite bundled y el backend criptográfico requieren conservar sus avisos al empaquetar; continúa pendiente el conjunto de avisos de una futura distribución binaria.

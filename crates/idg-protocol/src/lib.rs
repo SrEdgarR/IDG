@@ -1,6 +1,8 @@
 //! Versioned local protocol. No downloads or persistent user state in phase 01.
 pub const VERSION: u32 = 1;
 pub const MAX_FRAME: usize = 256 * 1024;
+mod download;
+pub use download::*;
 
 use serde::{Deserialize, Serialize};
 use std::{io, time::Duration};
@@ -17,6 +19,13 @@ pub enum Command {
     GetSnapshot,
     Subscribe,
     Shutdown,
+    GetDownloadCapabilities,
+    AddDownload { input: NewDownload },
+    GetDownload { job_id: String },
+    ListDownloads { offset: u32 },
+    PauseDownload { job_id: String },
+    ResumeDownload { job_id: String },
+    CancelDownload { job_id: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -57,6 +66,17 @@ pub struct ConnectionState {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Payload {
+    DownloadCapabilities {
+        operations: Vec<String>,
+        schema_version: u32,
+        max_active: u32,
+        max_write_bytes: u32,
+        strong_validator_required: bool,
+    },
+    DownloadChanged {
+        sequence: u32,
+        job: DownloadSnapshot,
+    },
     Hello {
         capabilities: Vec<Command>,
         snapshot: Snapshot,
@@ -71,6 +91,18 @@ pub enum Payload {
     Stopping,
     Error {
         code: ErrorCode,
+    },
+    Download {
+        job: DownloadSnapshot,
+    },
+    Downloads {
+        unavailable: Vec<UnavailableDownload>,
+        jobs: Vec<DownloadSnapshot>,
+        next_offset: Option<u32>,
+    },
+    DownloadFailure {
+        code: DownloadError,
+        message: String,
     },
 }
 

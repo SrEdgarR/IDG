@@ -79,7 +79,7 @@ Cierra los runtimes de IDG que hayas iniciado antes de ejecutar las pruebas: est
 .\scripts\Check.ps1
 ```
 
-Ejecuta formato Rust, Clippy sin warnings, seis tests Rust, tres tests del modelo de presentación, regeneración/consistencia de tipos, comprobación TS, builds y pruebas de procesos/seguridad. Comandos individuales: `cargo fmt --all -- --check`, `cargo clippy --locked --workspace --all-targets -- -D warnings`, `cargo test --locked --workspace`, `cargo run --locked -p idg-protocol --bin export-types`, `npx --yes pnpm@12.4.2 check`, `node scripts/test-runtime.mjs`.
+Ejecuta formato Rust, Clippy sin warnings, las pruebas Rust del workspace, tres tests del modelo de presentación, regeneración/consistencia de tipos, comprobación TS, builds y pruebas de procesos/seguridad. Comandos individuales: `cargo fmt --all -- --check`, `cargo clippy --locked --workspace --all-targets -- -D warnings`, `cargo test --locked --workspace`, `cargo run --locked -p idg-protocol --bin export-types`, `npx --yes pnpm@12.4.2 check`, `node scripts/test-runtime.mjs`.
 
 Para integración real (Firefox instalado y host registrado):
 
@@ -95,11 +95,11 @@ También puedes ejecutar `node scripts/test-desktop.mjs`, `node scripts/test-chr
 
 La prueba Tauri abre una ventana real con WebView2 y depuración local mediante una variable limitada al proceso de prueba; no añade un servidor TCP al IPC del producto. La prueba Firefox habilita el contexto de automatización del navegador mediante `--allow-system-access` solo en ese proceso aislado, para abrir la página propia del complemento. No cambia preferencias globales, firma o protecciones del perfil personal. Las pruebas de navegador son headless y ejercitan la página del popup con Native Messaging real; no certifican el gesto manual del menú de la barra.
 
-CI: `.github/workflows/check.yml` conserva portable (core/protocolo en Linux) y windows (compilación/pruebas de procesos). Añade ui (galería Playwright headless, modelo de presentación y aislamiento del bundle). CI no ejecuta Tauri/WebView2 ni Native Messaging en navegadores; esos requieren las pruebas locales con -Integration. Consulta el resultado remoto antes de declararla aprobada. No publica instaladores ni releases.
+CI: `.github/workflows/check.yml` conserva portable (core/protocolo/migraciones en Linux) y windows (compilación/pruebas de procesos). Añade ui (galería Playwright headless, modelo de presentación y aislamiento del bundle). CI no ejecuta Tauri/WebView2 ni Native Messaging en navegadores; esos requieren las pruebas locales con -Integration. Consulta el resultado remoto antes de declararla aprobada. No publica instaladores ni releases.
 
 ## Límites y diagnóstico
 
-No hay motor de descargas, DB, bandeja, autoinicio ni AutoPick. La interfaz de fase 02 conserva su lista vacía real; las acciones futuras están deshabilitadas y explicadas. Los estados de conexión no se persisten. El pipe admite 16 clientes simultáneos, frames de 256 KiB y plazos de cinco segundos. La suscripción usa una conexión dedicada y snapshots completos, por lo que un salto de secuencia no exige reconstruir deltas. Un proceso malicioso con control del mismo usuario y capacidad de reemplazar binarios no queda aislado por este mecanismo.
+Hay motor HTTP/HTTPS secuencial y SQLite protegida, manejados solo mediante la utilidad de desarrollo. No hay bandeja, autoinicio ni AutoPick. La interfaz de fase 02 conserva su lista vacía real; las acciones futuras están deshabilitadas y explicadas. Los estados de conexión no se persisten. El pipe admite 16 clientes simultáneos, frames de 256 KiB y plazos de cinco segundos. La suscripción usa una conexión dedicada y snapshots completos, por lo que un salto de secuencia no exige reconstruir deltas. Un proceso malicioso con control del mismo usuario y capacidad de reemplazar binarios no queda aislado por este mecanismo.
 
 Ante Desconectado: comprueba el runtime con `idg-probe.exe ping`, que los binarios estén juntos, registro/ID correctos y que el complemento se haya reconstruido. No pegues credenciales ni rutas privadas en issues. Estado, evidencias y pendientes en [IMPLEMENTATION_STATUS](IMPLEMENTATION_STATUS.md).
 
@@ -116,7 +116,7 @@ Abre http://127.0.0.1:1421/gallery.html. Este comando se comprobó con Vite; la 
 
 Prueba filtros y Limpiar, selección, menú de fila, expansión automática/manual, Nueva descarga y las superficies del banner. Actualizar muestra cambia una medida solo al pulsarlo; no hay temporizador de progreso. Conflicto, asistente, colas, reglas, multimedia, recuperación y ventanas auxiliares son componentes de muestra. Mini ventana y zona de arrastre necesitan activación local; no crean ventanas del sistema ni vigilan el portapapeles. Los diálogos explican qué acciones necesitan backend y no muestran éxitos falsos.
 
-Sistema es el tema inicial. Tema y vista de filas se conservan localmente por origen; no guardan URLs, credenciales ni trabajos. La configuración real del motor sigue pendiente. Una elección manual de expansión prevalece durante la sesión, incluso al filtrar y volver. 1–3 filas se expanden automáticamente si cabe el presupuesto de espacio; 4+ empiezan compactas. Los detalles técnicos se abren aparte. Lista paginada de 50 filas como límite de renderizado; no hay API de historial aún.
+Sistema es el tema inicial. Tema y vista de filas se conservan localmente por origen; no guardan URLs, credenciales ni trabajos. La configuración real del motor sigue pendiente. Una elección manual de expansión prevalece durante la sesión, incluso al filtrar y volver. 1–3 filas se expanden automáticamente si cabe el presupuesto de espacio; 4+ empiezan compactas. Los detalles técnicos se abren aparte. Lista paginada de 50 filas como límite de renderizado; hay listado paginado de trabajos por IPC de desarrollo, todavía sin conexión con la lista visual.
 
 Para repetir las pruebas visuales sin runtime:
 
@@ -133,4 +133,10 @@ Capturas automáticas en artifacts/ui-02: matriz claro/oscuro × normal 1180×90
 
 Selección pública de capturas: [aplicación clara](images/fase02-app-light.png), [oscura](images/fase02-app-dark.png), [galería clara](images/fase02-gallery-light.png), [galería oscura pequeña](images/fase02-gallery-dark-small.png), [Nueva descarga](images/fase02-new-download.png), [Configuración](images/fase02-settings.png), [asistente](images/fase02-wizard.png), [conflicto](images/fase02-conflict.png), [multimedia](images/fase02-media.png), [popup claro](images/fase02-popup-light.png), [popup oscuro](images/fase02-popup-dark.png). Las capturas de galería no representan descargas reales.
 
-Pendiente de revisión humana: apariencia en tu monitor, lector de pantalla y DPI real 150/200. Se mantienen Windows 10, otros navegadores y el recorrido del menú nativo de extensión de la matriz anterior. No son evidencia de fallos ni de aprobación.
+El propietario confirmó temas claro/oscuro, expansión, Nueva descarga y Configuración; el ajuste tipográfico posterior suma 1 px mediante tokens. Pendiente de revisión humana adicional: lector de pantalla y DPI real 150/200. Se mantienen Windows 10, otros navegadores y el recorrido del menú nativo de extensión de la matriz anterior. No son evidencia de fallos ni de aprobación.
+
+## Motor secuencial (fase 03)
+
+Sigue el [recorrido HTTP de desarrollo](HTTP_DEVELOPMENT.md). `node scripts/test-http-runtime.mjs` descarga bytes reales, observa eventos por IPC, pausa/cancela y mata/reinicia únicamente su runtime de prueba; verifica el sufijo solicitado y SHA-256 final. Check.ps1 lo ejecuta también en CI Windows. La prueba TLS, hash incorrecto y bloqueo real de destino está en `crates/idg-core/tests/http.rs`; el fallo de disco lleno se inyecta en la escritura, sin llenar el disco del usuario. SQLite/DPAPI y migraciones tienen pruebas propias.
+
+El host de Native Messaging no tiene permiso de iniciar ni consultar trabajos. El handshake del probe anuncia la consulta de capacidades; la del host/escritorio conserva comandos anteriores. Los snapshots de trabajos no contienen URL ni directorio. Datos persistentes por defecto en el directorio de aplicación del usuario, subcarpeta `IDG/development`; las pruebas usan `IDG_DATA_DIR` local al proceso. No compartas la DB como diagnóstico público.

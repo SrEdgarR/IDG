@@ -107,3 +107,9 @@ Separar pruebas portables del core y pruebas Windows reales. CI puede compilar/p
 GitHub owner/repo ya están definidos: `sredgarr/IDG`; crear y verificar ese repositorio en fase 00 según GITHUB_WORKFLOW. Los IDs de extensiones y claves de release siguen pendientes. Usar configuración `.example`, tests locales y errores claros; no endpoints falsos en producción. Preparar configuración y documentación antes de pedir secretos. No pegarlos en prompts ni archivos versionados.
 
 Usar FFmpeg como proceso lateral controlado, con procedencia e integridad del binario conocidas y obligaciones de licencia cubiertas. El build concreto determina obligaciones y codecs; evitar builds marcadas no redistribuibles. Referencia [S14].
+
+## Implementación de fase 03
+
+`idg-core/src/download` implementa HTTP y archivos mediante un contrato Checkpoint. `idg-runtime/src/downloads.rs` controla una transferencia, IPC y todas las escrituras persistentes. `idg-storage` aplica migración 001 y protege el documento de trabajo completo con DPAPI antes de SQLite/WAL. La normalización futura de colas/segmentos no se implementa todavía. `idg-probe` utiliza el pipe autorizado; no enlaza un segundo motor ni abre la DB. Contratos generados en `packages/shared-types/protocol.ts`: comandos aditivos v1, capacidades consultables, snapshots y eventos de descarga con secuencia. Un salto se recupera consultando el estado; no requiere reconstruir deltas.
+
+Un blob no descifrable se conserva sin sobrescribir, aparece en `unavailable` del listado y devuelve error tipado al consultar o actuar sobre ese ID; no bloquea los trabajos sanos. Una DB completa ilegible o una migración desconocida sí bloquea el arranque sin reinicializar datos. Detalles y límites: [ADR-011](decisions/011-http-secuencial.md). La UI aún no consume estos trabajos.

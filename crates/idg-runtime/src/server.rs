@@ -10,6 +10,7 @@ use tokio::{
 };
 
 struct State {
+    downloads: crate::downloads::Downloads,
     snapshot: Mutex<Snapshot>,
     events: watch::Sender<Snapshot>,
     stop: watch::Sender<bool>,
@@ -46,6 +47,10 @@ pub async fn run() -> io::Result<()> {
     let (events, _) = watch::channel(snapshot.clone());
     let (stop, mut stopped) = watch::channel(false);
     let state = Arc::new(State {
+        downloads: tokio::task::spawn_blocking(crate::downloads::Downloads::open)
+            .await
+            .map_err(io::Error::other)?
+            .map_err(|_| io::Error::other("download storage unavailable"))?,
         snapshot: Mutex::new(snapshot),
         events,
         stop,
@@ -75,20 +80,25 @@ pub async fn run() -> io::Result<()> {
     }
     state.update(0, true);
     state.stop.send_replace(true);
+    state.downloads.shutdown().await;
     while tasks.join_next().await.is_some() {}
     Ok(())
 }
 
 async fn serve(mut pipe: NamedPipeServer, state: Arc<State>) -> io::Result<()> {
+    let can_download = idg_platform_windows::is_development_probe(&pipe);
     let mut session = idg_core::Session::default();
     let mut subscribed = false;
     let events = state.events.subscribe();
     let mut stopped = state.stop.subscribe();
     loop {
+        if *stopped.borrow() {
+            return Ok(());
+        }
         // A separate reader task is unnecessary here: read_frame must NOT be cancelled
         // midway by an event. Split once and dedicate a bounded reader below.
         if subscribed {
-            return subscription(pipe, state, events, stopped).await;
+            return subscription(pipe, state, events, stopped, can_download).await;
         }
         let frame = tokio::select! {
             _ = stopped.changed() => return Ok(()),
@@ -104,7 +114,26 @@ async fn serve(mut pipe: NamedPipeServer, state: Arc<State>) -> io::Result<()> {
                 return Ok(());
             }
         };
-        let response = session.handle(&request, state.snapshot());
+        let download_command = !matches!(
+            request.command,
+            Command::Handshake
+                | Command::Ping
+                | Command::GetSnapshot
+                | Command::Subscribe
+                | Command::Shutdown
+        );
+        let mut response = if download_command && session.authorizes(&request) {
+            if can_download {
+                Response::new(&request.id, state.downloads.execute(request.clone()).await)
+            } else {
+                Response::error(&request.id, ErrorCode::Unauthorized)
+            }
+        } else {
+            session.handle(&request, state.snapshot())
+        };
+        if can_download && let Payload::Hello { capabilities, .. } = &mut response.payload {
+            capabilities.push(Command::GetDownloadCapabilities);
+        }
         let rejected = matches!(response.payload, Payload::Error { .. });
         subscribed = matches!(response.payload, Payload::Subscribed { .. });
         send(&mut pipe, &response).await?;
@@ -124,13 +153,23 @@ async fn subscription(
     state: Arc<State>,
     mut events: watch::Receiver<Snapshot>,
     mut stopped: watch::Receiver<bool>,
+    can_download: bool,
 ) -> io::Result<()> {
+    let mut downloads = state.downloads.subscribe();
     let (mut reader, mut writer) = tokio::io::split(pipe);
     // Pin one read across event updates so partial frames cannot be discarded.
     let read = read_frame(&mut reader);
     tokio::pin!(read);
     loop {
+        if *stopped.borrow() {
+            return Ok(());
+        }
         tokio::select! {
+            result=downloads.changed(), if can_download => {
+                if result.is_err(){return Ok(());}
+                let job=downloads.borrow_and_update().clone();
+                if let Some((sequence,job))=job{send(&mut writer,&Response::new("",Payload::DownloadChanged{sequence,job})).await?;}
+            },
             _ = stopped.changed() => { send(&mut writer, &Response::new("", Payload::Snapshot { snapshot: state.snapshot() })).await?; return Ok(()); },
             _ = &mut read => return Ok(()),
             result = events.changed() => {

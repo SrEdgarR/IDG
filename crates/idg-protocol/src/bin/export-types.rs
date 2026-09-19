@@ -1,9 +1,17 @@
-use idg_protocol::{Command, ConnectionState, ErrorCode, Payload, Request, Response, Snapshot};
+use idg_protocol::*;
 use ts_rs::TS;
 
 fn main() {
     let config = ts_rs::Config::default();
     let text = [
+        ResumeCapability::decl(&config),
+        IntegrityState::decl(&config),
+        ConflictPolicy::decl(&config),
+        NewDownload::decl(&config),
+        TransferState::decl(&config),
+        DownloadError::decl(&config),
+        UnavailableDownload::decl(&config),
+        DownloadSnapshot::decl(&config),
         Command::decl(&config),
         ErrorCode::decl(&config),
         Snapshot::decl(&config),
