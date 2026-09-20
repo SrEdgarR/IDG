@@ -185,3 +185,11 @@ El conjunto de implementación de este cierre (su SHA se registra en la PR y ent
 - Pendiente: CI remoto del HEAD publicado y revisión/autorización de integración de 04. Windows 10, archivos físicos >4 GiB, energía física, diez trabajos/rendimiento prolongado, otros discos y matriz ampliada no se declaran verificados. UI de trabajos pertenece a 05; no se ha iniciado.
 
 La revisión detectó un posible desbordamiento con Retry-After extremo: ahora se conserva el plazo y se libera el slot sin crear una espera desmesurada; prueba de regresión aprobada. También se corrigieron la contabilidad de permisos HTTP activos y la limpieza de listeners del fixture. Documentos de trabajos y ajustes protegidos mediante DPAPI dentro de SQLite: **no cifrado integral de SQLite**. Guía reproducible: [segmentación y límites](SEGMENTATION_DEVELOPMENT.md).
+
+### Publicación de fase 04
+
+Implementación probada: `128c01e` más el planificador previo `6457fde`. Se incorporó main mediante merge `93ede986d66dfdf6c82e30bbbf154b7ed4aae4ce`, sin cambiar el árbol probado. Push y SHA remoto comprobados. [PR #4](https://github.com/SrEdgarR/IDG/pull/4) abierta hacia main, sin fusionar.
+
+CI observado para 93ede986: [push 35477828885](https://github.com/SrEdgarR/IDG/actions/runs/35477828885), ui aprobado y portable/windows en curso; [PR 35477856928](https://github.com/SrEdgarR/IDG/actions/runs/35477856928), ui/portable/windows en curso. No se declaran aprobados los jobs pendientes ni se atribuyen estos runs al posterior commit documental. La entrega/PR registra la consulta del HEAD final; no se promete seguimiento en segundo plano. El workflow no ejecuta la integración gráfica ni navegadores.
+
+Revisión final: 168 archivos y 151 enlaces locales válidos, diff sin errores de espacios ni patrones de secretos detectados. No es certificación absoluta. Este registro posterior solo cambia documentación y no representa otra prueba completa del producto. SIGUIENTE_PASO: comprobar el CI del HEAD vigente y revisar PR #4; integrar únicamente con autorización posterior del propietario.
