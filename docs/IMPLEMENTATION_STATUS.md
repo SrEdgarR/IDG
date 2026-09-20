@@ -1,6 +1,6 @@
 # Estado de implementación
 
-Estado actual: **fase 03 integrada; corrección de fase 04 VERIFICADA localmente. CI del cambio correctivo APROBADO; cierre documental para integración autorizada en curso**.
+Estado actual: **fase 04 integrada en main; fase 05 implementada y VERIFICADA en las pruebas automáticas locales descritas debajo. Revisión manual parcial y CI del HEAD de entrega pendientes.** No se declara verificación completa de la matriz Windows ni confirmación humana del motor.
 No marcar una fila completada solo por generar archivos. Completar evidencia conforme se ejecute cada fase.
 
 Estados: PLANIFICADO, EN_CURSO, IMPLEMENTADO_NO_VERIFICADO, VERIFICADO, BLOQUEADO, DIFERIDO.
@@ -10,12 +10,12 @@ Estados: PLANIFICADO, EN_CURSO, IMPLEMENTADO_NO_VERIFICADO, VERIFICADO, BLOQUEAD
 | Repositorio SrEdgarR/IDG, README y primera subida | 00 | VERIFICADO | Repositorio público, main y primer SHA remoto verificados; evidencia debajo. |
 | Plataforma, licencia y límites | 00, 13, 15 | VERIFICADO (documentación 00) | [ADR-001](decisions/001-plataforma.md), [LICENSE](../LICENSE), [Desarrollo](DESARROLLO.md); compatibilidad del binario pendiente de 13/15. |
 | Separación core/runtime/desktop/host y contratos | 00, 01 | VERIFICADO (alcance 01 local) | crates/*, apps/*, scripts/test-*.mjs; [ADR-009](decisions/009-esqueleto-verificado.md). |
-| UI-01 a UI-08 | 02, 05, 14, 15 | EN_CURSO; capa visual 02 VERIFICADA localmente | App, DownloadList, Dialogs, Settings, galería y tokens; pruebas UI y Tauri. Backend de descargas, accesibilidad exhaustiva y rendimiento final pendientes. |
-| WIN-01 a WIN-06 | 05, 06, 08, 12, 13 | PLANIFICADO | — |
+| UI-01 a UI-08 | 02, 05, 14, 15 | EN_CURSO; capa visual 02 VERIFICADA localmente | App, DownloadList, Dialogs, Settings, galería y tokens; pruebas UI y Tauri. Backend conectado y probado en 05; accesibilidad exhaustiva y rendimiento final pendientes. |
+| WIN-01 a WIN-06 | 05, 06, 08, 12, 13 | EN_CURSO | Ciclo de vida, bandeja, preferencias y ventanas implementados; evidencia automatizada y límites manuales en cierre 05. Integración final posterior pendiente. |
 | WIN-07 | 13, 15 | PLANIFICADO | — |
 | DL-01 HTTP/HTTPS | 03, 04 | VERIFICADO (local automatizado 03/04) | core/download, tests/http.rs, test-http-runtime y test-segments; benchmark controlado. |
 | DL-01 FTP/FTPS | 11 | PLANIFICADO | — |
-| DL-02 a DL-07 | 03, 04, 05 | EN_CURSO | Persistencia, pausa/reanudación y validación secuencial por IPC verificadas; UI y fases posteriores pendientes. |
+| DL-02 a DL-07 | 03, 04, 05 | EN_CURSO | Persistencia, pausa/reanudación y validación secuencial por IPC verificadas; UI conectada en 05; funciones de fases posteriores pendientes. |
 | DL-08 a DL-10 | 04, 05, 06, 11 | PLANIFICADO | — |
 | ORG-01 a ORG-03 | 06, 07 | PLANIFICADO | — |
 | ORG-04 a ORG-06 | 06, 12 | PLANIFICADO | — |
@@ -84,7 +84,7 @@ Comprobación visual: captura auténtica del WebView2 revisada, estado/PID y con
 
 ## SIGUIENTE_PASO
 
-Comprobar CI del cierre documental de PR #4, fusionarla con la autorización recibida y desarrollar fase 05 en feat/05-app-funcional. No fusionar la futura PR de 05 ni avanzar a 06. No hay confirmación humana del motor.
+Revisar PR de fase 05 y el CI de su HEAD; realizar el checklist de APP_DEVELOPMENT.md (selector Windows, X/bandeja físicos y avisos nativos). No fusionar sin autorización ni avanzar a 06. No hay confirmación humana del motor. El cierre vigente está al final; los siguientes apartados conservan evidencia histórica.
 
 Revisión final local: 112 archivos inspeccionados, 106 enlaces Markdown locales válidos y cero patrones de tokens/claves privadas/URLs con credenciales. Revisión estática independiente sin hallazgos bloqueantes; precisó que el test Tauri termina el proceso y no pulsa la X (recorrido manual pendiente ya indicado). Diff sin errores de whitespace. Los binarios, perfiles, herramientas descargadas y capturas están excluidos; solo se versiona la clave pública de identidad Chromium.
 
@@ -222,3 +222,56 @@ Benchmark afectado repetido: release, 15/15 hashes correctos, cinco modos × tre
 HEAD 08b17caed34eb68e2411ca7f629c88f2d6d6bf76: [push 35479388766](https://github.com/SrEdgarR/IDG/actions/runs/35479388766) y [PR 35479390196](https://github.com/SrEdgarR/IDG/actions/runs/35479390196) terminaron con ui, portable y Windows aprobados. La ejecución de PR usa el merge temporal 4b26c70d5664fcc20abb57047ed45dad1617b3ac; no es el commit de la rama. Se conservan diagnóstico, fallos originales y benchmarks separados. Sin confirmación humana de descargas.
 
 El propietario autorizó fusionar solo PR #4 si el HEAD correspondiente aprueba y no hay conflictos ni defectos bloqueantes conocidos. Este cierre modifica únicamente documentación; su CI también se comprobará antes de fusionar. Mientras tanto, fase 05 puede comenzar en una rama dependiente explícita. Las pruebas locales registradas se atribuyen a 08b17ca, no se finge otra prueba de producto por esta edición.
+
+## Fase 05 — primer incremento (histórico, commit 69f07a1)
+
+El diálogo del escritorio acepta una URL por IPC tipado, reserva y guarda un trabajo mediante el runtime y muestra snapshots/eventos reales. El permiso se limita al ejecutable de escritorio validado; el host de extensión no obtiene estos comandos. Selector nativo de carpeta con plugin dialog 2.7.3; sin permisos genéricos de archivos o shell. URLs solo en memoria del formulario y almacenamiento protegido del runtime. Automático conserva `replay_safe=false` por defecto.
+
+Verificación del conjunto de cambios de este incremento: `cargo check -p idg-desktop -p idg-runtime`, `pnpm check`, `pnpm desktop:build`, `pnpm test:ui` y `node scripts/test-app-download.mjs` aprobados. La última prueba interactúa con Tauri/WebView2 real de forma automatizada: formulario → aceptación durable → fila → archivo de 2 MiB, SHA-256 correcto y un único GET, sin preflight durante la edición. No es confirmación humana. La galería permanece separada.
+
+El siguiente paso de ese incremento era completar ciclo de vida y aplicación; se desarrolla en el cierre siguiente. La rama comenzó dependiente de 8f19e11 y posteriormente incorpora main sin reescribir historia.
+
+## Cierre de fase 05 — aplicación conectada
+
+### Integración de fase 04
+
+PR #4 **fusionada con autorización**, HEAD documental 8f19e1126547816aae606b1a9f873f47b7d2043c, después de comprobar ui/portable/windows aprobados en [push 35480532423](https://github.com/SrEdgarR/IDG/actions/runs/35480532423) y [PR 35480534506](https://github.com/SrEdgarR/IDG/actions/runs/35480534506). Merge remoto verificado: 2e18de4adea099ad038444bc641032ab6ca18796. Las ejecuciones de PR usan un merge temporal, no sustituyen el SHA de su rama. Diagnóstico, ejecuciones fallidas y series de benchmark anteriores se conservan. No hay confirmación humana de descargas.
+
+### Implementación y pruebas locales
+
+Conjunto probado: incremento 69f07a1 más cambios de cierre en feat/05-app-funcional; el SHA que guarda este conjunto se registra en PR/entrega para evitar autorreferencia. Cambios posteriores exclusivamente documentales no implican una nueva prueba completa.
+
+| Área | Estado y evidencia |
+|---|---|
+| Alta durable por IPC, sin preflight, doble clic y reintento | VERIFICADO: test-app-download, formulario Tauri → runtime → archivo 2 MiB con SHA; un GET, recibo inmutable aun después de cambiar opciones. |
+| Después/Cola, categoría y opciones | VERIFICADO: estados persistentes sin GET antes de iniciar, cola ejecutada con hash; regresión de caída con respuesta pendiente recupera pausado sin repetir URL. Capacidad/reglas en downloads.rs; colas avanzadas DIFERIDAS a 06. |
+| Lista, pausa/reanudación, integridad | VERIFICADO: descarga 8 MiB, progreso real, pausa durable y reanudación, archivo final con SHA. BigInt u64, 60 muestras, render agrupado/oculto; filtros/selección/expansión conservados y galería aislada. |
+| Conflicto/destino | VERIFICADO: rechazo conserva formulario; destino inexistente produce FileIo; archivo bloqueado conserva contenido y reintenta publicación sin otro GET. Validación de parcial por identidad/hash probada en core; renombrado/resume positivo desde diálogo IMPLEMENTADO, pendiente de recorrido UI específico. |
+| Ciclo de vida | VERIFICADO por interacción automatizada real: solo escritorio inicia runtime, SC_CLOSE oculta y bytes siguen aumentando, segunda apertura conserva instancia, salida coordinada durante transferencia, reapertura conserva parcial/preferencias. SC_CLOSE no es clic físico/humano. |
+| Desconexión/arranque | VERIFICADO: detener no relanza, Iniciar motor explícito recupera sesión/historial; ejecutable adjunto ausente produce error y no busca en PATH. |
+| Asistente/preferencias | VERIFICADO: Known Folder consultada, destino introducido, navegador omitido, guardado y reapertura sin repetir asistente; tema conservado. Preferencias DPAPI/migración probadas. Selector nativo: IMPLEMENTADO_NO_VERIFICADO mediante su diálogo OS. |
+| Carpeta/mini/drop | VERIFICADO: Explorer abre carpeta correcta, mini real consulta trabajo y rechaza preferencias privadas, drop DOM en ventana real abre revisión sin alta automática. Arrastre físico pendiente. |
+| Avisos | IMPLEMENTADO: preferencias fin/error, acciones internas, deduplicación de transiciones y solicitud nativa validada/silenciosa. Entrega visual/toast Windows y sus políticas: IMPLEMENTADO_NO_VERIFICADO; en desarrollo puede identificar PowerShell. No se promete entrega por aceptar API. |
+| Puente navegador | VERIFICADO: Chromium y Firefox 156 con Native Messaging real, perfiles aislados, desconexión/reconexión; no captura ni gesto físico del menú. Registros preexistentes de esta copia conservados. |
+
+Comandos: **Check.ps1 -Integration APROBADO**, incluye fmt, Clippy -D warnings, 37 pruebas Rust, tres del modelo, tipos/build, HTTP, fixture compartido y tres repeticiones por condición de Automático, galería, Tauri y Chromium/Firefox. Sin eliminar ni debilitar la regresión de fase 04. Luego se corrigió únicamente la codificación de una etiqueta accesible y se formateó el test; check/build, test:ui y test-desktop se repiten sobre esa presentación final y se registra el resultado en el cierre de publicación.
+
+Durante desarrollo se detectó y corrigió bloqueo de creación síncrona de la mini ventana en Windows: ahora comando asíncrono y prueba con contenido real. También se corrigió la persistencia Probing antes del GET de una cola, con regresión de caída aprobada. Una preferencia recibida tarde ya no sobrescribe una carpeta editada. Los trabajos protegidos no recuperables se informan, no se borran ni ocultan silenciosamente.
+
+[Capturas](../README.md#cómo-se-verá) auténticas saneadas en screenshots/fase05; [memoria](test-evidence/fase05-memory.json) separa runtime, escritorio y procesos WebView2. Muestra debug aislada, ventana oculta con transferencia activa; no comparación antes/después ni promesa de liberar RAM. Working sets pueden compartir páginas y no equivalen a RAM física exclusiva.
+
+### Límites y siguiente paso
+
+Confirmación humana: solo aceptación visual anterior de 02; ninguna del motor/05. **PENDIENTE DE CONFIRMACIÓN DEL USUARIO**: [checklist corto](APP_DEVELOPMENT.md) de selector, X y bandeja físicos, notificación Windows y arrastre. No se ha comprobado ENOSPC real desde la UI; core inyecta disco lleno sin llenar el equipo. Windows 10, otros navegadores/discos, accesibilidad exhaustiva, DPI físico, archivos físicos >4 GiB y matriz ampliada siguen pendientes. No son funciones de 06 implementadas por esta entrega.
+
+AutoPick/captura, colas avanzadas/horarios/reglas, FTP/multimedia, inicio Windows, abrir archivo/copia de ruta/eliminar historial o disco, instaladores y actualizaciones siguen DIFERIDOS a sus fases; controles no conectados explican su indisponibilidad. No se confunde quitar historial con borrar archivo.
+
+SIGUIENTE_PASO: consultar CI del HEAD publicado de PR 05, revisar cambios y realizar el checklist manual. PR 05 no se fusiona sin autorización. No avanzar a 06. CI ui/portable/windows no ejecuta Tauri/WebView2 ni navegadores; sus resultados nunca sustituyen -Integration.
+
+Verificación final de presentación: `pnpm check`, `pnpm desktop:build`, `pnpm test:ui` y `node scripts/test-desktop.mjs` APROBADOS tras corregir la codificación de la etiqueta accesible. Solo se ajustó después el momento de captura para esperar la transición del tema y muestras reales de velocidad; el recorrido Tauri se repitió para generar esas imágenes. Revisión de 207 archivos y 186 enlaces locales: válidos, sin patrones de secretos detectados ni rutas personales absolutas en Markdown; diff sin errores de espacios. Esto no es una certificación absoluta de seguridad.
+
+Revisión adicional: orden estable por creación/ID para que un snapshot no reorganice filas; regresión de reconexión en Tauri. El primer test posterior falló porque esperaba en mini el último elemento del orden interno del motor, distinto del orden de presentación. Se corrigió la expectativa: mini debe mostrar un trabajo existente y sigue rechazando acceso a preferencias privadas. No se ocultó el fallo ni se modificó el producto para devolver un trabajo ficticio. **Check.ps1 -Integration se repitió completo sobre el conjunto final: APROBADO**, incluidos Tauri, Chromium y Firefox. No hubo cambios posteriores de código del producto.
+
+### Procedencia del cierre
+
+Código y pruebas finales guardados en `2544f944fff4d3d5adcc1d64c4ec5b776e934882`. Incorporación de main en `627aa353668dff18e76bc91004ad60f2324f63d3`: árbol idéntico `978147a077d7d3cd3c6104bfde2dd378a0d18780`, sin cambios en el conjunto probado. Este registro posterior solo modifica documentación. Rama `feat/05-app-funcional`; el SHA de entrega, push y CI de su HEAD se consultan y registran en la PR. No se atribuye CI de 04 ni de 69f07a1 a este código.

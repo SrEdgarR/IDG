@@ -35,6 +35,89 @@ pub fn validate_input(input: &NewDownload) -> Result<(), DownloadError> {
     }
     Ok(())
 }
+pub fn directory_for(job: &Job) -> Result<String, DownloadError> {
+    let directory = Path::new(&job.final_path)
+        .parent()
+        .ok_or(DownloadError::InvalidInput)?;
+    ordinary(directory)?;
+    if !directory.is_dir() {
+        return Err(DownloadError::FileIo);
+    }
+    Ok(directory
+        .canonicalize()
+        .map_err(file_error)?
+        .to_string_lossy()
+        .into_owned())
+}
+/// Local identity and durable hashes only: no HTTP request and no truncation.
+pub fn recoverable_matches(job: &Job, input: &NewDownload) -> bool {
+    let result = (|| -> Result<bool, DownloadError> {
+        validate_input(input)?;
+        if job.input.url != input.url
+            || job.input.expected_sha256 != input.expected_sha256
+            || job.durable == 0
+            || job.etag.is_none()
+            || !matches!(job.state, TransferState::Paused | TransferState::Failed)
+        {
+            return Ok(false);
+        }
+        let destination = Path::new(&job.final_path);
+        if destination.file_name().and_then(|n| n.to_str()) != Some(input.name.as_str())
+            || destination.parent()
+                != Some(
+                    std::fs::canonicalize(&input.directory)
+                        .map_err(file_error)?
+                        .as_path(),
+                )
+        {
+            return Ok(false);
+        }
+        ordinary(Path::new(&job.temporary))?;
+        let mut options = OpenOptions::new();
+        options.read(true);
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            options.share_mode(1).custom_flags(0x00200000);
+        }
+        let mut file = options.open(&job.temporary).map_err(file_error)?;
+        if !file.metadata().map_err(file_error)?.is_file() {
+            return Ok(false);
+        }
+        let regions: Vec<_> = if job.ranges.is_empty() {
+            vec![(0, job.durable, job.prefix_sha256.as_str())]
+        } else {
+            job.ranges
+                .iter()
+                .filter_map(|r| r.sha256.as_deref().map(|hash| (r.start, r.end, hash)))
+                .collect()
+        };
+        if regions.is_empty() {
+            return Ok(false);
+        }
+        for (start, end, expected) in regions {
+            file.seek(SeekFrom::Start(start)).map_err(file_error)?;
+            let mut remaining = end.checked_sub(start).ok_or(DownloadError::InvalidRange)?;
+            let mut hash = Sha256::new();
+            let mut buffer = [0u8; 65536];
+            while remaining > 0 {
+                let count = file
+                    .read(&mut buffer[..remaining.min(65536) as usize])
+                    .map_err(file_error)?;
+                if count == 0 {
+                    return Ok(false);
+                }
+                hash.update(&buffer[..count]);
+                remaining -= count as u64;
+            }
+            if format!("{:x}", hash.finalize()) != expected {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    })();
+    result.unwrap_or(false)
+}
 pub(super) fn ordinary(path: &Path) -> Result<(), DownloadError> {
     for parent in path.ancestors() {
         if let Ok(m) = std::fs::symlink_metadata(parent) {
@@ -90,6 +173,7 @@ pub fn create_job(id: &str, input: NewDownload) -> Result<Job, DownloadError> {
         .map_err(file_error)?;
     file.sync_all().map_err(file_error)?;
     Ok(Job {
+        creation: None,
         options: TransferOptions::default(),
         ranges: Vec::new(),
         transferred: 0,
@@ -270,4 +354,34 @@ pub(super) fn recover_published(
         return Err(error);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod phase05_tests {
+    use super::*;
+    #[test]
+    fn matching_name_is_not_enough_to_resume_and_probe_never_truncates() {
+        let dir = tempfile::tempdir().unwrap();
+        let input = NewDownload {
+            url: "https://example.org/test".into(),
+            directory: dir.path().to_string_lossy().into_owned(),
+            name: "test.bin".into(),
+            expected_sha256: None,
+            conflict: ConflictPolicy::Reject,
+        };
+        let mut job = create_job("recoverable", input.clone()).unwrap();
+        std::fs::write(&job.temporary, b"goodtail").unwrap();
+        job.state = TransferState::Paused;
+        job.durable = 4;
+        job.prefix_sha256 = format!("{:x}", Sha256::digest(b"good"));
+        assert!(!recoverable_matches(&job, &input));
+        job.etag = Some("\"strong\"".into());
+        assert!(recoverable_matches(&job, &input));
+        assert_eq!(std::fs::read(&job.temporary).unwrap(), b"goodtail");
+        let mut other = input.clone();
+        other.url = "https://example.org/other".into();
+        assert!(!recoverable_matches(&job, &other));
+        std::fs::write(&job.temporary, b"badtail").unwrap();
+        assert!(!recoverable_matches(&job, &input));
+    }
 }

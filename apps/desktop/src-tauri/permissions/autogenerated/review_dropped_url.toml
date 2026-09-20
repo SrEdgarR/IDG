@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-review-dropped-url"
+description = "Enables the review_dropped_url command without any pre-configured scope."
+commands.allow = ["review_dropped_url"]
+
+[[permission]]
+identifier = "deny-review-dropped-url"
+description = "Denies the review_dropped_url command without any pre-configured scope."
+commands.deny = ["review_dropped_url"]

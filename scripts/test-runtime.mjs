@@ -3,6 +3,7 @@ import { once } from "node:events";
 import net from "node:net";
 import path from "node:path";
 import assert from "node:assert/strict";
+import {mkdir,mkdtemp} from "node:fs/promises";
 const root = process.cwd();
 const binary = (name) => path.join(root, `target/debug/${name}.exe`);
 const probe = (command = "ping") =>
@@ -16,6 +17,8 @@ try {
   existing = probe();
 } catch {}
 if (existing) throw new Error("Detén el runtime antes de esta prueba aislada.");
+await mkdir('.local',{recursive:true});
+const dataDir=await mkdtemp(path.join(root,'.local/pipe-state-'));
 const sid = execFileSync(
   "powershell.exe",
   [
@@ -29,6 +32,7 @@ const pipe = `\\\\.\\pipe\\IDG.dev.v1.${sid}`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const run = (name) =>
   spawn(binary(name), [], {
+    env:{...process.env,IDG_DATA_DIR:dataDir},
     windowsHide: true,
     stdio: ["pipe", "pipe", "pipe"],
   });

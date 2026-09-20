@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 export type Theme = "system" | "light" | "dark";
-export function useViewMode() {
+export function useViewMode(persist = true) {
   const [mode, setMode] = useState(() => {
     try {
       const saved = localStorage.getItem("idg.ui.view");
@@ -13,14 +13,14 @@ export function useViewMode() {
   });
   useEffect(() => {
     try {
-      localStorage.setItem("idg.ui.view", mode);
+      if (persist) localStorage.setItem("idg.ui.view", mode);
     } catch {
       /* Optional UI preference. */
     }
-  }, [mode]);
+  }, [mode, persist]);
   return { mode, setMode };
 }
-export function useAppearance() {
+export function useAppearance(persist = true) {
   const [theme, setTheme] = useState<Theme>(() => {
     try {
       const t = localStorage.getItem("idg.ui.theme");
@@ -32,10 +32,10 @@ export function useAppearance() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     try {
-      localStorage.setItem("idg.ui.theme", theme);
+      if (persist) localStorage.setItem("idg.ui.theme", theme);
     } catch {
       /* UI remains usable without storage. */
     }
-  }, [theme]);
+  }, [theme, persist]);
   return { theme, setTheme };
 }

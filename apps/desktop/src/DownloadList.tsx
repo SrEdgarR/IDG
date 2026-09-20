@@ -13,6 +13,24 @@ import {
 } from "./model";
 import { Icon } from "./ui/Icon";
 import { ConfirmDialog } from "./Dialogs";
+export type RowAction = "pause" | "resume" | "cancel" | "folder";
+export function supports(row: DownloadView, action: RowAction) {
+  const state = row.snapshot?.state;
+  if (!state) return false;
+  if (action === "folder") return true;
+  if (action === "pause")
+    return ["downloading", "probing", "queued"].includes(state);
+  if (action === "cancel")
+    return [
+      "downloading",
+      "probing",
+      "queued",
+      "deferred",
+      "paused",
+      "failed",
+    ].includes(state);
+  return ["paused", "deferred", "failed", "publish_pending"].includes(state);
+}
 export function Sparkline({ samples }: { samples: number[] }) {
   const bounded = samples.slice(-60);
   if (bounded.length < 2)
@@ -26,7 +44,7 @@ export function Sparkline({ samples }: { samples: number[] }) {
     <svg
       className="sparkline"
       viewBox="0 0 84 24"
-      aria-label="Gráfica de muestras de velocidad de ejemplo"
+      aria-label="Gráfica de muestras de velocidad"
       role="img"
     >
       <polyline
@@ -46,9 +64,11 @@ export function Sparkline({ samples }: { samples: number[] }) {
 function RowMenu({
   row,
   onDelete,
+  onAction,
 }: {
   row: DownloadView;
   onDelete: () => void;
+  onAction?: (id: string, action: RowAction) => Promise<void>;
 }) {
   const ref = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
@@ -77,9 +97,31 @@ function RowMenu({
       <div
         className="action-menu"
         role="group"
-        aria-label="Acciones pendientes de integración"
+        aria-label="Acciones de descarga"
       >
-        <small>Motor de descargas pendiente</small>
+        {onAction ? (
+          <>
+            <small>Estado confirmado por el motor</small>
+            {(
+              [
+                ["pause", "Pausar"],
+                ["resume", "Reanudar / reintentar"],
+                ["cancel", "Cancelar"],
+                ["folder", "Abrir carpeta"],
+              ] as const
+            ).map(([action, label]) => (
+              <button
+                key={action}
+                disabled={!supports(row, action)}
+                onClick={() => void onAction(row.id, action)}
+              >
+                {label}
+              </button>
+            ))}
+          </>
+        ) : (
+          <small>Motor de descargas pendiente</small>
+        )}
         {[
           "Pausar",
           "Reanudar",
@@ -93,11 +135,23 @@ function RowMenu({
           "Cambiar categoría",
           "Quitar del historial",
           ...(row.missing ? ["Localizar archivo", "Descargar de nuevo"] : []),
-        ].map((t) => (
-          <button key={t} disabled title="Requiere backend; fases 05–12">
-            {t}
-          </button>
-        ))}
+        ]
+          .filter(
+            (t) =>
+              !onAction ||
+              ![
+                "Pausar",
+                "Reanudar",
+                "Cancelar",
+                "Reintentar",
+                "Abrir carpeta",
+              ].includes(t),
+          )
+          .map((t) => (
+            <button key={t} disabled title="Requiere backend; fases 05–12">
+              {t}
+            </button>
+          ))}
         <button
           className="danger"
           onClick={() => {
@@ -119,6 +173,7 @@ export function DownloadList({
   viewMode,
   overrides,
   setOverrides,
+  onAction,
 }: {
   rows: DownloadView[];
   selected: Set<string>;
@@ -126,6 +181,7 @@ export function DownloadList({
   viewMode: string;
   overrides: Record<string, boolean>;
   setOverrides: Dispatch<SetStateAction<Record<string, boolean>>>;
+  onAction?: (id: string, action: RowAction) => Promise<void>;
 }) {
   const [height, setHeight] = useState(() => innerHeight - 300);
   const [deleting, setDeleting] = useState<DownloadView | null>(null);
@@ -146,7 +202,21 @@ export function DownloadList({
           const percentage =
             row.total === null
               ? null
-              : Math.min(100, (row.received / Math.max(1, row.total)) * 100);
+              : row.state === "Completed"
+                ? 100
+                : Math.min(
+                    100,
+                    Number(
+                      (BigInt(row.received) * 10000n) /
+                        (BigInt(row.total) || 1n),
+                    ) / 100,
+                  );
+          const primary: RowAction =
+            row.state === "Downloading" || row.state === "Probing"
+              ? "pause"
+              : row.state === "Completed"
+                ? "folder"
+                : "resume";
           return (
             <li
               key={row.id}
@@ -211,9 +281,14 @@ export function DownloadList({
                 </span>
                 <button
                   className="row-action"
-                  aria-label={`${row.state === "Downloading" ? "Pausar" : row.state === "Completed" ? "Abrir carpeta" : row.state === "Failed" ? "Reintentar" : row.state === "Paused" ? "Reanudar" : "Iniciar"} ${row.name}`}
-                  title="Motor de descargas pendiente · fase 05"
-                  disabled
+                  aria-label={`${row.state === "Downloading" ? "Pausar" : row.state === "Completed" ? "Abrir carpeta" : row.snapshot?.state === "publish_pending" ? "Reintentar publicación" : row.state === "Failed" ? "Reintentar" : row.state === "Paused" ? "Reanudar" : "Iniciar"} ${row.name}`}
+                  title={
+                    onAction
+                      ? "Solicitar al motor; el estado cambia al confirmarse"
+                      : "Motor de descargas pendiente · fase 05"
+                  }
+                  disabled={!onAction || !supports(row, primary)}
+                  onClick={() => void onAction?.(row.id, primary)}
                 >
                   <Icon
                     name={
@@ -225,7 +300,11 @@ export function DownloadList({
                     }
                   />
                 </button>
-                <RowMenu row={row} onDelete={() => setDeleting(row)} />
+                <RowMenu
+                  row={row}
+                  onDelete={() => setDeleting(row)}
+                  onAction={onAction}
+                />
               </div>
               {expanded && (
                 <section
@@ -265,14 +344,40 @@ export function DownloadList({
                   )}
                   <details>
                     <summary>Detalles técnicos</summary>
-                    <p>
-                      Origen público: {row.domain} · Prioridad: Normal ·
-                      Concurrencia: no comprobada.
-                    </p>
-                    <p className="muted">
-                      Muestras estáticas de galería; sin cabeceras privadas,
-                      cookies ni logs del usuario.
-                    </p>
+                    {row.snapshot ? (
+                      <dl>
+                        <dt>Estrategia / solicitudes</dt>
+                        <dd>
+                          {row.snapshot.strategy} ·{" "}
+                          {row.snapshot.active_requests} /{" "}
+                          {row.snapshot.target_requests}
+                        </dd>
+                        <dt>Bytes confirmados</dt>
+                        <dd>
+                          {formatBytes(BigInt(row.snapshot.durable_bytes))}
+                        </dd>
+                        <dt>Recuperación</dt>
+                        <dd>{row.snapshot.resume}</dd>
+                        <dt>Integridad</dt>
+                        <dd>
+                          {row.snapshot.integrity} ·{" "}
+                          {row.snapshot.calculated_sha256 ?? "Pendiente"}
+                        </dd>
+                        <dt>Prioridad</dt>
+                        <dd>{row.snapshot.options.priority}</dd>
+                      </dl>
+                    ) : (
+                      <>
+                        <p>
+                          Origen público: {row.domain} · Prioridad: Normal ·
+                          Concurrencia: no comprobada.
+                        </p>
+                        <p className="muted">
+                          Muestras estáticas de galería; sin cabeceras privadas,
+                          cookies ni logs del usuario.
+                        </p>
+                      </>
+                    )}
                   </details>
                 </section>
               )}

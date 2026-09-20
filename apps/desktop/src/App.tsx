@@ -1,10 +1,16 @@
+import type { DesktopApi } from "./desktop";
+import { usePreferences } from "./desktop";
+import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
+import { Modal } from "./ui/Modal";
+import type { DownloadSnapshot } from "../../../packages/shared-types/protocol";
 import { useState, useRef, useEffect, type ReactNode } from "react";
 import { Icon } from "./ui/Icon";
 import { useAppearance, useViewMode, type Theme } from "./ui/appearance";
 import { type DownloadView, type Filters, filterDownloads } from "./model";
-import { DownloadList } from "./DownloadList";
+import { DownloadList, supports, type RowAction } from "./DownloadList";
 import { NewDownloadDialog } from "./Dialogs";
-import { Settings } from "./Settings";
+import { Settings, FirstRunWizard } from "./Settings";
 export const states = [
   "Todas",
   "Descargando",
@@ -12,6 +18,8 @@ export const states = [
   "Completadas",
   "Pausadas",
   "Fallidas",
+  "Para después",
+  "Canceladas",
 ];
 export const categories = [
   "Videos",
@@ -31,23 +39,166 @@ const emptyFilters: Filters = {
 const noRows: DownloadView[] = [];
 export function App({
   connection,
+  backend,
   rows = noRows,
   galleryTools,
   previewState = "normal",
 }: {
   connection: ReactNode;
+  backend?: DesktopApi;
   rows?: DownloadView[];
   galleryTools?: ReactNode;
   previewState?: string;
 }) {
-  const { theme, setTheme } = useAppearance();
+  const { theme, setTheme: setLocalTheme } = useAppearance(!backend);
+  const {
+    preferences,
+    save: savePreferences,
+    failure: preferencesFailure,
+  } = usePreferences(backend);
+  const setTheme = (t: Theme) => {
+    if (backend) void savePreferences({ theme: t }).catch(() => {});
+    else setLocalTheme(t);
+  };
   const [filters, setFilters] = useState(emptyFilters);
   const [collapsed, setCollapsed] = useState(false);
   const [selected, setSelected] = useState(new Set<string>());
-  const { mode, setMode } = useViewMode();
+  const { mode, setMode: setLocalMode } = useViewMode(!backend);
+  const setMode = (view: string) => {
+    if (backend) void savePreferences({ view }).catch(() => {});
+    else setLocalMode(view);
+  };
+  useEffect(() => {
+    if (preferences) {
+      setLocalTheme(preferences.theme as Theme);
+      setLocalMode(preferences.view);
+    }
+  }, [preferences, setLocalTheme, setLocalMode]);
+  const [exitRequest, setExitRequest] = useState<{
+    active: number;
+    unsafe_resume: number;
+    ask: boolean;
+    unknown: boolean;
+  } | null>(null);
+  const [exiting, setExiting] = useState(false);
+  async function exit() {
+    setExiting(true);
+    try {
+      await invoke("exit_desktop");
+    } catch (e) {
+      setActionNotice(String(e));
+      setExiting(false);
+    }
+  }
+  useEffect(() => {
+    if (!backend) return;
+    let disposed = false;
+    const offs: (() => void)[] = [];
+    for (const task of [
+      listen("desktop-launch", () => {
+        void invoke("start_runtime")
+          .then(() => invoke("connect_runtime"))
+          .catch((e) => setActionNotice(String(e)));
+      }),
+      listen("desktop-new", () => setDialog("new")),
+      listen<string>("desktop-drop", (e) => {
+        if (document.querySelector("dialog[open]")) {
+          setActionNotice(
+            "Ya hay un diálogo abierto. Ciérralo antes de soltar otro enlace.",
+          );
+          return;
+        }
+        setDroppedUrl(e.payload);
+        setDialog("new");
+      }),
+      listen<{
+        active: number;
+        unsafe_resume: number;
+        ask: boolean;
+        unknown: boolean;
+      }>("desktop-exit-request", (e) => setExitRequest(e.payload)),
+      listen<string>("desktop-notice", (e) => setActionNotice(e.payload)),
+    ])
+      void task.then((off) => {
+        if (disposed) off();
+        else offs.push(off);
+      });
+    return () => {
+      disposed = true;
+      offs.forEach((off) => off());
+    };
+  }, [backend]);
   const [expansions, setExpansions] = useState<Record<string, boolean>>({});
   const [dialog, setDialog] = useState<"new" | "settings" | null>(null);
   const [stats, setStats] = useState(false);
+  const [droppedUrl, setDroppedUrl] = useState("");
+  const [notifications, setNotifications] = useState<DownloadSnapshot[]>([]);
+  useEffect(() => {
+    if (backend && preferences)
+      void invoke("set_drop_window", {
+        enabled: preferences.drop_target,
+      }).catch((e) => setActionNotice(String(e)));
+  }, [backend, preferences?.drop_target]);
+  useEffect(() => {
+    if (!backend || !preferences) return;
+    const completed = (event: Event) => {
+      const job = (event as CustomEvent<DownloadSnapshot>).detail;
+      if (
+        (job.state === "completed" && preferences.notify_completed) ||
+        (job.state === "failed" && preferences.notify_failed)
+      ) {
+        setNotifications((old) =>
+          [...old.filter((n) => n.id !== job.id), job].slice(-10),
+        );
+        void invoke("notify_download", { jobId: job.id }).catch((e) =>
+          setActionNotice(String(e)),
+        );
+      }
+    };
+    addEventListener("idg-job-finished", completed);
+    return () => removeEventListener("idg-job-finished", completed);
+  }, [backend, preferences]);
+  useEffect(() => {
+    if (backend && preferences)
+      void invoke("set_mini_window", {
+        enabled: preferences.mini_window,
+      }).catch((e) => setActionNotice(String(e)));
+  }, [backend, preferences?.mini_window]);
+  const [actionNotice, setActionNotice] = useState("");
+  const pendingActions = useRef(new Set<string>());
+  async function action(id: string, command: RowAction) {
+    if (!backend || pendingActions.current.has(id)) return;
+    pendingActions.current.add(id);
+    try {
+      if (command === "folder") await backend.reveal(id);
+      else await backend.action(id, command);
+      setActionNotice(
+        command === "folder"
+          ? "Windows recibió la carpeta del trabajo."
+          : "Solicitud aceptada. La fila muestra el estado confirmado por el motor.",
+      );
+    } catch (e) {
+      setActionNotice(
+        e instanceof Error ? e.message : "No se pudo completar la acción.",
+      );
+    } finally {
+      pendingActions.current.delete(id);
+    }
+  }
+  async function queue(running: boolean) {
+    if (!backend) return;
+    try {
+      const p = await backend.preferences();
+      await backend.savePreferences({ ...p, queue_running: running });
+      setActionNotice(
+        running
+          ? "Cola en ejecución; respeta la capacidad del motor."
+          : "Cola detenida; los trabajos ya activos continúan.",
+      );
+    } catch (e) {
+      setActionNotice(String(e));
+    }
+  }
   const [page, setPage] = useState(0);
   const search = useRef<HTMLInputElement>(null);
   const filtersRef = useRef<HTMLDetailsElement>(null);
@@ -109,9 +260,16 @@ export function App({
               >
                 <Icon
                   name={
-                    ["folder", "download", "clock", "check", "pause", "error"][
-                      i
-                    ]
+                    [
+                      "folder",
+                      "download",
+                      "clock",
+                      "check",
+                      "pause",
+                      "error",
+                      "clock",
+                      "error",
+                    ][i]
                   }
                 />
                 <span>{s}</span>
@@ -151,7 +309,7 @@ export function App({
                 <option value="dark">Oscuro</option>
               </select>
             </label>
-            <small className="muted">Desarrollo · fase 02</small>
+            <small className="muted">Desarrollo · fase 05</small>
           </div>
         </aside>
         <div className="workspace">
@@ -245,6 +403,61 @@ export function App({
             </button>
           </header>
           <main>
+            {backend && preferences?.drop_target && (
+              <button
+                onClick={() =>
+                  void invoke("set_drop_window", { enabled: true }).catch((e) =>
+                    setActionNotice(String(e)),
+                  )
+                }
+              >
+                Mostrar zona flotante de enlaces
+              </button>
+            )}
+            {notifications.length > 0 && (
+              <section aria-label="Notificaciones" aria-live="polite">
+                {notifications.map((job) => (
+                  <div key={job.id}>
+                    <strong>{job.name}</strong>
+                    <span>
+                      {job.state === "completed"
+                        ? " · Descarga completada"
+                        : " · Error de descarga"}
+                    </span>
+                    {job.message && <p>{job.message}</p>}
+                    <button onClick={() => void action(job.id, "folder")}>
+                      Abrir carpeta
+                    </button>
+                    <button
+                      onClick={() => {
+                        setFilters({ ...emptyFilters, query: job.name });
+                        setPage(0);
+                        setExpansions((old) => ({ ...old, [job.id]: true }));
+                      }}
+                    >
+                      Ver trabajo
+                    </button>
+                    <button
+                      onClick={() =>
+                        setNotifications((old) =>
+                          old.filter((n) => n.id !== job.id),
+                        )
+                      }
+                    >
+                      Descartar aviso
+                    </button>
+                  </div>
+                ))}
+              </section>
+            )}
+            {preferencesFailure && <p role="alert">{preferencesFailure}</p>}
+            {actionNotice && <p role="status">{actionNotice}</p>}
+            {backend && filters.view === "En cola" && (
+              <div>
+                <button onClick={() => void queue(true)}>Iniciar cola</button>
+                <button onClick={() => void queue(false)}>Detener cola</button>
+              </div>
+            )}
             <div className="view-heading">
               <div>
                 <p className="eyebrow">TU BIBLIOTECA</p>
@@ -305,6 +518,31 @@ export function App({
                 <small>
                   {visible.filter((r) => selected.has(r.id)).length} visibles
                 </small>
+                {backend &&
+                  (["pause", "resume", "cancel"] as const).map((command) => (
+                    <button
+                      key={command}
+                      disabled={
+                        !rows.some(
+                          (r) => selected.has(r.id) && supports(r, command),
+                        )
+                      }
+                      onClick={() =>
+                        void (async () => {
+                          for (const r of rows.filter(
+                            (r) => selected.has(r.id) && supports(r, command),
+                          ))
+                            await action(r.id, command);
+                        })()
+                      }
+                    >
+                      {command === "pause"
+                        ? "Pausar compatibles"
+                        : command === "resume"
+                          ? "Reanudar compatibles"
+                          : "Cancelar compatibles"}
+                    </button>
+                  ))}
                 {[
                   "Pausar",
                   "Reanudar",
@@ -392,6 +630,7 @@ export function App({
                   viewMode={mode}
                   overrides={expansions}
                   setOverrides={setExpansions}
+                  onAction={backend ? action : undefined}
                 />
                 {visible.length > 50 && (
                   <div className="pagination">
@@ -427,7 +666,7 @@ export function App({
                 <p className="muted">
                   {galleryTools
                     ? "Galería aislada. Selecciona una cantidad de muestras arriba."
-                    : "El motor de descargas todavía no está disponible."}
+                    : "Añade una URL para comenzar. El motor mostrará aquí su progreso real."}
                 </p>
                 {!active && (
                   <button onClick={() => setDialog("new")}>
@@ -441,10 +680,20 @@ export function App({
         </div>
       </div>
       {dialog === "new" && (
-        <NewDownloadDialog onClose={() => setDialog(null)} />
+        <NewDownloadDialog
+          backend={backend}
+          initialUrl={droppedUrl}
+          onClose={() => {
+            setDialog(null);
+            setDroppedUrl("");
+          }}
+        />
       )}{" "}
       {dialog === "settings" && (
         <Settings
+          backend={backend}
+          preferences={preferences}
+          savePreferences={savePreferences}
           onClose={() => setDialog(null)}
           theme={theme}
           setTheme={setTheme}
@@ -453,6 +702,54 @@ export function App({
           mode={mode}
           setMode={setMode}
         />
+      )}
+      {backend && preferences && !preferences.welcome_done && (
+        <FirstRunWizard
+          backend={backend}
+          preferences={preferences}
+          savePreferences={savePreferences}
+          onClose={() => {}}
+        />
+      )}
+      {exitRequest && (
+        <Modal
+          title="Salir completamente"
+          onClose={() => {
+            if (!exiting) setExitRequest(null);
+          }}
+        >
+          <p>
+            {exitRequest.unknown
+              ? "Estado de trabajos no disponible."
+              : `${exitRequest.active} trabajos activos.`}{" "}
+            Se esperará a guardar sus checkpoints.
+          </p>
+          {exitRequest.unsafe_resume > 0 && (
+            <p role="alert">
+              {exitRequest.unsafe_resume} trabajos no tienen recuperación
+              comprobada; podrían necesitar un inicio desde cero con tu
+              autorización. Se conservarán sus parciales.
+            </p>
+          )}
+          <p>Salir detiene el motor; ocultar conserva las descargas.</p>
+          <footer className="dialog-actions">
+            <button disabled={exiting} onClick={() => setExitRequest(null)}>
+              Cancelar
+            </button>
+            <button
+              disabled={exiting}
+              onClick={() => {
+                setExitRequest(null);
+                void invoke("hide_desktop");
+              }}
+            >
+              Ocultar en bandeja
+            </button>
+            <button disabled={exiting} onClick={() => void exit()}>
+              {exiting ? "Guardando y cerrando…" : "Salir completamente"}
+            </button>
+          </footer>
+        </Modal>
       )}
     </div>
   );

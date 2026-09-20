@@ -1,7 +1,10 @@
+import type { DownloadSnapshot } from "../../../packages/shared-types/protocol";
 // Presentation-only view model using the states in ARCHITECTURE. Not an IPC contract.
 export type TransferState =
   | "Downloading"
   | "Paused"
+  | "Deferred"
+  | "Cancelled"
   | "Queued"
   | "Completed"
   | "Failed"
@@ -14,8 +17,9 @@ export type DownloadView = {
   category: string;
   domain: string;
   date: string;
-  total: number | null;
-  received: number;
+  total: number | bigint | null;
+  received: number | bigint;
+  snapshot?: DownloadSnapshot;
   speed: number | null;
   eta: string | null;
   samples: number[];
@@ -27,6 +31,8 @@ export type DownloadView = {
 export const stateLabels: Record<TransferState, string> = {
   Downloading: "Descargando",
   Paused: "Pausadas",
+  Deferred: "Para después",
+  Cancelled: "Canceladas",
   Queued: "En cola",
   Completed: "Completadas",
   Failed: "Fallidas",
@@ -62,7 +68,18 @@ export function filterDownloads(rows: DownloadView[], f: Filters) {
 export function autoExpanded(count: number, availableHeight: number) {
   return count > 0 && count <= 3 && availableHeight >= count * 250;
 }
-export function formatBytes(value: number | null) {
+export function formatBytes(value: number | bigint | null) {
+  if (typeof value === "bigint") {
+    const units = ["B", "KiB", "MiB", "GiB"];
+    let unit = 1n,
+      index = 0;
+    while (value >= unit * 1024n && index < 3) {
+      unit *= 1024n;
+      index++;
+    }
+    const tenths = (value * 10n) / unit;
+    return `${(tenths / 10n).toLocaleString("es")}${tenths % 10n ? "," + String(tenths % 10n) : ""} ${units[index]}`;
+  }
   if (value === null) return "Tamaño desconocido";
   if (value === 0) return "0 B";
   const n = Math.min(3, Math.floor(Math.log(value) / Math.log(1024)));

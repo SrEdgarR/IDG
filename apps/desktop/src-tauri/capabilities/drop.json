@@ -1,0 +1,6 @@
+{
+  "identifier": "drop",
+  "description": "Zona de enlaces: abrir revisión validada en la ventana principal, sin crear trabajos.",
+  "windows": ["drop"],
+  "permissions": ["allow-show-desktop", "allow-review-dropped-url"]
+}

@@ -13,6 +13,7 @@ struct Inner {
     jobs: BTreeMap<String, Job>,
     active: BTreeMap<String, watch::Sender<Control>>,
     stopping: bool,
+    preferences: AppPreferences,
     unavailable: BTreeMap<String, DownloadError>,
 }
 #[derive(Clone)]
@@ -36,6 +37,7 @@ impl Downloads {
         }
         std::fs::create_dir_all(&directory).map_err(|_| DownloadError::Storage)?;
         let mut store = Store::open(&directory.join("jobs.sqlite3"))?;
+        let preferences = store.preferences()?;
         let resources = download::resources::Resources::new(store.limits()?);
         let mut jobs = BTreeMap::new();
         let loaded = store.load()?;
@@ -45,18 +47,24 @@ impl Downloads {
             jobs.insert(job.id.clone(), job);
         }
         let (events, _) = watch::channel(None);
-        Ok(Self {
+        let this = Self {
             inner: Arc::new(Mutex::new(Inner {
                 store,
                 jobs,
                 active: BTreeMap::new(),
                 stopping: false,
+                preferences,
                 unavailable: loaded.unavailable.into_iter().collect(),
             })),
             events,
             resources,
             sequence: Arc::new(std::sync::atomic::AtomicU32::new(0)),
-        })
+        };
+        {
+            let mut inner = this.inner.lock().map_err(|_| DownloadError::Storage)?;
+            this.pump(&mut inner);
+        }
+        Ok(this)
     }
     fn snapshot(&self, job: &Job) -> DownloadSnapshot {
         let mut snapshot = job.snapshot();
@@ -95,9 +103,9 @@ impl Downloads {
             return Err(DownloadError::Busy);
         }
         let target = match &request.command {
-            Command::AddDownload { .. } | Command::AddDownloadWithOptions { .. } => {
-                Some(&request.id)
-            }
+            Command::AddDownload { .. }
+            | Command::AddDownloadWithOptions { .. }
+            | Command::CreateDownload { .. } => Some(&request.id),
             Command::GetDownload { job_id }
             | Command::ResumeDownload { job_id }
             | Command::PauseDownload { job_id }
@@ -115,8 +123,80 @@ impl Downloads {
         };
         requested_options.validate()?;
         match request.command {
+            Command::FindRecoverableDownload { input } => {
+                download::validate_input(&input)?;
+                Ok(Payload::RecoverableDownload {
+                    job_id: inner
+                        .jobs
+                        .values()
+                        .find(|job| {
+                            !inner.active.contains_key(&job.id)
+                                && download::recoverable_matches(job, &input)
+                        })
+                        .map(|job| job.id.clone()),
+                })
+            }
+            Command::GetDownloadDirectory { job_id } => Ok(Payload::DownloadDirectory {
+                directory: download::directory_for(
+                    inner.jobs.get(&job_id).ok_or(DownloadError::NotFound)?,
+                )?,
+            }),
+            Command::GetAppPreferences => Ok(Payload::AppPreferences {
+                preferences: inner.preferences.clone(),
+            }),
+            Command::SetAppPreferences { preferences } => {
+                inner.store.save_preferences(&preferences)?;
+                inner.preferences = preferences.clone();
+                self.pump(&mut inner);
+                Ok(Payload::AppPreferences { preferences })
+            }
+            Command::CreateDownload { draft } => {
+                draft.validate()?;
+                if let Some(job) = inner.jobs.get(&request.id) {
+                    return if job.creation.as_ref() == Some(&draft) {
+                        Ok(Payload::Download {
+                            job: self.snapshot(job),
+                        })
+                    } else {
+                        Err(DownloadError::Conflict)
+                    };
+                }
+                if inner.jobs.len() >= 10000
+                    || (draft.start == StartPolicy::Now
+                        && inner.active.len() >= self.resources.limits().max_downloads as usize)
+                {
+                    return Err(DownloadError::Busy);
+                }
+                let mut job = download::create_job(&request.id, draft.input.clone())?;
+                job.options = draft.options.clone();
+                job.state = match draft.start {
+                    StartPolicy::Now => TransferState::Probing,
+                    StartPolicy::Later => TransferState::Deferred,
+                    StartPolicy::Queue => TransferState::Queued,
+                };
+                job.creation = Some(draft.clone());
+                if let Err(error) = inner.store.save(&job) {
+                    let _ = std::fs::remove_file(&job.temporary);
+                    return Err(error);
+                }
+                inner.jobs.insert(job.id.clone(), job.clone());
+                self.emit(&job);
+                if draft.start == StartPolicy::Now {
+                    self.start(&mut inner, job.clone())?;
+                } else {
+                    self.pump(&mut inner);
+                }
+                Ok(Payload::Download {
+                    job: self.snapshot(&job),
+                })
+            }
             Command::GetDownloadCapabilities => Ok(Payload::DownloadCapabilities {
                 operations: [
+                    "create_download",
+                    "find_recoverable_download",
+                    "get_app_preferences",
+                    "set_app_preferences",
+                    "get_download_directory",
                     "add_download",
                     "get_download",
                     "list_downloads",
@@ -131,7 +211,7 @@ impl Downloads {
                 ]
                 .map(str::to_owned)
                 .to_vec(),
-                schema_version: 2,
+                schema_version: 3,
                 max_active: self.resources.limits().max_downloads,
                 max_write_bytes: 65536,
                 strong_validator_required: true,
@@ -262,6 +342,7 @@ impl Downloads {
                 };
                 inner.store.save(&job)?;
                 inner.jobs.insert(job.id.clone(), job.clone());
+                self.emit(&job);
                 Ok(Payload::Download {
                     job: self.snapshot(&job),
                 })
@@ -273,6 +354,7 @@ impl Downloads {
                 limits.validate()?;
                 inner.store.save_limits(&limits)?;
                 self.resources.update(limits.clone())?;
+                self.pump(&mut inner);
                 Ok(Payload::ResourceLimits { limits })
             }
             Command::SetDownloadOptions { job_id, options } => {
@@ -288,6 +370,7 @@ impl Downloads {
                 job.options = options;
                 inner.store.save(&job)?;
                 inner.jobs.insert(job_id, job.clone());
+                self.emit(&job);
                 Ok(Payload::Download {
                     job: self.snapshot(&job),
                 })
@@ -315,6 +398,14 @@ impl Downloads {
         }
     }
     fn start(&self, inner: &mut Inner, mut job: Job) -> Result<(), DownloadError> {
+        // Persist the transition before any GET. After a crash, an already-started
+        // queued job must recover paused instead of silently replaying its URL.
+        if matches!(job.state, TransferState::Queued | TransferState::Deferred) {
+            job.state = TransferState::Probing;
+            inner.store.save(&job)?;
+            inner.jobs.insert(job.id.clone(), job.clone());
+            self.emit(&job);
+        }
         let (control, mut commands) = watch::channel(Control::Run);
         inner.active.insert(job.id.clone(), control);
         let active_id = job.id.clone();
@@ -348,6 +439,7 @@ impl Downloads {
                 if let Ok(mut inner) = this.inner.lock() {
                     inner.jobs.insert(job.id.clone(), job.clone());
                     inner.active.remove(&worker_id);
+                    this.pump(&mut inner);
                 }
                 this.emit(&job);
             })
@@ -356,6 +448,25 @@ impl Downloads {
                 DownloadError::Busy
             })?;
         Ok(())
+    }
+    fn pump(&self, inner: &mut Inner) {
+        if inner.stopping || !inner.preferences.queue_running {
+            return;
+        }
+        let capacity =
+            (self.resources.limits().max_downloads as usize).saturating_sub(inner.active.len());
+        let mut queued: Vec<Job> = inner
+            .jobs
+            .values()
+            .filter(|j| j.state == TransferState::Queued && !inner.active.contains_key(&j.id))
+            .cloned()
+            .collect();
+        queued.sort_by_key(|j| (j.created_at, j.id.clone()));
+        for job in queued.into_iter().take(capacity) {
+            if self.start(inner, job).is_err() {
+                break;
+            }
+        }
     }
     pub async fn shutdown(&self) {
         if let Ok(mut inner) = self.inner.lock() {

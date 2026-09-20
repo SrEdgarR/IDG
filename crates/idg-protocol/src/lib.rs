@@ -5,6 +5,8 @@ mod download;
 pub use download::*;
 mod resources;
 pub use resources::*;
+mod app;
+pub use app::*;
 
 use serde::{Deserialize, Serialize};
 use std::{io, time::Duration};
@@ -16,6 +18,19 @@ pub const IO_TIMEOUT: Duration = Duration::from_secs(5);
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum Command {
+    FindRecoverableDownload {
+        input: NewDownload,
+    },
+    CreateDownload {
+        draft: CreateDownload,
+    },
+    GetAppPreferences,
+    GetDownloadDirectory {
+        job_id: String,
+    },
+    SetAppPreferences {
+        preferences: AppPreferences,
+    },
     Handshake,
     Ping,
     GetSnapshot,
@@ -79,6 +94,8 @@ pub enum ErrorCode {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct Snapshot {
+    #[serde(default)]
+    pub native_hosts: u32,
     pub runtime_id: String,
     pub process_id: u32,
     pub sequence: u32,
@@ -96,6 +113,15 @@ pub struct ConnectionState {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Payload {
+    RecoverableDownload {
+        job_id: Option<String>,
+    },
+    DownloadDirectory {
+        directory: String,
+    },
+    AppPreferences {
+        preferences: AppPreferences,
+    },
     ResourceLimits {
         limits: ResourceLimits,
     },

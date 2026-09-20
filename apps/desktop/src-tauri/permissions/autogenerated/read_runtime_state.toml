@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-read-runtime-state"
+description = "Enables the read_runtime_state command without any pre-configured scope."
+commands.allow = ["read_runtime_state"]
+
+[[permission]]
+identifier = "deny-read-runtime-state"
+description = "Denies the read_runtime_state command without any pre-configured scope."
+commands.deny = ["read_runtime_state"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-notify-download"
+description = "Enables the notify_download command without any pre-configured scope."
+commands.allow = ["notify_download"]
+
+[[permission]]
+identifier = "deny-notify-download"
+description = "Denies the notify_download command without any pre-configured scope."
+commands.deny = ["notify_download"]

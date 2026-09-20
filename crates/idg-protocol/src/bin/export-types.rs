@@ -4,6 +4,9 @@ use ts_rs::TS;
 fn main() {
     let config = ts_rs::Config::default();
     let text = [
+        StartPolicy::decl(&config),
+        CreateDownload::decl(&config),
+        AppPreferences::decl(&config),
         RequestMode::decl(&config),
         Priority::decl(&config),
         TransferOptions::decl(&config),

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-drop-window"
+description = "Enables the set_drop_window command without any pre-configured scope."
+commands.allow = ["set_drop_window"]
+
+[[permission]]
+identifier = "deny-set-drop-window"
+description = "Denies the set_drop_window command without any pre-configured scope."
+commands.deny = ["set_drop_window"]

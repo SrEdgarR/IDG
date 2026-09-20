@@ -21,7 +21,7 @@ function Gallery() {
   const [surface, setSurface] = useState("");
   const rows = examples(count).map((r) =>
     r.id === "sample-0"
-      ? { ...r, received: r.received + revision * 1024 ** 2 }
+      ? { ...r, received: Number(r.received) + revision * 1024 ** 2 }
       : r,
   );
   return (

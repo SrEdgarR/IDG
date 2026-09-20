@@ -3,13 +3,15 @@ mod http;
 pub mod ranges;
 pub mod resources;
 mod segmented;
-pub use files::{create_job, recover, validate_input};
+pub use files::{create_job, directory_for, recover, recoverable_matches, validate_input};
 pub use http::{client, transfer, transfer_managed};
 use idg_protocol::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Job {
+    #[serde(default)]
+    pub creation: Option<CreateDownload>,
     #[serde(default)]
     pub options: TransferOptions,
     #[serde(default)]
@@ -47,6 +49,16 @@ pub struct Job {
 impl Job {
     pub fn snapshot(&self) -> DownloadSnapshot {
         DownloadSnapshot {
+            category: self
+                .creation
+                .as_ref()
+                .map(|c| c.category.clone())
+                .unwrap_or_else(|| "Otros".into()),
+            domain: reqwest::Url::parse(&self.input.url)
+                .ok()
+                .and_then(|u| u.host_str().map(str::to_owned))
+                .unwrap_or_default(),
+            created_at: self.created_at.to_string(),
             options: self.options.clone(),
             active_requests: self.active_requests,
             target_requests: self.target_requests,
