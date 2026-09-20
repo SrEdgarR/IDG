@@ -1,7 +1,29 @@
-import { useState } from "react";
+import type {DesktopApi} from "./desktop";
+import { useState, useRef } from "react";
 import { Modal, Pending } from "./ui/Modal";
 import { validateDraft } from "./model";
-export function NewDownloadDialog({ onClose }: { onClose: () => void }) {
+export function NewDownloadDialog({ onClose, backend }: { onClose: () => void; backend?: DesktopApi }) {
+  const [directory, setDirectory] = useState("");
+  const [replaySafe, setReplaySafe] = useState(false);
+  const [requests, setRequests] = useState("automatic");
+  const [limit, setLimit] = useState("");
+  const [priority, setPriority] = useState<"normal" | "high" | "low">("normal");
+  const [failure, setFailure] = useState("");
+  const [busy, setBusy] = useState(false);
+  const sending = useRef(false);
+  const requestId = useRef(crypto.randomUUID());
+  async function submit() {
+    if (!backend || sending.current) return;
+    setChecked(true);setFailure("");
+    if (Object.keys(validateDraft(name,url)).length || !directory) {setFailure("Revisa URL, nombre y carpeta.");return;}
+    sending.current=true;setBusy(true);
+    try {
+      const result=await backend.add(requestId.current,{url,directory,name,expected_sha256:null,conflict:"reject"},{mode:requests==="automatic"?"automatic":{manual:{requests:Number(requests)}},replay_safe:replaySafe,bytes_per_second:limit?Number(limit)*1024:null,priority});
+      if(result.kind!=="download") throw new Error("El motor no confirmó el trabajo.");
+      onClose();
+    } catch(e) {setFailure(e instanceof Error?e.message:String(e));}
+    finally {sending.current=false;setBusy(false);}
+  }
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [reveal, setReveal] = useState(false);
@@ -10,7 +32,7 @@ export function NewDownloadDialog({ onClose }: { onClose: () => void }) {
   return (
     <Modal title="Nueva descarga" onClose={onClose}>
       <p className="muted">
-        Prepara los datos del archivo. Todavía no se enviarán al motor.
+        {backend ? "Revisa el destino. No se consulta el enlace hasta aceptar la descarga." : "Prepara los datos del archivo. Todavía no se enviarán al motor."}
       </p>
       <form
         onSubmit={(e) => {
@@ -62,7 +84,7 @@ export function NewDownloadDialog({ onClose }: { onClose: () => void }) {
         <div className="form-grid">
           <label className="field">
             Carpeta
-            <input disabled placeholder="Carpeta de Windows · fase 05" />
+            <input disabled={!backend || busy} value={directory} onChange={e=>setDirectory(e.target.value)} placeholder="Elige una carpeta" />
           </label>
           <label className="field">
             Categoría
@@ -80,7 +102,7 @@ export function NewDownloadDialog({ onClose }: { onClose: () => void }) {
             </select>
           </label>
         </div>
-        <button type="button" disabled aria-describedby="backend-pending">
+        <button type="button" disabled={!backend || busy} onClick={()=>void backend?.chooseFolder().then(folder=>{if(folder)setDirectory(folder);}).catch(()=>setFailure("No se pudo elegir la carpeta."))}>
           Elegir carpeta…
         </button>
         <dl className="metadata">
@@ -102,21 +124,15 @@ export function NewDownloadDialog({ onClose }: { onClose: () => void }) {
           <div className="form-grid">
             <label className="field">
               Conexiones
-              <select disabled>
-                <option>Automáticas · fase 04</option>
-              </select>
+              <select disabled={!backend || busy} value={requests} onChange={e=>setRequests(e.target.value)}><option value="automatic">Automáticas</option>{[1,2,4,8,16,32].map(n=><option key={n} value={n}>{n} solicitudes como máximo</option>)}</select>
             </label>
             <label className="field">
               Límite
-              <input disabled value="Sin límite · pendiente" readOnly />
+              <input type="number" min="1" max="4194303" disabled={!backend || busy} value={limit} onChange={e=>setLimit(e.target.value)} placeholder="Sin límite (KiB/s)" />
             </label>
             <label className="field">
               Prioridad
-              <select>
-                <option>Normal</option>
-                <option>Alta</option>
-                <option>Baja</option>
-              </select>
+              <select value={priority} onChange={e=>setPriority(e.target.value as typeof priority)}><option value="normal">Normal</option><option value="high">Alta</option><option value="low">Baja</option></select>
             </label>
             <label className="field">
               Cola
@@ -144,7 +160,8 @@ export function NewDownloadDialog({ onClose }: { onClose: () => void }) {
             />
           </label>
         </details>
-        <Pending />
+        {backend ? <><label className="check-field"><input type="checkbox" disabled={busy} checked={replaySafe} onChange={e=>setReplaySafe(e.target.checked)} />El enlace permite solicitudes repetidas</label><p className="muted">Actívalo solo para un enlace reutilizable. Ante dudas o enlaces de un solo uso se usa una solicitud secuencial; Automático no anula esta protección.</p></> : <Pending />}
+        {failure && <p role="alert" className="error-text">{failure}</p>}
         <button type="submit">Validar datos</button>
         {checked && (
           <p role="status">
@@ -154,7 +171,7 @@ export function NewDownloadDialog({ onClose }: { onClose: () => void }) {
           </p>
         )}
         <footer className="dialog-actions">
-          <button type="button" onClick={onClose}>
+          <button type="button" disabled={busy} onClick={onClose}>
             Cancelar
           </button>
           <button type="button" disabled aria-describedby="backend-pending">
@@ -166,8 +183,8 @@ export function NewDownloadDialog({ onClose }: { onClose: () => void }) {
           <button
             type="button"
             className="primary"
-            disabled
-            aria-describedby="backend-pending"
+            disabled={!backend || busy}
+            onClick={()=>void submit()}
           >
             Descargar ahora
           </button>

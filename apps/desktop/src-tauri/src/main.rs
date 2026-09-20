@@ -53,6 +53,10 @@ async fn connect_runtime(
                 if response.version != VERSION {
                     return Err(std::io::Error::other("version"));
                 }
+                if let Payload::DownloadChanged { .. } = response.payload {
+                    let _ = app.emit_to("main", "download-changed", &response.payload);
+                    continue;
+                }
                 if let Payload::Snapshot { snapshot } = response.payload {
                     // Events are complete snapshots, so coalescing/gaps require no delta replay.
                     if snapshot.runtime_id != runtime_id || snapshot.sequence < sequence {
@@ -80,6 +84,69 @@ async fn connect_runtime(
     Ok(())
 }
 
+#[tauri::command]
+async fn download_command(
+    request: idg_protocol::Request,
+    window: tauri::Window,
+) -> Result<Payload, String> {
+    if window.label() != "main"
+        || !matches!(
+            request.command,
+            Command::AddDownloadWithOptions { .. }
+                | Command::GetDownload { .. }
+                | Command::ListDownloads { .. }
+                | Command::PauseDownload { .. }
+                | Command::ResumeDownload { .. }
+                | Command::CancelDownload { .. }
+                | Command::GetResourceLimits
+                | Command::SetResourceLimits { .. }
+                | Command::SetDownloadOptions { .. }
+                | Command::GetDownloadRanges { .. }
+        )
+    {
+        return Err("Acción no autorizada".into());
+    }
+    let bytes = serde_json::to_vec(&request).map_err(|_| "Solicitud no válida")?;
+    if bytes.len() > idg_protocol::MAX_FRAME
+        || request.version != VERSION
+        || idg_protocol::decode_request(&bytes).is_err()
+    {
+        return Err("Solicitud no válida".into());
+    }
+    let mut pipe = idg_platform_windows::connect()
+        .await
+        .map_err(|_| "El motor está desconectado; los datos se conservan.")?;
+    idg_platform_windows::exchange(&mut pipe, Command::Handshake, "desktop-action")
+        .await
+        .map_err(|_| "No se pudo autenticar el motor")?;
+    idg_platform_windows::exchange(&mut pipe, request.command, &request.id)
+        .await
+        .map(|r| r.payload)
+        .map_err(|_| "No se confirmó la acción. Puedes reintentar sin duplicar el trabajo.".into())
+}
+
+#[tauri::command]
+async fn choose_download_folder(
+    app: tauri::AppHandle,
+    window: tauri::Window,
+) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    if window.label() != "main" {
+        return Err("Ventana no autorizada".into());
+    }
+    let (send, receive) = tokio::sync::oneshot::channel();
+    app.dialog().file().pick_folder(move |folder| {
+        let _ = send.send(
+            folder
+                .and_then(|f| f.into_path().ok())
+                .map(|p| p.to_string_lossy().into_owned()),
+        );
+    });
+    receive
+        .await
+        .map_err(|_| "No se pudo elegir la carpeta".into())
+}
+
 async fn command(command: Command, window: tauri::Window) -> Result<(), String> {
     if window.label() != "main" {
         return Err("Ventana no autorizada".into());
@@ -105,11 +172,14 @@ async fn shutdown_runtime(window: tauri::Window) -> Result<(), String> {
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(Connection::default())
         .invoke_handler(tauri::generate_handler![
             connect_runtime,
             ping_runtime,
-            shutdown_runtime
+            shutdown_runtime,
+            download_command,
+            choose_download_folder
         ])
         .run(tauri::generate_context!())
         .expect("No se pudo iniciar IDG Desktop");

@@ -14,3 +14,4 @@ idg-protocol.workspace = true
 idg-platform-windows.workspace = true
 tokio.workspace = true
 serde_json.workspace = true
+tauri-plugin-dialog = "=2.7.3"

@@ -1,7 +1,17 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "Solo eventos de conexión en la ventana local de IDG.",
-  "windows": ["main"],
-  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten", "allow-connect-runtime", "allow-ping-runtime", "allow-shutdown-runtime"]
+  "description": "Comandos de descargas tipados y selector de carpeta; sin filesystem ni shell genéricos.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "allow-connect-runtime",
+    "allow-ping-runtime",
+    "allow-shutdown-runtime",
+    "allow-download-command",
+    "allow-choose-download-folder"
+  ]
 }

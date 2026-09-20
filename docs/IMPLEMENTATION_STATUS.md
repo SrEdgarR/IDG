@@ -222,3 +222,11 @@ Benchmark afectado repetido: release, 15/15 hashes correctos, cinco modos × tre
 HEAD 08b17caed34eb68e2411ca7f629c88f2d6d6bf76: [push 35479388766](https://github.com/SrEdgarR/IDG/actions/runs/35479388766) y [PR 35479390196](https://github.com/SrEdgarR/IDG/actions/runs/35479390196) terminaron con ui, portable y Windows aprobados. La ejecución de PR usa el merge temporal 4b26c70d5664fcc20abb57047ed45dad1617b3ac; no es el commit de la rama. Se conservan diagnóstico, fallos originales y benchmarks separados. Sin confirmación humana de descargas.
 
 El propietario autorizó fusionar solo PR #4 si el HEAD correspondiente aprueba y no hay conflictos ni defectos bloqueantes conocidos. Este cierre modifica únicamente documentación; su CI también se comprobará antes de fusionar. Mientras tanto, fase 05 puede comenzar en una rama dependiente explícita. Las pruebas locales registradas se atribuyen a 08b17ca, no se finge otra prueba de producto por esta edición.
+
+## Fase 05 — primer incremento (EN_CURSO)
+
+El diálogo del escritorio acepta una URL por IPC tipado, reserva y guarda un trabajo mediante el runtime y muestra snapshots/eventos reales. El permiso se limita al ejecutable de escritorio validado; el host de extensión no obtiene estos comandos. Selector nativo de carpeta con plugin dialog 2.7.3; sin permisos genéricos de archivos o shell. URLs solo en memoria del formulario y almacenamiento protegido del runtime. Automático conserva `replay_safe=false` por defecto.
+
+Verificación del conjunto de cambios de este incremento: `cargo check -p idg-desktop -p idg-runtime`, `pnpm check`, `pnpm desktop:build`, `pnpm test:ui` y `node scripts/test-app-download.mjs` aprobados. La última prueba interactúa con Tauri/WebView2 real de forma automatizada: formulario → aceptación durable → fila → archivo de 2 MiB, SHA-256 correcto y un único GET, sin preflight durante la edición. No es confirmación humana. La galería permanece separada.
+
+SIGUIENTE_PASO: completar fase 05 con cola/Después persistentes, acciones de filas, preferencias/asistente, arranque explícito, bandeja y cierre coordinado, notificaciones y E2E ampliado. No se declara completada la fase ni se avanza a 06. La rama parte provisionalmente del cierre documental 8f19e11 de PR #4, pendiente de integrar main cuando todos sus checks terminen.

@@ -81,3 +81,5 @@ Capturas auténticas en Windows 11. La lista vacía es real: todavía no hay mot
 Para desarrolladores: [recorrido del archivo de prueba](docs/HTTP_DEVELOPMENT.md), con inicio, pausa, reanudación y comprobación de SHA-256. Es una prueba del motor, no una aplicación final para usuarios.
 
 También está disponible la [prueba de segmentación y límites](docs/SEGMENTATION_DEVELOPMENT.md). Más solicitudes no garantizan mayor velocidad: las mediciones se limitan a servidores locales controlados.
+
+Fase 05 está en desarrollo: Nueva descarga ya conecta el formulario con el motor y muestra progreso real. Aún no se considera una aplicación lista para uso habitual; consulte el [estado de implementación](docs/IMPLEMENTATION_STATUS.md).

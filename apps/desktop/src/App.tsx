@@ -1,3 +1,4 @@
+import type {DesktopApi} from "./desktop";
 import { useState, useRef, useEffect, type ReactNode } from "react";
 import { Icon } from "./ui/Icon";
 import { useAppearance, useViewMode, type Theme } from "./ui/appearance";
@@ -31,11 +32,13 @@ const emptyFilters: Filters = {
 const noRows: DownloadView[] = [];
 export function App({
   connection,
+  backend,
   rows = noRows,
   galleryTools,
   previewState = "normal",
 }: {
   connection: ReactNode;
+  backend?: DesktopApi;
   rows?: DownloadView[];
   galleryTools?: ReactNode;
   previewState?: string;
@@ -151,7 +154,7 @@ export function App({
                 <option value="dark">Oscuro</option>
               </select>
             </label>
-            <small className="muted">Desarrollo · fase 02</small>
+            <small className="muted">Desarrollo · fase 05</small>
           </div>
         </aside>
         <div className="workspace">
@@ -427,7 +430,7 @@ export function App({
                 <p className="muted">
                   {galleryTools
                     ? "Galería aislada. Selecciona una cantidad de muestras arriba."
-                    : "El motor de descargas todavía no está disponible."}
+                    : "Añade una URL para comenzar. El motor mostrará aquí su progreso real."}
                 </p>
                 {!active && (
                   <button onClick={() => setDialog("new")}>
@@ -441,7 +444,7 @@ export function App({
         </div>
       </div>
       {dialog === "new" && (
-        <NewDownloadDialog onClose={() => setDialog(null)} />
+        <NewDownloadDialog backend={backend} onClose={() => setDialog(null)} />
       )}{" "}
       {dialog === "settings" && (
         <Settings

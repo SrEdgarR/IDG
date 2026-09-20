@@ -166,6 +166,15 @@ pub fn is_development_probe(pipe: &NamedPipeServer) -> bool {
     verify_process(pid, &["idg-probe.exe"]).is_ok()
 }
 
+/// Authenticated local desktop only; never grant these permissions to the host.
+pub fn is_desktop(pipe: &NamedPipeServer) -> bool {
+    let mut pid = 0;
+    if checked(unsafe { GetNamedPipeClientProcessId(pipe.as_raw_handle(), &mut pid) }).is_err() {
+        return false;
+    }
+    verify_process(pid, &["idg-desktop.exe"]).is_ok()
+}
+
 pub async fn connect() -> io::Result<NamedPipeClient> {
     let name = pipe_name()?;
     let pipe = tokio::time::timeout(IO_TIMEOUT, async {

@@ -144,3 +144,7 @@ El host de Native Messaging no tiene permiso de iniciar ni consultar trabajos. E
 ## Segmentación y recursos (fase 04)
 
 [Guía de comandos, límites y benchmark](SEGMENTATION_DEVELOPMENT.md). Check.ps1 añade `node scripts/test-segments.mjs`; las pruebas anteriores permanecen. No se requieren paquetes nuevos ni cambios de sistema. Migración 002 conserva los documentos de fase 03 y añade ajustes protegidos; no borres la base para actualizar. [ADR-012](decisions/012-segmentacion-recursos.md) precisa elegibilidad, rangos durables, políticas de recursos/reintento y límites de la evidencia.
+
+### Desarrollo de fase 05 (en curso)
+
+La ventana permite crear una descarga HTTP real con Nueva descarga, URL, nombre y carpeta. Compilar con `pnpm desktop:build`; en este primer incremento aún se inicia `target/debug/idg-runtime.exe` antes de `target/debug/idg-desktop.exe`. La opción de enlace reutilizable es explícita: ante incertidumbre se conserva una única solicitud secuencial. `node scripts/test-app-download.mjs` prueba el recorrido con un servidor local y carpetas aisladas; no usa enlaces personales. Las acciones de filas y el ciclo de bandeja siguen pendientes del siguiente incremento.

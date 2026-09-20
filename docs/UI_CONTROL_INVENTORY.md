@@ -175,3 +175,7 @@ No se habilitan nuevos controles gráficos. El backend de iniciar/pausar/reanuda
 ## Transición de fase 04
 
 El motor incorpora modo Automático/manual, límites y prioridades por IPC de desarrollo; no se habilitan los controles gráficos correspondientes hasta conectarlos de extremo a extremo en su fase. La UI aprobada y la escala tipográfica se conservan. `active_requests` significa solicitudes HTTP en curso, no conexiones TCP. Pruebas de CLI/core no equivalen a pruebas de esos botones.
+
+### Incremento inicial de fase 05
+
+Nueva descarga: campos URL/nombre/carpeta y opciones del motor conectados a backend; Descargar ahora comprobado en Tauri real automatizado con archivo/hash. Elegir carpeta: implementación nativa compilada, interacción del selector pendiente. Después/Cola, conflictos y acciones de filas: todavía pendientes. La lista recibe snapshots/eventos reales; las pruebas de galería no se presentan como comprobación del motor.

@@ -86,7 +86,8 @@ pub async fn run() -> io::Result<()> {
 }
 
 async fn serve(mut pipe: NamedPipeServer, state: Arc<State>) -> io::Result<()> {
-    let can_download = idg_platform_windows::is_development_probe(&pipe);
+    let can_download = idg_platform_windows::is_development_probe(&pipe)
+        || idg_platform_windows::is_desktop(&pipe);
     let mut session = idg_core::Session::default();
     let mut subscribed = false;
     let events = state.events.subscribe();

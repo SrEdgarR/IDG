@@ -146,7 +146,7 @@ export function DownloadList({
           const percentage =
             row.total === null
               ? null
-              : Math.min(100, (row.received / Math.max(1, row.total)) * 100);
+              : Number(BigInt(row.received) * 10000n / (BigInt(row.total) || 1n)) / 100;
           return (
             <li
               key={row.id}
