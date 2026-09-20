@@ -103,6 +103,7 @@ async fn download_command(
         || !matches!(
             request.command,
             Command::AddDownloadWithOptions { .. }
+                | Command::Organization { .. }
                 | Command::FindRecoverableDownload { .. }
                 | Command::CreateDownload { .. }
                 | Command::GetAppPreferences

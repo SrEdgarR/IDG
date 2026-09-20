@@ -7,6 +7,8 @@ mod resources;
 pub use resources::*;
 mod app;
 pub use app::*;
+mod organization;
+pub use organization::*;
 
 use serde::{Deserialize, Serialize};
 use std::{io, time::Duration};
@@ -18,6 +20,9 @@ pub const IO_TIMEOUT: Duration = Duration::from_secs(5);
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum Command {
+    Organization {
+        operation: OrganizationCommand,
+    },
     FindRecoverableDownload {
         input: NewDownload,
     },
@@ -113,6 +118,9 @@ pub struct ConnectionState {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Payload {
+    Organization {
+        state: OrganizationState,
+    },
     RecoverableDownload {
         job_id: Option<String>,
     },

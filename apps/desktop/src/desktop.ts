@@ -48,9 +48,10 @@ export const desktop = {
     options: TransferOptions,
     category: string,
     start: StartPolicy,
+    queueId = "main",
   ) =>
     execute(
-      { create_download: { draft: { input, options, category, start } } },
+      { create_download: { draft: { input, options, category, start,queue_id:queueId } } },
       id,
     ),
   preferences: async (): Promise<AppPreferences> => {

@@ -1,6 +1,6 @@
 # Estado de implementación
 
-Estado actual: **fase 04 integrada en main; fase 05 implementada y VERIFICADA en las pruebas automáticas locales descritas debajo. Revisión manual parcial y CI del HEAD de entrega pendientes.** No se declara verificación completa de la matriz Windows ni confirmación humana del motor.
+Estado actual: **fase 05 integrada; fase 06 EN_CURSO**. El propietario confirma que el recorrido manual de 05 funciona correctamente. Es un resultado comunicado por el propietario, no una prueba automatizada ni una certificación de Windows 10, accesibilidad exhaustiva o matriz completa.
 No marcar una fila completada solo por generar archivos. Completar evidencia conforme se ejecute cada fase.
 
 Estados: PLANIFICADO, EN_CURSO, IMPLEMENTADO_NO_VERIFICADO, VERIFICADO, BLOQUEADO, DIFERIDO.
@@ -275,3 +275,19 @@ Revisión adicional: orden estable por creación/ID para que un snapshot no reor
 ### Procedencia del cierre
 
 Código y pruebas finales guardados en `2544f944fff4d3d5adcc1d64c4ec5b776e934882`. Incorporación de main en `627aa353668dff18e76bc91004ad60f2324f63d3`: árbol idéntico `978147a077d7d3cd3c6104bfde2dd378a0d18780`, sin cambios en el conjunto probado. Este registro posterior solo modifica documentación. Rama `feat/05-app-funcional`; el SHA de entrega, push y CI de su HEAD se consultan y registran en la PR. No se atribuye CI de 04 ni de 69f07a1 a este código.
+
+## Transición 05 → 06
+
+El propietario comunica que el recorrido manual de fase 05 funciona correctamente. No ha proporcionado mediciones, capturas ni resultados individuales nuevos; no se inventan. Esta confirmación sustituye la solicitud de volver a confirmar el recorrido, sin ampliar la cobertura Windows 10/accesibilidad/compatibilidad.
+
+HEAD `36bd38019884542f4c515f39eb617bf87a8f1712`: [push 35484084966](https://github.com/SrEdgarR/IDG/actions/runs/35484084966) y [PR 35484087792](https://github.com/SrEdgarR/IDG/actions/runs/35484087792) APROBADOS en ui/portable/windows. PR #5 integrada con autorización expresa y HEAD comprobado, sin conflictos; merge verificado `71827ad68df22f2bd41a5b44c3e1e4cdbd1309b4`. Fase 06 parte de ese main en `feat/06-colas-y-organizacion`, sin dependencia pendiente.
+
+SIGUIENTE_PASO vigente: implementar y verificar 06 por incrementos (colas/programación, reglas, búsqueda/lotes y organización restante), manteniendo runtime como único escritor. Energía simulada en pruebas, nunca apagar/suspender/hibernar el equipo o CI. No iniciar 07 ni fusionar la PR de 06.
+
+### Incremento 06-A — colas y programación (EN_CURSO)
+
+Implementados protocolo tipado, migración 004 DPAPI, colas nombradas/orden/concurrencia/prioridad, reasignación sin eliminar archivos, recibos idempotentes y horario único. Código: `crates/idg-runtime/src/downloads/organization.rs`, `crates/idg-core/src/organization.rs`, `apps/desktop/src/Organization.tsx`. Decisiones en [ADR 014](adr/014-organizacion-y-programacion.md).
+
+Verificado automáticamente en el conjunto de cambios 06-A: tests del workspace, clippy estricto, tipos TypeScript, build Tauri y migración/rollback/recibos. Interacción real automatizada (`node scripts/test-organization.mjs`): crear cola desde Tauri, altas por formulario, orden, concurrencia uno, detener frente a pausar, mover idempotentemente, ejecución programada y reasignación sin borrar; archivos comprobados por SHA-256. La automatización inicialmente falló al localizar un selector por etiqueta; se corrigió para usar su rol/nombre accesible y se repitió correctamente. No es confirmación humana.
+
+Energía: política y adaptador implementados; tests unitarios con reloj controlado y adaptador simulado aprobados. Integración Tauri repetida y aprobada: Después bloquea, completar permite cuenta atrás visible, el botón de cancelar la consume sin reactivarla. Clippy estricto y build Tauri repetidos con energía. Nunca se ejecutaron apagado, suspensión ni hibernación reales. Reglas, categorías personalizadas, búsqueda del backend, lotes, portapapeles, retención y estadísticas aún pendientes dentro de esta misma fase; 06 no está completa.

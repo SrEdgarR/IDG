@@ -1,5 +1,15 @@
 # Desarrollo de IDG
 
+## Incremento 06-A: colas y energía de prueba
+
+Con el runtime anterior detenido, compila mediante `pnpm desktop:build`. Para probar energía sin actuar sobre Windows, establece `$env:IDG_POWER_ADAPTER = 'simulate'` **antes de iniciar el runtime** y abre `./target/debug/idg-desktop.exe`. El aviso debe indicar «Simulación»; no actives energía si falta esa indicación en una prueba. Esta variable es del proceso de desarrollo, no una preferencia global ni un ajuste recibido por IPC.
+
+En «En cola → Gestionar colas» crea una cola, ajusta simultáneas y guarda. «Nueva descarga → Avanzado → Cola de descarga» elige su cola antes de añadir. Detener nuevos inicios no pausa una transferencia activa; «Pausar activas» sí. Mover u ordenar requiere trabajos inactivos. Eliminar una cola exige reasignar sus trabajos y conserva los archivos.
+
+El horario acepta una fecha ISO con zona explícita, como `2030-01-01T15:00:00-04:00`; el ejemplo no es un horario recomendado. Elige tu instante futuro real. La aplicación muestra su equivalencia en la hora del equipo. Requiere runtime activo y Windows despierto; se aplica una sola vez, recupera hasta 15 minutos de retraso y vence después.
+
+Guardar «Al terminar» no activa energía. Su botón de confirmación la activa una vez; todos los trabajos deben estar completados/publicados. En modo simulado, completa trabajos de fixture, observa la cuenta atrás y pulsa «Cancelar acción de energía». La prueba automatizada reproducible es `node scripts/test-organization.mjs`, después de compilar escritorio/runtime/probe; utiliza datos propios y rechaza un runtime previo. Nunca invoca energía real.
+
 La fase 05 conecta la ventana con descargas HTTP/HTTPS, preferencias y ciclo de vida reales. La [instalación para usuarios](INSTALACION.md) sigue pendiente de una publicación; cargar esta extensión local es una prueba de desarrollo.
 
 ## Entorno y versiones comprobados

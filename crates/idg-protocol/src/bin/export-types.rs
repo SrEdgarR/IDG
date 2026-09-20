@@ -4,6 +4,12 @@ use ts_rs::TS;
 fn main() {
     let config = ts_rs::Config::default();
     let text = [
+        PowerAction::decl(&config),
+        ScheduleState::decl(&config),
+        QueueSchedule::decl(&config),
+        DownloadQueue::decl(&config),
+        OrganizationCommand::decl(&config),
+        OrganizationState::decl(&config),
         StartPolicy::decl(&config),
         CreateDownload::decl(&config),
         AppPreferences::decl(&config),

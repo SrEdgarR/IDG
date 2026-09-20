@@ -7,6 +7,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tokio::sync::watch;
+mod organization;
 
 struct Inner {
     store: Store,
@@ -14,6 +15,10 @@ struct Inner {
     active: BTreeMap<String, watch::Sender<Control>>,
     stopping: bool,
     preferences: AppPreferences,
+    organization: OrganizationState,
+    queue_cursor: usize,
+    power_countdown: Option<idg_core::power::Countdown>,
+    clock_origin: std::time::Instant,
     unavailable: BTreeMap<String, DownloadError>,
 }
 #[derive(Clone)]
@@ -38,6 +43,18 @@ impl Downloads {
         std::fs::create_dir_all(&directory).map_err(|_| DownloadError::Storage)?;
         let mut store = Store::open(&directory.join("jobs.sqlite3"))?;
         let preferences = store.preferences()?;
+        let mut organization = store.organization()?.unwrap_or_else(|| {
+            let mut o = OrganizationState::default();
+            o.queues[0].running = preferences.queue_running;
+            o
+        });
+        if organization.power_remaining.take().is_some() {
+            organization.power_message =
+                "Cuenta atrás cancelada al reiniciar el motor; requiere activar de nuevo.".into();
+        }
+        organization.power_simulated =
+            std::env::var("IDG_POWER_ADAPTER").is_ok_and(|s| s == "simulate");
+        store.save_organization(&organization, &[], None, None)?;
         let resources = download::resources::Resources::new(store.limits()?);
         let mut jobs = BTreeMap::new();
         let loaded = store.load()?;
@@ -54,6 +71,10 @@ impl Downloads {
                 active: BTreeMap::new(),
                 stopping: false,
                 preferences,
+                organization,
+                queue_cursor: 0,
+                power_countdown: None,
+                clock_origin: std::time::Instant::now(),
                 unavailable: loaded.unavailable.into_iter().collect(),
             })),
             events,
@@ -122,6 +143,9 @@ impl Downloads {
             _ => TransferOptions::default(),
         };
         requested_options.validate()?;
+        if let Command::Organization { operation } = &request.command {
+            return self.organize(&mut inner, operation.clone(), &request);
+        }
         match request.command {
             Command::FindRecoverableDownload { input } => {
                 download::validate_input(&input)?;
@@ -145,13 +169,29 @@ impl Downloads {
                 preferences: inner.preferences.clone(),
             }),
             Command::SetAppPreferences { preferences } => {
-                inner.store.save_preferences(&preferences)?;
+                preferences.validate()?;
+                let mut organization = inner.organization.clone();
+                if let Some(main) = organization.queues.iter_mut().find(|q| q.id == "main") {
+                    main.running = preferences.queue_running;
+                }
+                inner
+                    .store
+                    .save_organization(&organization, &[], Some(&preferences), None)?;
+                inner.organization = organization;
                 inner.preferences = preferences.clone();
                 self.pump(&mut inner);
                 Ok(Payload::AppPreferences { preferences })
             }
             Command::CreateDownload { draft } => {
                 draft.validate()?;
+                if !inner
+                    .organization
+                    .queues
+                    .iter()
+                    .any(|q| q.id == draft.queue_id)
+                {
+                    return Err(DownloadError::InvalidInput);
+                }
                 if let Some(job) = inner.jobs.get(&request.id) {
                     return if job.creation.as_ref() == Some(&draft) {
                         Ok(Payload::Download {
@@ -161,13 +201,40 @@ impl Downloads {
                         Err(DownloadError::Conflict)
                     };
                 }
+                let queue_limit = inner
+                    .organization
+                    .queues
+                    .iter()
+                    .find(|q| q.id == draft.queue_id)
+                    .ok_or(DownloadError::InvalidInput)?
+                    .concurrency as usize;
+                let queue_active = inner
+                    .active
+                    .keys()
+                    .filter(|id| {
+                        inner
+                            .jobs
+                            .get(*id)
+                            .is_some_and(|j| j.organization.queue_id == draft.queue_id)
+                    })
+                    .count();
                 if inner.jobs.len() >= 10000
                     || (draft.start == StartPolicy::Now
-                        && inner.active.len() >= self.resources.limits().max_downloads as usize)
+                        && (inner.active.len() >= self.resources.limits().max_downloads as usize
+                            || queue_active >= queue_limit))
                 {
                     return Err(DownloadError::Busy);
                 }
                 let mut job = download::create_job(&request.id, draft.input.clone())?;
+                job.organization.queue_id = draft.queue_id.clone();
+                job.organization.order = inner
+                    .jobs
+                    .values()
+                    .filter(|j| j.organization.queue_id == draft.queue_id)
+                    .map(|j| j.organization.order)
+                    .max()
+                    .unwrap_or(0)
+                    .saturating_add(1);
                 job.options = draft.options.clone();
                 job.state = match draft.start {
                     StartPolicy::Now => TransferState::Probing,
@@ -208,10 +275,11 @@ impl Downloads {
                     "get_download_ranges",
                     "set_resource_limits",
                     "get_resource_limits",
+                    "organization",
                 ]
                 .map(str::to_owned)
                 .to_vec(),
-                schema_version: 3,
+                schema_version: 4,
                 max_active: self.resources.limits().max_downloads,
                 max_write_bytes: 65536,
                 strong_validator_required: true,
@@ -398,6 +466,26 @@ impl Downloads {
         }
     }
     fn start(&self, inner: &mut Inner, mut job: Job) -> Result<(), DownloadError> {
+        let queue = inner
+            .organization
+            .queues
+            .iter()
+            .find(|q| q.id == job.organization.queue_id)
+            .ok_or(DownloadError::InvalidInput)?;
+        if inner
+            .active
+            .keys()
+            .filter(|id| {
+                inner
+                    .jobs
+                    .get(*id)
+                    .is_some_and(|j| j.organization.queue_id == queue.id)
+            })
+            .count()
+            >= queue.concurrency as usize
+        {
+            return Err(DownloadError::Busy);
+        }
         // Persist the transition before any GET. After a crash, an already-started
         // queued job must recover paused instead of silently replaying its URL.
         if matches!(job.state, TransferState::Queued | TransferState::Deferred) {
@@ -450,23 +538,12 @@ impl Downloads {
         Ok(())
     }
     fn pump(&self, inner: &mut Inner) {
-        if inner.stopping || !inner.preferences.queue_running {
+        if inner.stopping {
             return;
         }
         let capacity =
             (self.resources.limits().max_downloads as usize).saturating_sub(inner.active.len());
-        let mut queued: Vec<Job> = inner
-            .jobs
-            .values()
-            .filter(|j| j.state == TransferState::Queued && !inner.active.contains_key(&j.id))
-            .cloned()
-            .collect();
-        queued.sort_by_key(|j| (j.created_at, j.id.clone()));
-        for job in queued.into_iter().take(capacity) {
-            if self.start(inner, job).is_err() {
-                break;
-            }
-        }
+        self.pump_queues(inner, capacity);
     }
     pub async fn shutdown(&self) {
         if let Ok(mut inner) = self.inner.lock() {

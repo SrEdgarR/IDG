@@ -1,5 +1,6 @@
 import type { DesktopApi } from "./desktop";
 import { DownloadFailure } from "./desktop";
+import {useOrganization} from "./Organization";
 import { useState, useRef, useEffect } from "react";
 import type {
   StartPolicy,
@@ -17,6 +18,8 @@ export function NewDownloadDialog({
   initialUrl?: string;
 }) {
   const [directory, setDirectory] = useState("");
+  const {state:organization}=useOrganization(Boolean(backend));
+  const [queueId,setQueueId]=useState("main");
   const directoryEdited = useRef(false);
   const [category, setCategory] = useState("Otros");
   const [conflict, setConflict] = useState<ConflictPolicy>("reject");
@@ -84,6 +87,7 @@ export function NewDownloadDialog({
         },
         category,
         start,
+        queueId,
       );
       if (result.kind !== "download")
         throw new Error("El motor no confirmó el trabajo.");
@@ -249,9 +253,10 @@ export function NewDownloadDialog({
         )}
         <details>
           <summary>Avanzado</summary>
+            {backend && <label className="field">Cola de descarga<select value={queueId} onChange={e=>setQueueId(e.target.value)}>{organization?.queues.map(q=><option key={q.id} value={q.id}>{q.name}</option>)}</select></label>}
           <div className="form-grid">
-            <label className="field">
-              Conexiones
+              <label className="field">
+                Conexiones
               <select
                 disabled={!backend || busy}
                 value={requests}
@@ -286,12 +291,6 @@ export function NewDownloadDialog({
                 <option value="normal">Normal</option>
                 <option value="high">Alta</option>
                 <option value="low">Baja</option>
-              </select>
-            </label>
-            <label className="field">
-              Cola
-              <select disabled>
-                <option>No disponible · fase 06</option>
               </select>
             </label>
           </div>

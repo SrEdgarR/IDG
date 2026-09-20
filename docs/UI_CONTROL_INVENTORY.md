@@ -1,5 +1,14 @@
 # Inventario de controles de IDG
 
+## Incremento 06-A vigente
+
+| Controles | Implementación | Evidencia y límite |
+|---|---|---|
+| CTL-026, CTL-036–037 | OrganizationCommand, transacciones DPAPI, selector de cola de Nueva descarga; crear/renombrar, mover/reordenar, iniciar/detener/pausar, eliminar con reasignación | Recorrido Tauri automatizado `scripts/test-organization.mjs`, sin GET al diferir/encolar, concurrencia uno y hashes. La cobertura ampliada de límites/fairness queda pendiente de cierre 06. |
+| CTL-038 | Horario único con zona, estado durable y política de retraso; activación explícita de energía, cuenta atrás y cancelación | Reloj controlado en core, pruebas Tauri de horario y cancelación, adaptador Windows simulado. Apagar/suspender/hibernar realmente NO ejecutados. |
+
+El resto de controles 06 sigue EN_CURSO; esta matriz no certifica reglas, importaciones ni organización todavía pendiente. Las matrices inferiores conservan evidencia histórica de sus fases.
+
 Contrato inicial ampliado. El estado funcional sigue separado del avance visual: consulta la matriz vigente de fase 05 y la evidencia histórica de fase 02 debajo; una superficie no acredita su backend. Los nombres de comandos son contratos orientativos que se deben ajustar al protocolo real, no API ya implementadas.
 
 Leer [INTERFAZ.md](INTERFAZ.md) y [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md). Al implementar, añadir ruta de código, error exacto y prueba/evidencia real a cada fila. Los grupos (por ejemplo límites o filtros) se desglosan en controles individuales al construir su pantalla, sin eliminar ningún elemento del grupo.

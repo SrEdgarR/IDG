@@ -42,7 +42,7 @@ impl Store {
             0 => tx
                 .execute_batch(include_str!("../migrations/001.sql"))
                 .map_err(|_| DownloadError::Storage)?,
-            1..=3 => {}
+            1..=4 => {}
             _ => return Err(DownloadError::Storage),
         }
         if version < 2 {
@@ -53,8 +53,103 @@ impl Store {
             tx.execute_batch(include_str!("../migrations/003.sql"))
                 .map_err(|_| DownloadError::Storage)?;
         }
+        if version < 4 {
+            tx.execute_batch(include_str!("../migrations/004.sql"))
+                .map_err(|_| DownloadError::Storage)?;
+        }
         tx.commit().map_err(|_| DownloadError::Storage)?;
         Ok(Self { connection })
+    }
+    pub fn organization(&self) -> Result<Option<idg_protocol::OrganizationState>, DownloadError> {
+        use rusqlite::OptionalExtension;
+        let bytes: Option<Vec<u8>> = self
+            .connection
+            .query_row(
+                "SELECT protected_value FROM organization WHERE id=1",
+                [],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|_| DownloadError::Storage)?;
+        bytes
+            .map(|bytes| {
+                let mut clear = protection::decrypt(&bytes)?;
+                let result = serde_json::from_slice(&clear).map_err(|_| DownloadError::Storage);
+                clear.fill(0);
+                result
+            })
+            .transpose()
+    }
+    /// Organization and affected job records commit together; failure leaves both unchanged.
+    pub fn save_organization(
+        &mut self,
+        state: &idg_protocol::OrganizationState,
+        jobs: &[Job],
+        preferences: Option<&idg_protocol::AppPreferences>,
+        receipt: Option<(&idg_protocol::Request, &idg_protocol::Payload)>,
+    ) -> Result<(), DownloadError> {
+        fn seal<T: serde::Serialize>(value: &T) -> Result<Vec<u8>, DownloadError> {
+            let mut clear = serde_json::to_vec(value).map_err(|_| DownloadError::Storage)?;
+            let sealed = protection::encrypt(&clear);
+            clear.fill(0);
+            sealed
+        }
+        let value = seal(state)?;
+        let records = jobs
+            .iter()
+            .map(|j| Ok((j.id.clone(), seal(j)?)))
+            .collect::<Result<Vec<_>, DownloadError>>()?;
+        let prefs = preferences.map(seal).transpose()?;
+        let receipt = receipt
+            .map(|(r, p)| Ok((r.id.clone(), seal(&(r.command.clone(), p))?)))
+            .transpose()?;
+        let tx = self
+            .connection
+            .transaction()
+            .map_err(|_| DownloadError::Storage)?;
+        tx.execute("INSERT INTO organization VALUES(1,?1) ON CONFLICT(id) DO UPDATE SET protected_value=excluded.protected_value",params![value]).map_err(|_|DownloadError::Storage)?;
+        for (id, blob) in records {
+            tx.execute("INSERT INTO downloads(id,protected_job) VALUES(?1,?2) ON CONFLICT(id) DO UPDATE SET protected_job=excluded.protected_job",params![id,blob]).map_err(|_|DownloadError::Storage)?;
+        }
+        if let Some(prefs) = prefs {
+            tx.execute("INSERT INTO app_preferences VALUES(1,?1) ON CONFLICT(id) DO UPDATE SET protected_value=excluded.protected_value",params![prefs]).map_err(|_|DownloadError::Storage)?;
+        }
+        if let Some((id, value)) = receipt {
+            tx.execute(
+                "INSERT INTO operation_receipts VALUES(?1,?2)",
+                params![id, value],
+            )
+            .map_err(|_| DownloadError::Storage)?;
+        }
+        tx.commit().map_err(|_| DownloadError::Storage)
+    }
+    pub fn receipt(
+        &self,
+        request: &idg_protocol::Request,
+    ) -> Result<Option<idg_protocol::Payload>, DownloadError> {
+        use rusqlite::OptionalExtension;
+        let bytes: Option<Vec<u8>> = self
+            .connection
+            .query_row(
+                "SELECT protected_value FROM operation_receipts WHERE id=?1",
+                params![request.id],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|_| DownloadError::Storage)?;
+        let Some(bytes) = bytes else {
+            return Ok(None);
+        };
+        let mut clear = protection::decrypt(&bytes)?;
+        let decoded =
+            serde_json::from_slice::<(idg_protocol::Command, idg_protocol::Payload)>(&clear)
+                .map_err(|_| DownloadError::Storage);
+        clear.fill(0);
+        let (command, payload) = decoded?;
+        if command != request.command {
+            return Err(DownloadError::Conflict);
+        }
+        Ok(Some(payload))
     }
     pub fn limits(&self) -> Result<idg_protocol::ResourceLimits, DownloadError> {
         use rusqlite::OptionalExtension;
@@ -172,6 +267,95 @@ impl Checkpoint for Store {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
+    #[test]
+    fn phase05_migration_and_receipt_are_atomic_and_preserve_records() {
+        use idg_protocol::*;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("phase05.sqlite3");
+        let connection = Connection::open(&path).unwrap();
+        connection
+            .execute_batch("CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY)")
+            .unwrap();
+        for sql in [
+            include_str!("../migrations/001.sql"),
+            include_str!("../migrations/002.sql"),
+            include_str!("../migrations/003.sql"),
+        ] {
+            connection.execute_batch(sql).unwrap();
+        }
+        let job = idg_core::download::create_job(
+            "old",
+            NewDownload {
+                url: "https://example.org/file".into(),
+                directory: dir.path().to_string_lossy().into(),
+                name: "file.bin".into(),
+                expected_sha256: None,
+                conflict: ConflictPolicy::Reject,
+            },
+        )
+        .unwrap();
+        let mut legacy = serde_json::to_value(&job).unwrap();
+        legacy.as_object_mut().unwrap().remove("organization");
+        let blob = protection::encrypt(&serde_json::to_vec(&legacy).unwrap()).unwrap();
+        connection
+            .execute("INSERT INTO downloads VALUES('old',?1)", params![&blob])
+            .unwrap();
+        drop(connection);
+        let mut store = Store::open(&path).unwrap();
+        let loaded = store.load().unwrap();
+        assert_eq!(loaded.jobs[0].organization.queue_id, "main");
+        let unchanged: Vec<u8> = store
+            .connection
+            .query_row("SELECT protected_job FROM downloads", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(blob, unchanged);
+        let state = OrganizationState::default();
+        let request = Request {
+            version: 1,
+            id: "receipt-test".into(),
+            command: Command::Organization {
+                operation: OrganizationCommand::RunQueue {
+                    id: "main".into(),
+                    running: true,
+                },
+            },
+        };
+        let reply = Payload::Organization {
+            state: state.clone(),
+        };
+        store
+            .save_organization(&state, &[], None, Some((&request, &reply)))
+            .unwrap();
+        let mut changed = loaded.jobs[0].clone();
+        changed.organization.order = 99;
+        let mut other = state.clone();
+        other.queues[0].name = "Must roll back".into();
+        // Duplicate receipt causes the whole transaction to roll back, including jobs/config.
+        assert!(
+            store
+                .save_organization(&other, &[changed], None, Some((&request, &reply)))
+                .is_err()
+        );
+        drop(store);
+        let store = Store::open(&path).unwrap();
+        assert_eq!(store.organization().unwrap(), Some(state));
+        assert_eq!(store.load().unwrap().jobs[0].organization.order, 0);
+        assert!(matches!(
+            store.receipt(&request).unwrap(),
+            Some(Payload::Organization { .. })
+        ));
+        let collision = Request {
+            command: Command::Organization {
+                operation: OrganizationCommand::CancelPower,
+            },
+            ..request
+        };
+        assert!(matches!(
+            store.receipt(&collision),
+            Err(DownloadError::Conflict)
+        ));
+    }
     #[test]
     fn migration_is_idempotent() {
         let store = Store::open(Path::new(":memory:")).unwrap();
@@ -179,7 +363,7 @@ mod tests {
             .connection
             .query_row("SELECT COUNT(*) FROM schema_migrations", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(n, 3);
+        assert_eq!(n, 4);
     }
     #[cfg(windows)]
     #[test]
@@ -228,7 +412,7 @@ mod tests {
         drop(Store::open(&path).unwrap());
         let other = Connection::open(&path).unwrap();
         other
-            .execute_batch("BEGIN IMMEDIATE; INSERT INTO schema_migrations VALUES(4);")
+            .execute_batch("BEGIN IMMEDIATE; INSERT INTO schema_migrations VALUES(5);")
             .unwrap();
         assert!(matches!(Store::open(&path), Err(DownloadError::Storage)));
         other.execute_batch("COMMIT").unwrap();
@@ -238,7 +422,7 @@ mod tests {
                 r.get(0)
             })
             .unwrap();
-        assert_eq!(version, 4);
+        assert_eq!(version, 5);
     }
     #[cfg(windows)]
     #[test]

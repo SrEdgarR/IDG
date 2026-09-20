@@ -1,6 +1,8 @@
 //! Transfer engine and IPC session logic, independent of the desktop.
 use idg_protocol::{Command, ErrorCode, Payload, Request, Response, Snapshot, VERSION};
 pub mod download;
+pub mod organization;
+pub mod power;
 
 #[derive(Default)]
 pub struct Session {

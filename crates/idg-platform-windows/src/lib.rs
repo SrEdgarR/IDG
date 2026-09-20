@@ -3,3 +3,5 @@
 mod pipe;
 #[cfg(windows)]
 pub use pipe::*;
+#[cfg(windows)]
+pub mod power;

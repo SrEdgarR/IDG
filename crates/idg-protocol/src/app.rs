@@ -13,6 +13,8 @@ pub enum StartPolicy {
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct CreateDownload {
+    #[serde(default = "crate::default_queue_id")]
+    pub queue_id: String,
     pub input: NewDownload,
     pub options: TransferOptions,
     pub category: String,

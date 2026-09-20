@@ -173,6 +173,10 @@ pub fn create_job(id: &str, input: NewDownload) -> Result<Job, DownloadError> {
         .map_err(file_error)?;
     file.sync_all().map_err(file_error)?;
     Ok(Job {
+        organization: JobOrganization {
+            queue_id: default_queue_id(),
+            ..Default::default()
+        },
         creation: None,
         options: TransferOptions::default(),
         ranges: Vec::new(),

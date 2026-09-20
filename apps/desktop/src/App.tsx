@@ -11,6 +11,7 @@ import { type DownloadView, type Filters, filterDownloads } from "./model";
 import { DownloadList, supports, type RowAction } from "./DownloadList";
 import { NewDownloadDialog } from "./Dialogs";
 import { Settings, FirstRunWizard } from "./Settings";
+import {QueueEditor, EnergyNotice} from "./Organization";
 export const states = [
   "Todas",
   "Descargando",
@@ -61,6 +62,7 @@ export function App({
     else setLocalTheme(t);
   };
   const [filters, setFilters] = useState(emptyFilters);
+  const [queueEditor,setQueueEditor]=useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [selected, setSelected] = useState(new Set<string>());
   const { mode, setMode: setLocalMode } = useViewMode(!backend);
@@ -452,13 +454,16 @@ export function App({
             )}
             {preferencesFailure && <p role="alert">{preferencesFailure}</p>}
             {actionNotice && <p role="status">{actionNotice}</p>}
+            {backend && <EnergyNotice />}
             {backend && filters.view === "En cola" && (
               <div>
                 <button onClick={() => void queue(true)}>Iniciar cola</button>
                 <button onClick={() => void queue(false)}>Detener cola</button>
+                <button onClick={()=>setQueueEditor(true)}>Gestionar colas</button>
               </div>
             )}
             <div className="view-heading">
+              {queueEditor&&<QueueEditor onClose={()=>setQueueEditor(false)}/>}
               <div>
                 <p className="eyebrow">TU BIBLIOTECA</p>
                 <h1>
