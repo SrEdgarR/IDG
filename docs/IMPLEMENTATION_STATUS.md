@@ -349,3 +349,9 @@ Revisión del cierre: 238 archivos y 196 enlaces locales comprobados, diff sin e
 CI observada de incrementos anteriores: [06-A](https://github.com/SrEdgarR/IDG/actions/runs/35486103075) y [06-B](https://github.com/SrEdgarR/IDG/actions/runs/35486584588) aprobadas; no acreditan el cierre posterior. El SHA final, push y las ejecuciones correspondientes a su HEAD se registran en la descripción de la PR y entrega.
 
 SIGUIENTE_PASO vigente: revisar la PR de fase 06, su CI del HEAD y el [recorrido manual](FASE06_PRUEBA_MANUAL.md); resolver observaciones y obtener autorización de integración. Las limitaciones físicas/manuales anteriores permanecen explícitas. No fusionar PR 06 ni avanzar a 07 en esta tarea.
+
+### Procedencia de la entrega 06
+
+Código y pruebas finales guardados en `5e93a52ed9a1db81d750ee94ed85b5cc3a66957c`, push a `feat/06-colas-y-organizacion` confirmado mediante `git ls-remote` y API. [PR #6](https://github.com/SrEdgarR/IDG/pull/6) abierta hacia main, sin fusionar. La edición que registra esta procedencia modifica únicamente este documento; no implica otra ejecución completa del producto.
+
+Primera consulta de CI de ese SHA: [push 35490200500](https://github.com/SrEdgarR/IDG/actions/runs/35490200500) y [PR 35490215687](https://github.com/SrEdgarR/IDG/actions/runs/35490215687), con ui/portable/windows **EN CURSO**, todavía sin conclusión. Se conserva esta observación atribuida al código exacto; no acredita el HEAD documental posterior ni sustituye las pruebas locales con `-Integration`. El estado vigente de CI del HEAD se consulta y registra en la descripción de la PR y entrega, sin prometer seguimiento en segundo plano.
