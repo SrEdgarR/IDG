@@ -1,5 +1,7 @@
+import { RuleResult } from "./Rules";
+import type { RulePreview } from "../../../packages/shared-types/protocol";
 import type { DesktopApi } from "./desktop";
-import { DownloadFailure } from "./desktop";
+import { DownloadFailure, execute } from "./desktop";
 import {useOrganization} from "./Organization";
 import { useState, useRef, useEffect } from "react";
 import type {
@@ -20,6 +22,8 @@ export function NewDownloadDialog({
   const [directory, setDirectory] = useState("");
   const {state:organization}=useOrganization(Boolean(backend));
   const [queueId,setQueueId]=useState("main");
+  const [applyRules,setApplyRules]=useState(true),[ruleOverrides,setRuleOverrides]=useState<string[]>([]),[rulePreview,setRulePreview]=useState<RulePreview|null>(null);
+  const override=(key:string)=>{setRuleOverrides(old=>old.includes(key)?old:[...old,key]);setRulePreview(null);};
   const directoryEdited = useRef(false);
   const [category, setCategory] = useState("Otros");
   const [conflict, setConflict] = useState<ConflictPolicy>("reject");
@@ -88,6 +92,8 @@ export function NewDownloadDialog({
         category,
         start,
         queueId,
+        applyRules,
+        ruleOverrides,
       );
       if (result.kind !== "download")
         throw new Error("El motor no confirmó el trabajo.");
@@ -175,7 +181,7 @@ export function NewDownloadDialog({
               value={directory}
               onChange={(e) => {
                 directoryEdited.current = true;
-                setDirectory(e.target.value);
+                setDirectory(e.target.value);override("directory");
               }}
               placeholder="Elige una carpeta"
             />
@@ -186,16 +192,16 @@ export function NewDownloadDialog({
               aria-label="Categoría"
               value={backend ? category : undefined}
               defaultValue={backend ? undefined : "Automática"}
-              onChange={(e) => setCategory(e.target.value)}
+              onChange={(e) => {setCategory(e.target.value);override("category");}}
             >
               {!backend && <option>Automática</option>}
-              {[
+              {(organization?.categories??[
                 "Videos",
                 "Documentos",
                 "Programas",
                 "Comprimidos",
                 "Otros",
-              ].map((c) => (
+              ]).map((c) => (
                 <option key={c}>{c}</option>
               ))}
             </select>
@@ -210,7 +216,7 @@ export function NewDownloadDialog({
               .then((folder) => {
                 if (folder) {
                   directoryEdited.current = true;
-                  setDirectory(folder);
+                  setDirectory(folder);override("directory");
                 }
               })
               .catch(() => setFailure("No se pudo elegir la carpeta."))
@@ -253,7 +259,8 @@ export function NewDownloadDialog({
         )}
         <details>
           <summary>Avanzado</summary>
-            {backend && <label className="field">Cola de descarga<select value={queueId} onChange={e=>setQueueId(e.target.value)}>{organization?.queues.map(q=><option key={q.id} value={q.id}>{q.name}</option>)}</select></label>}
+            {backend&&<section><label><input type="checkbox" checked={applyRules} onChange={e=>{setApplyRules(e.target.checked);setRulePreview(null);}}/> Aplicar reglas guardadas a esta descarga</label><p>Los campos que cambies explícitamente prevalecen. No se consulta la URL para obtener tamaño o tipo.</p><button type="button" disabled={busy||!applyRules} onClick={()=>void execute({organization:{operation:{action:"preview_rules",input:{url,directory,name,expected_sha256:null,conflict},overrides:ruleOverrides}}}).then(r=>{if(r.kind==="rule_preview")setRulePreview(r.preview);}).catch(e=>setFailure(String(e)))}>Previsualizar reglas</button>{rulePreview&&<RuleResult preview={rulePreview}/>}</section>}
+            {backend && <label className="field">Cola de descarga<select value={queueId} onChange={e=>{setQueueId(e.target.value);override("queue_id");}}>{organization?.queues.map(q=><option key={q.id} value={q.id}>{q.name}</option>)}</select></label>}
           <div className="form-grid">
               <label className="field">
                 Conexiones
@@ -278,7 +285,7 @@ export function NewDownloadDialog({
                 max="4194303"
                 disabled={!backend || busy}
                 value={limit}
-                onChange={(e) => setLimit(e.target.value)}
+                onChange={(e) => {setLimit(e.target.value);override("bytes_per_second");}}
                 placeholder="Sin límite (KiB/s)"
               />
             </label>
@@ -286,7 +293,7 @@ export function NewDownloadDialog({
               Prioridad
               <select
                 value={priority}
-                onChange={(e) => setPriority(e.target.value as typeof priority)}
+                onChange={(e) => {setPriority(e.target.value as typeof priority);override("priority");}}
               >
                 <option value="normal">Normal</option>
                 <option value="high">Alta</option>

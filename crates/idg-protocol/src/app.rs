@@ -13,6 +13,10 @@ pub enum StartPolicy {
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct CreateDownload {
+    #[serde(default)]
+    pub apply_rules: bool,
+    #[serde(default)]
+    pub rule_overrides: Vec<String>,
     #[serde(default = "crate::default_queue_id")]
     pub queue_id: String,
     pub input: NewDownload,
@@ -23,8 +27,20 @@ pub struct CreateDownload {
 impl CreateDownload {
     pub fn validate(&self) -> Result<(), DownloadError> {
         self.options.validate()?;
-        if !["Videos", "Documentos", "Programas", "Comprimidos", "Otros"]
-            .contains(&self.category.as_str())
+        if self.category.trim().is_empty()
+            || self.category.len() > 120
+            || self.category.chars().any(char::is_control)
+            || self.rule_overrides.len() > 5
+            || self.rule_overrides.iter().any(|s| {
+                ![
+                    "directory",
+                    "category",
+                    "queue_id",
+                    "bytes_per_second",
+                    "priority",
+                ]
+                .contains(&s.as_str())
+            })
         {
             return Err(DownloadError::InvalidInput);
         }

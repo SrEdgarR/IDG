@@ -12,6 +12,7 @@ import { DownloadList, supports, type RowAction } from "./DownloadList";
 import { NewDownloadDialog } from "./Dialogs";
 import { Settings, FirstRunWizard } from "./Settings";
 import {QueueEditor, EnergyNotice} from "./Organization";
+import { RuleEditor } from "./Rules";
 export const states = [
   "Todas",
   "Descargando",
@@ -63,6 +64,7 @@ export function App({
   };
   const [filters, setFilters] = useState(emptyFilters);
   const [queueEditor,setQueueEditor]=useState(false);
+  const [ruleEditor,setRuleEditor]=useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [selected, setSelected] = useState(new Set<string>());
   const { mode, setMode: setLocalMode } = useViewMode(!backend);
@@ -460,10 +462,12 @@ export function App({
                 <button onClick={() => void queue(true)}>Iniciar cola</button>
                 <button onClick={() => void queue(false)}>Detener cola</button>
                 <button onClick={()=>setQueueEditor(true)}>Gestionar colas</button>
+                <button onClick={()=>setRuleEditor(true)}>Gestionar reglas</button>
               </div>
             )}
             <div className="view-heading">
               {queueEditor&&<QueueEditor onClose={()=>setQueueEditor(false)}/>}
+              {ruleEditor&&<RuleEditor onClose={()=>setRuleEditor(false)}/>}
               <div>
                 <p className="eyebrow">TU BIBLIOTECA</p>
                 <h1>
@@ -696,6 +700,8 @@ export function App({
       )}{" "}
       {dialog === "settings" && (
         <Settings
+          onQueues={()=>{setDialog(null);setQueueEditor(true);}}
+          onRules={()=>{setDialog(null);setRuleEditor(true);}}
           backend={backend}
           preferences={preferences}
           savePreferences={savePreferences}

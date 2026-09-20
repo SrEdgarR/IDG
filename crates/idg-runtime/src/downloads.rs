@@ -8,6 +8,7 @@ use std::{
 };
 use tokio::sync::watch;
 mod organization;
+mod rules;
 
 struct Inner {
     store: Store,
@@ -182,16 +183,8 @@ impl Downloads {
                 self.pump(&mut inner);
                 Ok(Payload::AppPreferences { preferences })
             }
-            Command::CreateDownload { draft } => {
+            Command::CreateDownload { mut draft } => {
                 draft.validate()?;
-                if !inner
-                    .organization
-                    .queues
-                    .iter()
-                    .any(|q| q.id == draft.queue_id)
-                {
-                    return Err(DownloadError::InvalidInput);
-                }
                 if let Some(job) = inner.jobs.get(&request.id) {
                     return if job.creation.as_ref() == Some(&draft) {
                         Ok(Payload::Download {
@@ -200,6 +193,30 @@ impl Downloads {
                     } else {
                         Err(DownloadError::Conflict)
                     };
+                }
+                let original = draft.clone();
+                if draft.apply_rules {
+                    let preview = rules::preview(
+                        &inner.organization,
+                        &draft.input,
+                        None,
+                        None,
+                        &draft.rule_overrides,
+                    )?;
+                    rules::effect_valid(&inner.organization, &preview.effect)?;
+                    rules::apply(&mut draft, &preview.effect);
+                    draft.validate()?;
+                }
+                if !inner.organization.categories.contains(&draft.category) {
+                    return Err(DownloadError::InvalidInput);
+                }
+                if !inner
+                    .organization
+                    .queues
+                    .iter()
+                    .any(|q| q.id == draft.queue_id)
+                {
+                    return Err(DownloadError::InvalidInput);
                 }
                 let queue_limit = inner
                     .organization
@@ -241,7 +258,8 @@ impl Downloads {
                     StartPolicy::Later => TransferState::Deferred,
                     StartPolicy::Queue => TransferState::Queued,
                 };
-                job.creation = Some(draft.clone());
+                job.organization.category = Some(draft.category.clone());
+                job.creation = Some(original);
                 if let Err(error) = inner.store.save(&job) {
                     let _ = std::fs::remove_file(&job.temporary);
                     return Err(error);

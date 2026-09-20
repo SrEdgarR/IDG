@@ -2,6 +2,10 @@
 
 ## Incremento 06-A: colas y energía de prueba
 
+Reglas y categorías (06-B): abre «Gestionar reglas» desde En cola o Configuración → Colas y programación. Añade categorías personalizadas en el apartado plegado. Una regla guardada se evalúa para descargas nuevas; el menor orden y después el identificador deciden cada campo. Campos cambiados explícitamente en Nueva descarga prevalecen. «Previsualizar reglas» no consulta el enlace. Tipo HTTP y tamaño desconocidos no coinciden con condiciones de tipo/tamaño. El horario de reglas se expresa en minutos UTC desde medianoche; no usa implícitamente la zona del equipo.
+
+Para un trabajo anterior, despliega «Previsualizar y aplicar a un trabajo existente», carga trabajos, previsualiza y acepta. Las carpetas existentes se omiten con explicación; no hay movimientos de parciales/archivos. Una carpeta de regla debe existir y sus permisos efectivos se comprueban al crear el trabajo; un error conserva el formulario y no descarga. Prueba reproducible: `node scripts/test-rules.mjs`, con binarios recompilados y sin runtime previo.
+
 Con el runtime anterior detenido, compila mediante `pnpm desktop:build`. Para probar energía sin actuar sobre Windows, establece `$env:IDG_POWER_ADAPTER = 'simulate'` **antes de iniciar el runtime** y abre `./target/debug/idg-desktop.exe`. El aviso debe indicar «Simulación»; no actives energía si falta esa indicación en una prueba. Esta variable es del proceso de desarrollo, no una preferencia global ni un ajuste recibido por IPC.
 
 En «En cola → Gestionar colas» crea una cola, ajusta simultáneas y guarda. «Nueva descarga → Avanzado → Cola de descarga» elige su cola antes de añadir. Detener nuevos inicios no pausa una transferencia activa; «Pausar activas» sí. Mover u ordenar requiere trabajos inactivos. Eliminar una cola exige reasignar sus trabajos y conserva los archivos.

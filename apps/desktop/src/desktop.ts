@@ -49,9 +49,11 @@ export const desktop = {
     category: string,
     start: StartPolicy,
     queueId = "main",
+    applyRules = true,
+    ruleOverrides: string[] = [],
   ) =>
     execute(
-      { create_download: { draft: { input, options, category, start,queue_id:queueId } } },
+      { create_download: { draft: { input, options, category, start,queue_id:queueId,apply_rules:applyRules,rule_overrides:ruleOverrides } } },
       id,
     ),
   preferences: async (): Promise<AppPreferences> => {

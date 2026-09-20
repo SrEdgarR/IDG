@@ -2,6 +2,8 @@
 
 ## Incremento 06-A vigente
 
+Incremento 06-B: CTL-039–040 conectados a SaveRule/DeleteRule/SaveCategories/PreviewRules/PreviewJobRules/ApplyJobRules. Editor de producción y formulario Nueva descarga usan metadatos reales, precedencia explicada y aceptación retroactiva. Prueba Tauri `scripts/test-rules.mjs` aprobada con carpeta/categoría/hash; guardar no mueve archivos. La matriz histórica inferior conserva la situación anterior.
+
 | Controles | Implementación | Evidencia y límite |
 |---|---|---|
 | CTL-026, CTL-036–037 | OrganizationCommand, transacciones DPAPI, selector de cola de Nueva descarga; crear/renombrar, mover/reordenar, iniciar/detener/pausar, eliminar con reasignación | Recorrido Tauri automatizado `scripts/test-organization.mjs`, sin GET al diferir/encolar, concurrencia uno y hashes. La cobertura ampliada de límites/fairness queda pendiente de cierre 06. |

@@ -16,6 +16,88 @@ impl Downloads {
         let mut pause = None;
         match operation {
             OrganizationCommand::Get => return Ok(Payload::Organization { state }),
+            OrganizationCommand::PreviewRules { input, overrides } => {
+                return Ok(Payload::RulePreview {
+                    preview: super::rules::preview(&state, &input, None, None, &overrides)?,
+                });
+            }
+            OrganizationCommand::PreviewJobRules { job_id } => {
+                return Ok(Payload::RulePreview {
+                    preview: super::rules::job_preview(
+                        &state,
+                        inner.jobs.get(&job_id).ok_or(DownloadError::NotFound)?,
+                    )?,
+                });
+            }
+            OrganizationCommand::SaveRule { rule } => {
+                rule.validate()?;
+                super::rules::effect_valid(&state, &rule.effect)?;
+                if let Some(old) = state.rules.iter_mut().find(|r| r.id == rule.id) {
+                    *old = rule;
+                } else {
+                    if state.rules.len() >= 64 {
+                        return Err(DownloadError::Busy);
+                    }
+                    state.rules.push(rule);
+                }
+            }
+            OrganizationCommand::DeleteRule { id } => {
+                state.rules.retain(|r| r.id != id);
+            }
+            OrganizationCommand::SaveCategories { categories } => {
+                if categories.len() > 64
+                    || categories
+                        .iter()
+                        .collect::<std::collections::BTreeSet<_>>()
+                        .len()
+                        != categories.len()
+                    || categories.iter().any(|s| {
+                        s.trim().is_empty() || s.len() > 120 || s.chars().any(char::is_control)
+                    })
+                    || default_categories().iter().any(|s| !categories.contains(s))
+                    || inner
+                        .jobs
+                        .values()
+                        .any(|j| !categories.contains(&j.snapshot().category))
+                    || state.rules.iter().any(|r| {
+                        r.effect
+                            .category
+                            .as_ref()
+                            .is_some_and(|s| !categories.contains(s))
+                    })
+                {
+                    return Err(DownloadError::InvalidInput);
+                }
+                state.categories = categories;
+            }
+            OrganizationCommand::ApplyJobRules { job_id, preview } => {
+                if inner.active.contains_key(&job_id) {
+                    return Err(DownloadError::Busy);
+                }
+                let mut job = inner
+                    .jobs
+                    .get(&job_id)
+                    .ok_or(DownloadError::NotFound)?
+                    .clone();
+                if super::rules::job_preview(&state, &job)? != preview {
+                    return Err(DownloadError::Conflict);
+                }
+                super::rules::effect_valid(&state, &preview.effect)?;
+                if let Some(v) = preview.effect.category {
+                    job.organization.category = Some(v);
+                }
+                if let Some(v) = preview.effect.queue_id {
+                    job.organization.queue_id = v;
+                }
+                if let Some(v) = preview.effect.bytes_per_second {
+                    job.options.bytes_per_second = Some(v);
+                }
+                if let Some(v) = preview.effect.priority {
+                    job.options.priority = v;
+                }
+                job.options.validate()?;
+                changed.push(job);
+            }
             OrganizationCommand::SaveQueue { mut queue } => {
                 queue.validate()?;
                 let previous = state.queues.iter().find(|q| q.id == queue.id);
@@ -146,6 +228,14 @@ impl Downloads {
             }
         }
         let mut preferences = inner.preferences.clone();
+        // Keep both snapshots and receipts well below the authenticated IPC frame limit.
+        if serde_json::to_vec(&state)
+            .map_err(|_| DownloadError::Storage)?
+            .len()
+            > 96 * 1024
+        {
+            return Err(DownloadError::Busy);
+        }
         preferences.queue_running = state.queues.iter().any(|q| q.id == "main" && q.running);
         let reply = Payload::Organization {
             state: state.clone(),

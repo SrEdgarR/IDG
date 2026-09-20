@@ -9,6 +9,8 @@ mod app;
 pub use app::*;
 mod organization;
 pub use organization::*;
+mod rules;
+pub use rules::*;
 
 use serde::{Deserialize, Serialize};
 use std::{io, time::Duration};
@@ -118,6 +120,9 @@ pub struct ConnectionState {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Payload {
+    RulePreview {
+        preview: RulePreview,
+    },
     Organization {
         state: OrganizationState,
     },

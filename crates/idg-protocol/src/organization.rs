@@ -5,6 +5,11 @@ use ts_rs::TS;
 pub fn default_queue_id() -> String {
     "main".into()
 }
+pub fn default_categories() -> Vec<String> {
+    ["Videos", "Documentos", "Programas", "Comprimidos", "Otros"]
+        .map(str::to_owned)
+        .to_vec()
+}
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 pub struct JobOrganization {
@@ -16,6 +21,7 @@ pub struct JobOrganization {
     pub hidden: bool,
     pub finished_at: Option<u32>,
     pub context: String,
+    pub media_type: Option<String>,
 }
 impl Default for JobOrganization {
     fn default() -> Self {
@@ -27,6 +33,7 @@ impl Default for JobOrganization {
             hidden: false,
             finished_at: None,
             context: String::new(),
+            media_type: None,
         }
     }
 }
@@ -101,17 +108,60 @@ impl DownloadQueue {
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum OrganizationCommand {
     Get,
-    SaveQueue { queue: DownloadQueue },
-    DeleteQueue { id: String, reassign_to: String },
-    MoveJobs { ids: Vec<String>, queue_id: String },
-    Reorder { queue_id: String, ids: Vec<String> },
-    RunQueue { id: String, running: bool },
-    PauseQueue { id: String },
+    SaveQueue {
+        queue: DownloadQueue,
+    },
+    DeleteQueue {
+        id: String,
+        reassign_to: String,
+    },
+    MoveJobs {
+        ids: Vec<String>,
+        queue_id: String,
+    },
+    Reorder {
+        queue_id: String,
+        ids: Vec<String>,
+    },
+    RunQueue {
+        id: String,
+        running: bool,
+    },
+    PauseQueue {
+        id: String,
+    },
     CancelPower,
-    ArmPower { id: String, power: PowerAction },
+    ArmPower {
+        id: String,
+        power: PowerAction,
+    },
+    SaveRule {
+        rule: crate::OrganizationRule,
+    },
+    DeleteRule {
+        id: String,
+    },
+    SaveCategories {
+        categories: Vec<String>,
+    },
+    PreviewRules {
+        input: crate::NewDownload,
+        overrides: Vec<String>,
+    },
+    PreviewJobRules {
+        job_id: String,
+    },
+    ApplyJobRules {
+        job_id: String,
+        preview: crate::RulePreview,
+    },
 }
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 pub struct OrganizationState {
+    #[serde(default = "default_categories")]
+    pub categories: Vec<String>,
+    #[serde(default)]
+    pub rules: Vec<crate::OrganizationRule>,
     pub queues: Vec<DownloadQueue>,
     pub power_message: String,
     pub power_remaining: Option<u32>,
@@ -120,6 +170,8 @@ pub struct OrganizationState {
 impl Default for OrganizationState {
     fn default() -> Self {
         Self {
+            categories: default_categories(),
+            rules: Vec::new(),
             queues: vec![DownloadQueue::default()],
             power_message: String::new(),
             power_remaining: None,

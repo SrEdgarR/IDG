@@ -3,6 +3,7 @@ use idg_protocol::{Command, ErrorCode, Payload, Request, Response, Snapshot, VER
 pub mod download;
 pub mod organization;
 pub mod power;
+pub mod rules;
 
 #[derive(Default)]
 pub struct Session {

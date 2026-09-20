@@ -4,6 +4,9 @@ use ts_rs::TS;
 fn main() {
     let config = ts_rs::Config::default();
     let text = [
+        RuleEffect::decl(&config),
+        OrganizationRule::decl(&config),
+        RulePreview::decl(&config),
         PowerAction::decl(&config),
         ScheduleState::decl(&config),
         QueueSchedule::decl(&config),
