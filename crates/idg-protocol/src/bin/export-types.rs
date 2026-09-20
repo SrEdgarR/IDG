@@ -4,6 +4,13 @@ use ts_rs::TS;
 fn main() {
     let config = ts_rs::Config::default();
     let text = [
+        SearchQuery::decl(&config),
+        BulkAction::decl(&config),
+        BulkItem::decl(&config),
+        LibraryCommand::decl(&config),
+        LibrarySettings::decl(&config),
+        LocalStatistics::decl(&config),
+        SiteStatistic::decl(&config),
         RuleEffect::decl(&config),
         OrganizationRule::decl(&config),
         RulePreview::decl(&config),

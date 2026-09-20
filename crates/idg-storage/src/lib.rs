@@ -13,6 +13,26 @@ pub struct LoadedJobs {
     pub unavailable: Vec<(String, DownloadError)>,
 }
 impl Store {
+    pub fn update_receipt(
+        &mut self,
+        request: &idg_protocol::Request,
+        payload: &idg_protocol::Payload,
+    ) -> Result<(), DownloadError> {
+        if self.receipt(request)?.is_none() {
+            return Err(DownloadError::NotFound);
+        }
+        let mut clear =
+            serde_json::to_vec(&(&request.command, payload)).map_err(|_| DownloadError::Storage)?;
+        let sealed = protection::encrypt(&clear);
+        clear.fill(0);
+        self.connection
+            .execute(
+                "UPDATE operation_receipts SET protected_value=?2 WHERE id=?1",
+                params![request.id, sealed?],
+            )
+            .map_err(|_| DownloadError::Storage)?;
+        Ok(())
+    }
     pub fn open(path: &Path) -> Result<Self, DownloadError> {
         let mut connection = Connection::open(path).map_err(|_| DownloadError::Storage)?;
         connection
@@ -301,8 +321,34 @@ mod tests {
         connection
             .execute("INSERT INTO downloads VALUES('old',?1)", params![&blob])
             .unwrap();
+        let preferences = AppPreferences {
+            welcome_done: true,
+            directory: dir.path().to_string_lossy().into(),
+            theme: "dark".into(),
+            queue_running: true,
+            ..Default::default()
+        };
+        let limits = ResourceLimits {
+            max_downloads: 5,
+            bytes_per_second: Some(123456),
+            ..Default::default()
+        };
+        connection
+            .execute(
+                "INSERT INTO app_preferences VALUES(1,?1)",
+                params![protection::encrypt(&serde_json::to_vec(&preferences).unwrap()).unwrap()],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO settings VALUES(1,?1)",
+                params![protection::encrypt(&serde_json::to_vec(&limits).unwrap()).unwrap()],
+            )
+            .unwrap();
         drop(connection);
         let mut store = Store::open(&path).unwrap();
+        assert_eq!(store.preferences().unwrap(), preferences);
+        assert_eq!(store.limits().unwrap(), limits);
         let loaded = store.load().unwrap();
         assert_eq!(loaded.jobs[0].organization.queue_id, "main");
         let unchanged: Vec<u8> = store

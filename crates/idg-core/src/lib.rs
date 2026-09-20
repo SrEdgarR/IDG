@@ -1,6 +1,8 @@
 //! Transfer engine and IPC session logic, independent of the desktop.
 use idg_protocol::{Command, ErrorCode, Payload, Request, Response, Snapshot, VERSION};
+pub mod clipboard;
 pub mod download;
+pub mod library;
 pub mod organization;
 pub mod power;
 pub mod rules;

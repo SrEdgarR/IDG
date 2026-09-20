@@ -20,8 +20,10 @@ pub struct JobOrganization {
     pub private: bool,
     pub hidden: bool,
     pub finished_at: Option<u32>,
+    pub history_visible_since: Option<u32>,
     pub context: String,
     pub media_type: Option<String>,
+    pub stats_recorded: bool,
 }
 impl Default for JobOrganization {
     fn default() -> Self {
@@ -32,8 +34,10 @@ impl Default for JobOrganization {
             private: false,
             hidden: false,
             finished_at: None,
+            history_visible_since: None,
             context: String::new(),
             media_type: None,
+            stats_recorded: false,
         }
     }
 }
@@ -107,6 +111,16 @@ impl DownloadQueue {
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum OrganizationCommand {
+    SetLibrarySettings {
+        settings: crate::LibrarySettings,
+    },
+    ClearStatistics,
+    EditJob {
+        job_id: String,
+        hidden: Option<bool>,
+        category: Option<String>,
+        priority: Option<Priority>,
+    },
     Get,
     SaveQueue {
         queue: DownloadQueue,
@@ -122,6 +136,9 @@ pub enum OrganizationCommand {
     Reorder {
         queue_id: String,
         ids: Vec<String>,
+    },
+    MoveUp {
+        job_id: String,
     },
     RunQueue {
         id: String,
@@ -158,6 +175,10 @@ pub enum OrganizationCommand {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 pub struct OrganizationState {
+    #[serde(default)]
+    pub library: crate::LibrarySettings,
+    #[serde(default)]
+    pub statistics: crate::LocalStatistics,
     #[serde(default = "default_categories")]
     pub categories: Vec<String>,
     #[serde(default)]
@@ -170,6 +191,8 @@ pub struct OrganizationState {
 impl Default for OrganizationState {
     fn default() -> Self {
         Self {
+            library: Default::default(),
+            statistics: Default::default(),
             categories: default_categories(),
             rules: Vec::new(),
             queues: vec![DownloadQueue::default()],

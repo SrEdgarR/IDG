@@ -15,6 +15,81 @@ impl Downloads {
         let mut changed = Vec::<Job>::new();
         let mut pause = None;
         match operation {
+            OrganizationCommand::SetLibrarySettings { settings } => {
+                if settings
+                    .retention_days
+                    .is_some_and(|n| !(1..=36500).contains(&n))
+                {
+                    return Err(DownloadError::InvalidInput);
+                }
+                if settings.statistics && !state.library.statistics {
+                    for job in inner.jobs.values().filter(|j| {
+                        j.state == TransferState::Completed
+                            && !inner.active.contains_key(&j.id)
+                            && !j.organization.stats_recorded
+                    }) {
+                        let mut job = job.clone();
+                        job.organization.stats_recorded = true;
+                        changed.push(job);
+                    }
+                }
+                state.library = settings;
+            }
+            OrganizationCommand::ClearStatistics => {
+                state.statistics = LocalStatistics::default();
+                for job in inner.jobs.values().filter(|j| {
+                    j.state == TransferState::Completed
+                        && !inner.active.contains_key(&j.id)
+                        && !j.organization.stats_recorded
+                }) {
+                    let mut job = job.clone();
+                    job.organization.stats_recorded = true;
+                    changed.push(job);
+                }
+            }
+            OrganizationCommand::EditJob {
+                job_id,
+                hidden,
+                category,
+                priority,
+            } => {
+                if inner.active.contains_key(&job_id) {
+                    return Err(DownloadError::Busy);
+                }
+                let mut job = inner
+                    .jobs
+                    .get(&job_id)
+                    .ok_or(DownloadError::NotFound)?
+                    .clone();
+                if let Some(hidden) = hidden {
+                    if !matches!(
+                        job.state,
+                        TransferState::Completed | TransferState::Cancelled
+                    ) {
+                        return Err(DownloadError::InvalidState);
+                    }
+                    job.organization.hidden = hidden;
+                    if !hidden {
+                        job.organization.history_visible_since = Some(
+                            std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_secs()
+                                .min(u32::MAX as u64) as u32,
+                        );
+                    }
+                }
+                if let Some(category) = category {
+                    if !state.categories.contains(&category) {
+                        return Err(DownloadError::InvalidInput);
+                    }
+                    job.organization.category = Some(category);
+                }
+                if let Some(priority) = priority {
+                    job.options.priority = priority;
+                }
+                changed.push(job);
+            }
             OrganizationCommand::Get => return Ok(Payload::Organization { state }),
             OrganizationCommand::PreviewRules { input, overrides } => {
                 return Ok(Payload::RulePreview {
@@ -169,6 +244,30 @@ impl Downloads {
                     changed.push(job);
                 }
             }
+            OrganizationCommand::MoveUp { job_id } => {
+                let job = inner.jobs.get(&job_id).ok_or(DownloadError::NotFound)?;
+                let mut ordered: Vec<_> = inner
+                    .jobs
+                    .values()
+                    .filter(|j| j.organization.queue_id == job.organization.queue_id)
+                    .collect();
+                ordered.sort_by_key(|j| (j.organization.order, j.created_at, j.id.clone()));
+                let index = ordered
+                    .iter()
+                    .position(|j| j.id == job_id)
+                    .ok_or(DownloadError::NotFound)?;
+                if index > 0 {
+                    ordered.swap(index - 1, index);
+                }
+                for (i, job) in ordered.into_iter().enumerate() {
+                    if inner.active.contains_key(&job.id) {
+                        return Err(DownloadError::Busy);
+                    }
+                    let mut job = job.clone();
+                    job.organization.order = i as u32;
+                    changed.push(job);
+                }
+            }
             OrganizationCommand::Reorder { queue_id, ids } => {
                 let unique: std::collections::BTreeSet<_> = ids.iter().collect();
                 if ids.len() > 1000 || unique.len() != ids.len() {
@@ -248,6 +347,9 @@ impl Downloads {
         )?;
         inner.preferences = preferences;
         inner.organization = state;
+        if !inner.organization.library.clipboard {
+            inner.clipboard.poll(false, 0, || 0, || None);
+        }
         // Every explicit organization edit cancels any pending countdown. Get returned above.
         if inner.power_countdown.take().is_some() {
             inner.organization.power_remaining = None;
@@ -361,12 +463,22 @@ impl Downloads {
             inner.preferences = prefs;
         }
         self.pump(&mut inner);
+        self.tick_library(&mut inner, now);
+        let enabled = inner.organization.library.clipboard;
+        let elapsed = inner.clock_origin.elapsed().as_secs();
+        inner.clipboard.poll(
+            enabled,
+            elapsed,
+            idg_platform_windows::clipboard::sequence,
+            idg_platform_windows::clipboard::read_text,
+        );
         self.tick_power(&mut inner);
     }
     fn tick_power(&self, inner: &mut Inner) {
         let seconds = inner.clock_origin.elapsed().as_secs();
         let clear = !inner.jobs.is_empty()
             && inner.active.is_empty()
+            && inner.file_operations.is_empty()
             && inner.unavailable.is_empty()
             && inner
                 .jobs

@@ -13,11 +13,13 @@ import {
 } from "./model";
 import { Icon } from "./ui/Icon";
 import { ConfirmDialog } from "./Dialogs";
-export type RowAction = "pause" | "resume" | "cancel" | "folder";
+import { DeleteFileDialog } from "./Library";
+export type RowAction = "pause" | "resume" | "cancel" | "folder" | "organize";
 export function supports(row: DownloadView, action: RowAction) {
   const state = row.snapshot?.state;
   if (!state) return false;
   if (action === "folder") return true;
+  if (action === "organize") return true;
   if (action === "pause")
     return ["downloading", "probing", "queued"].includes(state);
   if (action === "cancel")
@@ -108,6 +110,10 @@ function RowMenu({
                 ["resume", "Reanudar / reintentar"],
                 ["cancel", "Cancelar"],
                 ["folder", "Abrir carpeta"],
+                [
+                  "organize",
+                  "Organizar selección (cola, categoría e historial)",
+                ],
               ] as const
             ).map(([action, label]) => (
               <button
@@ -145,6 +151,10 @@ function RowMenu({
                 "Cancelar",
                 "Reintentar",
                 "Abrir carpeta",
+                "Prioridad",
+                "Mover a cola",
+                "Cambiar categoría",
+                "Quitar del historial",
               ].includes(t),
           )
           .map((t) => (
@@ -385,9 +395,18 @@ export function DownloadList({
           );
         })}
       </ul>
-      {deleting && (
-        <ConfirmDialog name={deleting.name} onClose={() => setDeleting(null)} />
-      )}
+      {deleting &&
+        (onAction ? (
+          <DeleteFileDialog
+            id={deleting.id}
+            onClose={() => setDeleting(null)}
+          />
+        ) : (
+          <ConfirmDialog
+            name={deleting.name}
+            onClose={() => setDeleting(null)}
+          />
+        ))}
     </>
   );
 }

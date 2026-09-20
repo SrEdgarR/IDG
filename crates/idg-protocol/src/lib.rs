@@ -11,6 +11,8 @@ mod organization;
 pub use organization::*;
 mod rules;
 pub use rules::*;
+mod library;
+pub use library::*;
 
 use serde::{Deserialize, Serialize};
 use std::{io, time::Duration};
@@ -22,6 +24,9 @@ pub const IO_TIMEOUT: Duration = Duration::from_secs(5);
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum Command {
+    Library {
+        operation: LibraryCommand,
+    },
     Organization {
         operation: OrganizationCommand,
     },
@@ -120,6 +125,30 @@ pub struct ConnectionState {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Payload {
+    ClipboardStatus {
+        id: Option<u32>,
+        count: u32,
+        domains: Vec<String>,
+    },
+    ClipboardText {
+        text: String,
+    },
+    FileDeletionPreview {
+        path: String,
+        sha256: String,
+        bytes: String,
+    },
+    SearchResults {
+        ids: Vec<String>,
+        total: u32,
+        next_offset: Option<u32>,
+    },
+    BulkResults {
+        items: Vec<BulkItem>,
+    },
+    Duplicates {
+        ids: Vec<String>,
+    },
     RulePreview {
         preview: RulePreview,
     },

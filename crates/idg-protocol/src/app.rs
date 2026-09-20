@@ -14,6 +14,10 @@ pub enum StartPolicy {
 #[serde(deny_unknown_fields)]
 pub struct CreateDownload {
     #[serde(default)]
+    pub context: String,
+    #[serde(default)]
+    pub private: bool,
+    #[serde(default)]
     pub apply_rules: bool,
     #[serde(default)]
     pub rule_overrides: Vec<String>,
@@ -27,6 +31,9 @@ pub struct CreateDownload {
 impl CreateDownload {
     pub fn validate(&self) -> Result<(), DownloadError> {
         self.options.validate()?;
+        if self.context.len() > 128 || self.context.chars().any(char::is_control) {
+            return Err(DownloadError::InvalidInput);
+        }
         if self.category.trim().is_empty()
             || self.category.len() > 120
             || self.category.chars().any(char::is_control)

@@ -1,6 +1,10 @@
 # Desarrollo de IDG
 
-## Incremento 06-A: colas y energía de prueba
+La organización de fase 06 se prueba mediante el [recorrido aislado](FASE06_PRUEBA_MANUAL.md). Comprobaciones nuevas: `node --test scripts/test-import-parser.mjs`, `node scripts/test-organization.mjs`, `node scripts/test-rules.mjs`, `node scripts/test-library.mjs`, `node scripts/test-import.mjs` y `node scripts/test-queue-limits.mjs`. Las últimas cinco abren Tauri real y requieren binarios recién compilados y ningún runtime previo. `scripts/Check.ps1 -Integration` las incorpora; `Check.ps1` sin ese parámetro no acredita la matriz gráfica o navegadores.
+
+El monitor nativo está separado de su política testeable. El arnés configura `IDG_CLIPBOARD_FIXTURE` para leer un archivo propio de prueba, nunca el portapapeles personal. `IDG_POWER_ADAPTER=simulate` evita toda acción física. Ambas se fijan antes de iniciar procesos. Formato de las superficies nuevas aplicado con Prettier 3.9.8, comprobado en el registro oficial npm; no es una dependencia de ejecución ni cambia el stack.
+
+## Colas, reglas y energía de prueba (fase 06)
 
 Reglas y categorías (06-B): abre «Gestionar reglas» desde En cola o Configuración → Colas y programación. Añade categorías personalizadas en el apartado plegado. Una regla guardada se evalúa para descargas nuevas; el menor orden y después el identificador deciden cada campo. Campos cambiados explícitamente en Nueva descarga prevalecen. «Previsualizar reglas» no consulta el enlace. Tipo HTTP y tamaño desconocidos no coinciden con condiciones de tipo/tamaño. El horario de reglas se expresa en minutos UTC desde medianoche; no usa implícitamente la zona del equipo.
 
@@ -107,7 +111,7 @@ CI: `.github/workflows/check.yml` conserva portable (core/protocolo/migraciones 
 
 ## Límites y diagnóstico
 
-Hay motor HTTP/HTTPS secuencial y segmentado, manejado solo mediante la utilidad de desarrollo. Los documentos de trabajos se protegen con DPAPI dentro de SQLite; no es cifrado integral de la DB. No hay bandeja, autoinicio ni AutoPick. La interfaz de fase 02 conserva su lista vacía real; las acciones futuras están deshabilitadas y explicadas. Los estados de conexión no se persisten. El pipe admite 16 clientes simultáneos, frames de 256 KiB y plazos de cinco segundos. La suscripción usa una conexión dedicada y snapshots completos, por lo que un salto de secuencia no exige reconstruir deltas. Un proceso malicioso con control del mismo usuario y capacidad de reemplazar binarios no queda aislado por este mecanismo.
+El motor HTTP/HTTPS secuencial y segmentado se controla desde la aplicación real, además de la utilidad de desarrollo. Trabajos, preferencias y organización se protegen con DPAPI dentro de SQLite; no es cifrado integral de la DB. Hay bandeja y cierre coordinado; autoinicio y AutoPick siguen pendientes. La lista y organización de producción reciben datos del runtime. Los estados de conexión no se persisten. El pipe admite 16 clientes simultáneos, frames de 256 KiB y plazos de cinco segundos. La suscripción usa una conexión dedicada y snapshots completos, por lo que un salto de secuencia no exige reconstruir deltas. Un proceso malicioso con control del mismo usuario y capacidad de reemplazar binarios no queda aislado por este mecanismo.
 
 Ante Desconectado: comprueba el runtime con `idg-probe.exe ping`, que los binarios estén juntos, registro/ID correctos y que el complemento se haya reconstruido. No pegues credenciales ni rutas privadas en issues. Estado, evidencias y pendientes en [IMPLEMENTATION_STATUS](IMPLEMENTATION_STATUS.md).
 
@@ -124,7 +128,7 @@ Abre http://127.0.0.1:1421/gallery.html. Este comando se comprobó con Vite; la 
 
 Prueba filtros y Limpiar, selección, menú de fila, expansión automática/manual, Nueva descarga y las superficies del banner. Actualizar muestra cambia una medida solo al pulsarlo; no hay temporizador de progreso. Conflicto, asistente, colas, reglas, multimedia, recuperación y ventanas auxiliares son componentes de muestra. Mini ventana y zona de arrastre necesitan activación local; no crean ventanas del sistema ni vigilan el portapapeles. Los diálogos explican qué acciones necesitan backend y no muestran éxitos falsos.
 
-Sistema es el tema inicial. Tema y vista de filas se conservan localmente por origen; no guardan URLs, credenciales ni trabajos. La configuración real del motor sigue pendiente. Una elección manual de expansión prevalece durante la sesión, incluso al filtrar y volver. 1–3 filas se expanden automáticamente si cabe el presupuesto de espacio; 4+ empiezan compactas. Los detalles técnicos se abren aparte. Lista paginada de 50 filas como límite de renderizado; hay listado paginado de trabajos por IPC de desarrollo, todavía sin conexión con la lista visual.
+En la galería, Sistema es el tema inicial y tema/vista se conservan localmente por origen; no guardan URLs, credenciales ni trabajos. En producción, preferencias, lista y búsqueda sí están conectadas al runtime. Una elección manual de expansión prevalece durante la sesión, incluso al filtrar y volver. 1–3 filas se expanden automáticamente si cabe el presupuesto de espacio; 4+ empiezan compactas. Los detalles técnicos se abren aparte. Lista y editor de cola renderizan páginas de 50; el buscador de producción consulta todo el historial en el backend.
 
 Para repetir las pruebas visuales sin runtime:
 

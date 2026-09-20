@@ -356,13 +356,41 @@ try {
     await c.close();
   }
   // Production bundle must not ship the independent gallery entry or sample records.
+  for (const [kind, title, field] of [
+    ["new", "Nueva descarga", "Carpeta"],
+    ["import", "Importar enlaces", "Carpeta del lote"],
+  ]) {
+    await page.evaluate(async (kind) => {
+      const { openFocusFixture } =
+        await import("/src/gallery/PreferencesFixture.tsx");
+      window.__idgFocusFixture = openFocusFixture(kind);
+    }, kind);
+    const dialog = page.getByRole("dialog", { name: title, exact: true });
+    const directory = dialog.getByRole("textbox", { name: field, exact: true });
+    await directory.focus();
+    assert.equal(await directory.inputValue(), "");
+    await page.evaluate(async () => {
+      window.__idgFocusFixture.release();
+      await new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      );
+    });
+    assert.equal(
+      await directory.inputValue(),
+      "",
+      "Late preferences must not alter a focused directory before its first input event",
+    );
+    await directory.fill("C:\\explicit-fixture");
+    assert.equal(await directory.inputValue(), "C:\\explicit-fixture");
+    await page.evaluate(() => window.__idgFocusFixture.close());
+  }
   const dist = path.join(root, "apps/desktop/dist");
   assert.equal((await readdir(dist)).includes("gallery.html"), false);
   for (const file of await readdir(path.join(dist, "assets"))) {
     if (file.endsWith(".js"))
       assert.doesNotMatch(
         await readFile(path.join(dist, "assets", file), "utf8"),
-        /GALLERY_ONLY_FIXTURE|Paisajes del altiplano|sample-0/,
+        /GALLERY_ONLY_FIXTURE|IDG_PREFERENCES_TEST_FIXTURE|Paisajes del altiplano|sample-0/,
       );
   }
   assert.deepEqual(errors, []);

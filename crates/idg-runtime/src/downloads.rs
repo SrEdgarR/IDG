@@ -7,6 +7,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tokio::sync::watch;
+mod library;
 mod organization;
 mod rules;
 
@@ -20,6 +21,8 @@ struct Inner {
     queue_cursor: usize,
     power_countdown: Option<idg_core::power::Countdown>,
     clock_origin: std::time::Instant,
+    clipboard: idg_core::clipboard::Monitor,
+    file_operations: std::collections::BTreeSet<String>,
     unavailable: BTreeMap<String, DownloadError>,
 }
 #[derive(Clone)]
@@ -76,6 +79,8 @@ impl Downloads {
                 queue_cursor: 0,
                 power_countdown: None,
                 clock_origin: std::time::Instant::now(),
+                clipboard: Default::default(),
+                file_operations: Default::default(),
                 unavailable: loaded.unavailable.into_iter().collect(),
             })),
             events,
@@ -119,6 +124,20 @@ impl Downloads {
         }
     }
     fn handle(&self, request: Request) -> Result<Payload, DownloadError> {
+        if matches!(
+            &request.command,
+            Command::Library {
+                operation: LibraryCommand::DeleteFile { .. }
+            }
+        ) {
+            return self.delete_file(&request);
+        }
+        if let Command::Library {
+            operation: LibraryCommand::Bulk { ids, operation },
+        } = &request.command
+        {
+            return self.bulk(&request, ids, operation);
+        }
         let cancel = matches!(request.command, Command::CancelDownload { .. });
         let mut inner = self.inner.lock().map_err(|_| DownloadError::Storage)?;
         if inner.stopping {
@@ -148,6 +167,80 @@ impl Downloads {
             return self.organize(&mut inner, operation.clone(), &request);
         }
         match request.command {
+            Command::Library {
+                operation: LibraryCommand::ClipboardStatus,
+            } => {
+                let pending = inner.clipboard.pending();
+                Ok(Payload::ClipboardStatus {
+                    id: pending.map(|p| p.id),
+                    count: pending.map_or(0, |p| p.urls.len() as u32),
+                    domains: pending.map(|p| p.domains.clone()).unwrap_or_default(),
+                })
+            }
+            Command::Library {
+                operation: LibraryCommand::TakeClipboard { id },
+            } => {
+                if !inner.organization.library.clipboard {
+                    return Err(DownloadError::InvalidState);
+                }
+                let urls = inner.clipboard.take(id).ok_or(DownloadError::NotFound)?;
+                Ok(Payload::ClipboardText {
+                    text: urls.join("\n"),
+                })
+            }
+            Command::Library {
+                operation: LibraryCommand::DismissClipboard { id },
+            } => {
+                inner.clipboard.take(id);
+                Ok(Payload::ClipboardStatus {
+                    id: None,
+                    count: 0,
+                    domains: Vec::new(),
+                })
+            }
+            Command::Library {
+                operation: LibraryCommand::PreviewDelete { job_id },
+            } => {
+                let job = inner.jobs.get(&job_id).ok_or(DownloadError::NotFound)?;
+                if inner.active.contains_key(&job_id) || job.state != TransferState::Completed {
+                    return Err(DownloadError::InvalidState);
+                }
+                Ok(Payload::FileDeletionPreview {
+                    path: job.final_path.clone(),
+                    sha256: job
+                        .calculated_sha256
+                        .clone()
+                        .ok_or(DownloadError::InvalidState)?,
+                    bytes: job.durable.to_string(),
+                })
+            }
+            Command::Library {
+                operation: LibraryCommand::Search { query },
+            } => {
+                let (ids, total, next_offset) =
+                    idg_core::library::search(inner.jobs.values(), &query)?;
+                Ok(Payload::SearchResults {
+                    ids,
+                    total,
+                    next_offset,
+                })
+            }
+            Command::Library {
+                operation: LibraryCommand::Duplicates { input, context },
+            } => {
+                download::validate_input(&input)?;
+                if context.len() > 128 {
+                    return Err(DownloadError::InvalidInput);
+                }
+                let ids = inner
+                    .jobs
+                    .values()
+                    .filter(|j| idg_core::library::duplicate(j, &input, &context))
+                    .take(100)
+                    .map(|j| j.id.clone())
+                    .collect();
+                Ok(Payload::Duplicates { ids })
+            }
             Command::FindRecoverableDownload { input } => {
                 download::validate_input(&input)?;
                 Ok(Payload::RecoverableDownload {
@@ -243,6 +336,8 @@ impl Downloads {
                     return Err(DownloadError::Busy);
                 }
                 let mut job = download::create_job(&request.id, draft.input.clone())?;
+                job.organization.context = draft.context.clone();
+                job.organization.private = draft.private;
                 job.organization.queue_id = draft.queue_id.clone();
                 job.organization.order = inner
                     .jobs
@@ -574,7 +669,7 @@ impl Downloads {
             let active = self
                 .inner
                 .lock()
-                .map(|i| !i.active.is_empty())
+                .map(|i| !i.active.is_empty() || !i.file_operations.is_empty())
                 .unwrap_or(false);
             if !active {
                 break;

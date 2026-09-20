@@ -4,4 +4,8 @@ mod pipe;
 #[cfg(windows)]
 pub use pipe::*;
 #[cfg(windows)]
+pub mod clipboard;
+#[cfg(windows)]
+pub mod files;
+#[cfg(windows)]
 pub mod power;
