@@ -256,19 +256,19 @@ impl Adaptive {
             cooldown: 0,
         }
     }
-    pub fn sample(&mut self, useful_per_second: f64, pressure: bool) {
+    pub fn sample(&mut self, useful_per_second: f64, pressure: bool) -> &'static str {
         if pressure {
             self.target = (self.target / 2).max(1);
             self.trial = None;
             self.stable = 0;
             self.cooldown = 3;
             self.baseline = useful_per_second;
-            return;
+            return "pressure";
         }
         if self.cooldown > 0 {
             self.cooldown -= 1;
             self.baseline = useful_per_second;
-            return;
+            return "cooldown";
         }
         if let Some((old, rate, good)) = self.trial {
             if useful_per_second >= rate * 1.10 {
@@ -276,16 +276,18 @@ impl Adaptive {
                     self.trial = None;
                     self.baseline = useful_per_second;
                     self.cooldown = 2;
+                    return "retain";
                 } else {
                     self.trial = Some((old, rate, good + 1));
+                    return "trial_window";
                 }
             } else {
                 self.target = old;
                 self.trial = None;
                 self.cooldown = 4;
                 self.baseline = useful_per_second;
+                return "reject";
             }
-            return;
         }
         if self.baseline > 0.0 && useful_per_second >= self.baseline * 0.95 {
             self.stable += 1;
@@ -298,12 +300,60 @@ impl Adaptive {
             self.target += 1;
             self.trial = Some((old, useful_per_second, 0));
             self.stable = 0;
+            return "trial";
         }
+        "measure"
+    }
+    pub fn reference(&self) -> f64 {
+        self.trial.map_or(self.baseline, |(_, rate, _)| rate)
     }
 }
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn trial() -> Adaptive {
+        let mut a = Adaptive::new(8);
+        assert_eq!(a.sample(100.0, false), "measure");
+        assert_eq!(a.sample(100.0, false), "measure");
+        assert_eq!(a.sample(100.0, false), "trial");
+        assert_eq!(a.reference(), 100.0);
+        a
+    }
+    #[test]
+    fn flat_throughput_rejects_increase_and_observes_cooldown() {
+        let mut a = trial();
+        assert_eq!(a.sample(100.0, false), "reject");
+        assert_eq!(a.target, 2);
+        for _ in 0..4 {
+            assert_eq!(a.sample(100.0, false), "cooldown");
+            assert_eq!(a.target, 2);
+        }
+    }
+    #[test]
+    fn gain_requires_two_consecutive_windows_against_fixed_reference() {
+        let mut a = trial();
+        assert_eq!(a.sample(140.0, false), "trial_window");
+        assert_eq!(a.reference(), 100.0);
+        assert_eq!(a.sample(145.0, false), "retain");
+        assert_eq!(a.target, 3);
+    }
+    #[test]
+    fn brief_fluctuation_is_not_sustained_gain() {
+        let mut a = trial();
+        assert_eq!(a.sample(140.0, false), "trial_window");
+        assert_eq!(a.sample(105.0, false), "reject");
+        assert_eq!(a.target, 2);
+    }
+    #[test]
+    fn pressure_cancels_trial_even_when_throughput_increases() {
+        let mut a = trial();
+        assert_eq!(a.sample(150.0, true), "pressure");
+        assert_eq!(a.target, 1);
+        for _ in 0..3 {
+            assert_eq!(a.sample(150.0, false), "cooldown");
+            assert_eq!(a.target, 1);
+        }
+    }
     #[test]
     fn automatic_requires_measurements_and_rejects_flat_trials() {
         let mut a = Adaptive::new(8);

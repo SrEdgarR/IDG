@@ -1,6 +1,6 @@
 # Estado de implementación
 
-Estado actual: **fase 03 integrada; fase 04 VERIFICADA en el alcance local automatizado descrito abajo. Revisión de PR e integración pendientes**.
+Estado actual: **fase 03 integrada; corrección de fase 04 VERIFICADA localmente. CI del cambio correctivo e integración pendientes; fallo remoto anterior documentado al final**.
 No marcar una fila completada solo por generar archivos. Completar evidencia conforme se ejecute cada fase.
 
 Estados: PLANIFICADO, EN_CURSO, IMPLEMENTADO_NO_VERIFICADO, VERIFICADO, BLOQUEADO, DIFERIDO.
@@ -84,7 +84,7 @@ Comprobación visual: captura auténtica del WebView2 revisada, estado/PID y con
 
 ## SIGUIENTE_PASO
 
-Revisar la PR de fase 04 y comprobar ui/portable/windows del HEAD actual. Solicitar autorización del propietario antes de integrar; no fusionar 04 ni avanzar a 05. La prueba interactiva humana del motor sigue pendiente.
+Comprobar CI del HEAD correctivo y revisar PR #4, incluyendo diagnóstico y benchmark separado. No integrar sin autorización ni avanzar a 05. No hay confirmación humana del motor.
 
 Revisión final local: 112 archivos inspeccionados, 106 enlaces Markdown locales válidos y cero patrones de tokens/claves privadas/URLs con credenciales. Revisión estática independiente sin hallazgos bloqueantes; precisó que el test Tauri termina el proceso y no pulsa la X (recorrido manual pendiente ya indicado). Diff sin errores de whitespace. Los binarios, perfiles, herramientas descargadas y capturas están excluidos; solo se versiona la clave pública de identidad Chromium.
 
@@ -193,3 +193,26 @@ Implementación probada: `128c01e` más el planificador previo `6457fde`. Se inc
 CI observado para 93ede986: [push 35477828885](https://github.com/SrEdgarR/IDG/actions/runs/35477828885), ui aprobado y portable/windows en curso; [PR 35477856928](https://github.com/SrEdgarR/IDG/actions/runs/35477856928), ui/portable/windows en curso. No se declaran aprobados los jobs pendientes ni se atribuyen estos runs al posterior commit documental. La entrega/PR registra la consulta del HEAD final; no se promete seguimiento en segundo plano. El workflow no ejecuta la integración gráfica ni navegadores.
 
 Revisión final: 168 archivos y 151 enlaces locales válidos, diff sin errores de espacios ni patrones de secretos detectados. No es certificación absoluta. Este registro posterior solo cambia documentación y no representa otra prueba completa del producto. SIGUIENTE_PASO: comprobar el CI del HEAD vigente y revisar PR #4; integrar únicamente con autorización posterior del propietario.
+
+## Corrección puntual del CI de fase 04
+
+El CI de c73617f terminó **FALLIDO en Windows** en ambas ejecuciones, no pendiente: [push 35477886488](https://github.com/SrEdgarR/IDG/actions/runs/35477886488) y [PR 35477888133](https://github.com/SrEdgarR/IDG/actions/runs/35477888133). ui y portable aprobaron. El push ejecutó c73617f y la PR el merge temporal d30b607, con el mismo árbol Git. [Diagnóstico y causa reproducida](CI04_DIAGNOSIS.md).
+
+El fixture compartido perdía crédito con callbacks tardíos. Reproducción controlada con mínimo 16 ms: misma aserción fallida, referencia de 1.945.262 bytes/s y dos ventanas de 2.942.916 / 2.934.997 bytes/s; conservar el aumento era correcto frente a esa mejora real. No se conoce el caudal interno exacto de las ejecuciones remotas antiguas, porque no lo registraron. La corrección usa presupuesto compartido con crédito acotado y comprueba su caudal real; no fuerza el objetivo a dos ni modifica la política de Adaptive. Trazas optativas permiten observar las decisiones sin perder transiciones por sondeo.
+
+Registro de ejecuciones, sin ocultar fallos:
+
+1. Reproducción con fixture antiguo y callbacks retrasados: FALLÓ la aserción original; evidencia numérica conservada.
+2. Primera suite completa tras corregir pacing: FALLÓ en `timeout crash`, antes de los casos Automático. Se reforzó la observación con una barrera HTTP sin alterar el motor ni sus hashes/checkpoints.
+3. Suite completa con barrera: APROBADA; tres repeticiones por conexión y tres compartidas.
+4. `Check.ps1 -Integration`: APROBADO, 35 pruebas Rust, tres del modelo UI, formato/Clippy, tipos/build, HTTP/IPC/recuperación, fixture con temporizadores retrasados y otras tres repeticiones de cada condición; galería, Tauri/WebView2 y Chromium/Firefox reales automatizados.
+
+Después se afinó únicamente la asociación de cada decisión con su prueba de aumento más reciente en la aserción diagnóstica; la política Rust y la UI no cambiaron. Esa comprobación se ejecuta otra vez en un recorrido HTTP/IPC focalizado de tres repeticiones por condición. Resultados finales del recorrido y benchmark se agregan debajo.
+
+Los cuatro registros de host ya estaban presentes por la prueba manual anterior y apuntaban a esta copia. Se conservaron sin modificaciones durante la regresión. El propietario cerró su aplicación/runtime; las pruebas administraron únicamente procesos y perfiles propios. No se declara confirmación humana del motor.
+
+La interfaz, tipografía, paleta, permisos y protocolo de producto no cambian. Sin fusión de PR #4, releases ni fase 05. CI del nuevo commit correctivo se consulta después del push y se registra en la PR/entrega; el resultado del commit fallido no se presenta como éxito ni como pendiente.
+
+Recorrido focalizado final: APROBADO, otras tres repeticiones por condición (nueve aprobadas por condición en total, sumando suite completa e integración). [Trazas finales con referencia, ventanas, decisiones, coste de probe y caudal del servidor](test-evidence/adaptive-after.json). Son comprobaciones automatizadas, no confirmación humana.
+
+Benchmark afectado repetido: release, 15/15 hashes correctos, cinco modos × tres repeticiones. [Serie compartida v2](BENCHMARK_04.md) y [datos](benchmarks/fase04-shared-v2.json). Las 45 mediciones originales se comprobaron idénticas byte a byte respecto a c73617f. No se atribuyen al fixture nuevo. Código probado sin modificaciones posteriores del algoritmo; SHA de publicación se registra en PR #4 y entrega.

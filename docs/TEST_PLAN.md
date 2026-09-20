@@ -110,3 +110,13 @@ Pendiente: Windows 10, navegadores de consumo adicionales, gesto del popup desde
 - `benchmark-segments.mjs`: release, 16 MiB +13 bytes, tres repeticiones × cinco modos × tres condiciones; tiempos, cuerpos emitidos/repetidos, solicitudes, CPU y RSS del runtime. El sampler de proceso es de solo lectura. 45 ejecuciones aprobadas; datos y análisis en [BENCHMARK_04](BENCHMARK_04.md).
 
 Las pruebas de proceso matan solo su hijo propio, no procesos personales. Disco lleno sigue siendo fallo inyectado y no una prueba de volumen lleno. Benchmark local no acredita Internet, IDM, energía física, disco externo, rendimiento con miles de trabajos ni Windows 10. Matriz de UI/perfiles ampliada permanece pendiente.
+
+### Regresión del CI de Automático (PR #4)
+
+- Secuencias deterministas: caudal plano, dos ventanas consecutivas de ganancia contra referencia fija, mejora de una sola ventana y presión incluso con ganancia. Se conserva la lógica existente.
+- `node scripts/test-segment-fixture.mjs`: HTTP real, dos y tres clientes, callbacks retrasados al menos 16 ms, bytes/hash y caudal agregado >=90% del configurado, con crédito máximo 256 KiB. No cambia la resolución de temporizadores del equipo.
+- `test-segments.mjs` ejecuta tres repeticiones de cada escenario Automático. Cada transferencia tiene límite de 60 s. Conserva 64 MiB por conexión y 32 MiB compartidos; exige decisión antes de los últimos 2 MiB y resultado íntegro. El compartido exige rechazo y ninguna aceptación sin ganancia; el escenario por conexión exige dos ventanas de mejora y aceptación.
+- Diagnóstico optativo debug `IDG_ADAPTIVE_TRACE`: máximo 128 líneas numéricas por transferencia, tiempo, bytes útiles, caudal, referencia, presión, objetivo, permisos activos y decisión. No contiene ID, URL ni ruta. Sin variable no emite nada; release no emite estas trazas. La prueba consume stderr y conserva decisiones, no necesita capturar el instante con snapshots. Registra por separado coste del probe, objetivos sondeados y ventanas del servidor.
+- La prueba de crash usa una barrera HTTP para mantener un rango parcialmente escrito sin checkpoint hasta que se observa. Mata solo su runtime y libera la barrera antes de reanudar; conserva validación de rangos durables y hash final.
+
+La temporización se fundamenta en tiempo transcurrido: [Node no garantiza el instante exacto de los callbacks](https://nodejs.org/api/timers.html). La prueba no presupone que todos los runners tengan temporizadores de 16 ms.

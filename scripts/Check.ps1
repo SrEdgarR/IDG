@@ -20,6 +20,7 @@ Invoke-Checked { cargo build --locked -p idg-runtime -p idg-native-host -p idg-p
 Invoke-Checked { npx --yes pnpm@12.4.2 desktop:build }
 Invoke-Checked { node scripts/test-runtime.mjs }
 Invoke-Checked { node scripts/test-http-runtime.mjs }
+Invoke-Checked { node scripts/test-segment-fixture.mjs }
 Invoke-Checked { node scripts/test-segments.mjs }
 if ($Integration) {
     Invoke-Checked { node scripts/test-ui.mjs }

@@ -1,0 +1,184 @@
+{
+  "source_head": "c73617fae353cfd0589bea1a4649054fbdb280a0",
+  "reproduction": "Original shared fixture, minimum timer delay 16 ms; controller instrumented without changing decisions",
+  "original_assertion": "reject shared-bottleneck trial",
+  "result": "failed",
+  "sampling": {
+    "count": 176,
+    "max_gap_ms": 91.92419999999765,
+    "transitions": [
+      {
+        "elapsed_ms": 0,
+        "target": 1
+      },
+      {
+        "elapsed_ms": 1351.6650999999983,
+        "target": 2
+      },
+      {
+        "elapsed_ms": 4159.6646,
+        "target": 3
+      },
+      {
+        "elapsed_ms": 10282.125100000001,
+        "target": 4
+      }
+    ]
+  },
+  "decisions": [
+    {
+      "active": 2,
+      "at_ms": 1007,
+      "before": 2,
+      "decision": "measure",
+      "pressure": false,
+      "rate": 1935650.3404347035,
+      "received": 2932736,
+      "reference": 0,
+      "target": 2,
+      "total": 33554432,
+      "useful_bytes": 1949696,
+      "window_ms": 1007.2563000000001
+    },
+    {
+      "active": 2,
+      "at_ms": 2011,
+      "before": 2,
+      "decision": "measure",
+      "pressure": false,
+      "rate": 1958635.2275002715,
+      "received": 4898816,
+      "reference": 1935650.3404347035,
+      "target": 2,
+      "total": 33554432,
+      "useful_bytes": 1966080,
+      "window_ms": 1003.8009999999999
+    },
+    {
+      "active": 2,
+      "at_ms": 3022,
+      "before": 2,
+      "decision": "trial",
+      "pressure": false,
+      "rate": 1945261.808129399,
+      "received": 6864896,
+      "reference": 1958635.2275002715,
+      "target": 3,
+      "total": 33554432,
+      "useful_bytes": 1966080,
+      "window_ms": 1010.702
+    },
+    {
+      "active": 3,
+      "at_ms": 4024,
+      "before": 3,
+      "decision": "trial_window",
+      "pressure": false,
+      "rate": 2942916.332371361,
+      "received": 9814016,
+      "reference": 1945261.808129399,
+      "target": 3,
+      "total": 33554432,
+      "useful_bytes": 2949120,
+      "window_ms": 1002.108
+    },
+    {
+      "active": 3,
+      "at_ms": 5029,
+      "before": 3,
+      "decision": "retain",
+      "pressure": false,
+      "rate": 2934996.503326343,
+      "received": 12763136,
+      "reference": 1945261.808129399,
+      "target": 3,
+      "total": 33554432,
+      "useful_bytes": 2949120,
+      "window_ms": 1004.8121000000001
+    },
+    {
+      "active": 3,
+      "at_ms": 6031,
+      "before": 3,
+      "decision": "cooldown",
+      "pressure": false,
+      "rate": 2978521.674803138,
+      "received": 15745024,
+      "reference": 2934996.503326343,
+      "target": 3,
+      "total": 33554432,
+      "useful_bytes": 2981888,
+      "window_ms": 1001.1302
+    },
+    {
+      "active": 3,
+      "at_ms": 7033,
+      "before": 3,
+      "decision": "cooldown",
+      "pressure": false,
+      "rate": 2925929.702326448,
+      "received": 18677760,
+      "reference": 2978521.674803138,
+      "target": 3,
+      "total": 33554432,
+      "useful_bytes": 2932736,
+      "window_ms": 1002.3262
+    },
+    {
+      "active": 3,
+      "at_ms": 8036,
+      "before": 3,
+      "decision": "measure",
+      "pressure": false,
+      "rate": 2892880.1543338667,
+      "received": 21577728,
+      "reference": 2925929.702326448,
+      "target": 3,
+      "total": 33554432,
+      "useful_bytes": 2899968,
+      "window_ms": 1002.4500999999999
+    },
+    {
+      "active": 3,
+      "at_ms": 9043,
+      "before": 3,
+      "decision": "trial",
+      "pressure": false,
+      "rate": 2913415.105047854,
+      "received": 24510464,
+      "reference": 2892880.1543338667,
+      "target": 4,
+      "total": 33554432,
+      "useful_bytes": 2932736,
+      "window_ms": 1006.6317
+    },
+    {
+      "active": 4,
+      "at_ms": 10050,
+      "before": 4,
+      "decision": "trial_window",
+      "pressure": false,
+      "rate": 3872600.959303443,
+      "received": 28409856,
+      "reference": 2913415.105047854,
+      "target": 4,
+      "total": 33554432,
+      "useful_bytes": 3899392,
+      "window_ms": 1006.9181000000001
+    },
+    {
+      "active": 3,
+      "at_ms": 11051,
+      "before": 4,
+      "decision": "retain",
+      "pressure": false,
+      "rate": 3635203.9248330668,
+      "received": 32047104,
+      "reference": 2913415.105047854,
+      "target": 4,
+      "total": 33554432,
+      "useful_bytes": 3637248,
+      "window_ms": 1000.5622999999999
+    }
+  ]
+}

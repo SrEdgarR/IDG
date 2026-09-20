@@ -11,8 +11,9 @@ let exists=false;try{await probe(['ping']);exists=true;}catch{}if(exists)throw E
 // A debug runtime also owns the same protected pipe; start below fails without terminating it.
 await mkdir('.local',{recursive:true});const directory=await mkdtemp(path.join(root,'.local/bench04-'));
 const size=16*1024*1024+13,rate=4*1024*1024,repetitions=3;
+const sharedOnly=process.argv.includes('--shared-only');
 const results=[];
-for(const condition of ['per-request','shared','no-ranges']){
+for(const condition of (sharedOnly?['shared']:['per-request','shared','no-ranges'])){
  for(const mode of [1,4,8,16,'automatic']){
   for(let repetition=1;repetition<=repetitions;repetition++){
    const id=`${condition}-${mode}-${repetition}`;const dir=path.join(directory,id);await mkdir(dir);
@@ -44,5 +45,6 @@ for(const condition of ['per-request','shared','no-ranges']){
  }
 }
 const report={environment:{os:os.platform(),release:os.release(),arch:os.arch(),cpu:os.cpus()[0].model,logical_cpus:os.cpus().length,ram_bytes:os.totalmem(),node:process.version,profile:'release',file_size:size,server_rate_bytes_per_second:rate,repetitions,sampling_ms:100},results};
-await mkdir('artifacts',{recursive:true});await writeFile('artifacts/benchmark04.json',JSON.stringify(report,null,2)+'\n');
-console.log('Benchmark completo: artifacts/benchmark04.json');
+const output=sharedOnly?'artifacts/benchmark04-shared-v2.json':'artifacts/benchmark04.json';
+await mkdir('artifacts',{recursive:true});await writeFile(output,JSON.stringify({...report,fixture_version:'shared-credit-v2'},null,2)+'\n');
+console.log('Benchmark completo: '+output);

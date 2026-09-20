@@ -33,3 +33,23 @@ Tiempo medido desde aceptación hasta archivo final verificado; incluye sondeo p
 El crecimiento observado con 16 solicitudes quedó acotado en estos archivos, pero no demuestra estabilidad universal o ausencia de fugas en sesiones prolongadas. Quedan pendientes rendimiento con archivos físicos >4 GiB, diez trabajos, Internet real, otros discos/equipos y Windows 10. Tres trabajos/prioridades y límites combinados se probaron funcionalmente fuera de este benchmark. No se eliminó ninguna repetición desfavorable.
 
 Prueba funcional adicional (fuera de las 45 mediciones): con 64 MiB y límite por conexión, Automático conservó el aumento de dos a tres; con 32 MiB y límite compartido volvió a dos después de probar tres. Ambas transferencias terminaron con el hash esperado. No modifica los resultados del benchmark corto.
+
+## Corrección del fixture compartido
+
+Las 45 mediciones anteriores y fase04.json se conservan intactas y corresponden al código publicado en c73617f (implementación 128c01e). No acreditan el fixture corregido. La temporización antigua descartaba crédito cuando el callback se retrasaba; con un mínimo de 16 ms entregó 1,88 MiB/s con dos solicitudes y 2,84 MiB/s con tres aunque el techo configurado era 4 MiB/s. No excedía necesariamente el techo: no lo saturaba y una solicitud adicional daba una ganancia real no prevista por la prueba.
+
+Se sustituyó únicamente el pacing compartido por un presupuesto agregado que conserva crédito hasta 256 KiB. El algoritmo de decisiones del motor no cambia. Las mediciones afectadas se repiten con `node scripts/benchmark-segments.mjs --shared-only` y se guardan separadas en artifacts/benchmark04-shared-v2.json. Las condiciones por conexión y sin rangos antiguas siguen siendo evidencia del código original, no cifras atribuidas al nuevo build.
+
+### Serie compartida corregida (v2)
+
+15/15 archivos terminaron con el hash esperado. Mismo equipo/Node, Rust 1.98.1 release, tamaño, tasa configurada y tres repeticiones que la serie original. El único modelo de pacing cambiado es el compartido. [Datos completos v2](benchmarks/fase04-shared-v2.json). Bytes útiles por ejecución: 16.777.229. No se inyectaron retrasos de 16 ms en este benchmark; esa inyección pertenece a las pruebas funcionales.
+
+| Modo | Media s (mín–máx) | CPU ms media | RSS máx observado MiB | Bytes adicionales medios |
+|---|---:|---:|---:|---:|
+| 1 | 4.052 (4.036–4.061) | 406.3 | 9.85 | 0 |
+| 4 | 4.060 (4.044–4.092) | 338.5 | 10.64 | 38229 |
+| 8 | 4.060 (4.047–4.069) | 213.5 | 10.94 | 38229 |
+| 16 | 4.062 (4.055–4.069) | 125.0 | 11.46 | 32768 |
+| automatic | 4.062 (4.049–4.073) | 359.4 | 10.50 | 38229 |
+
+El compartido queda alrededor de cuatro segundos en todos los modos. No demuestra ventaja de paralelizar este cuello de botella. Se conservan CPU, variabilidad y bytes adicionales, incluidos resultados desfavorables. El archivo corto puede terminar antes de evaluar una prueba de aumento: la decisión de rechazo se acredita con las transferencias de 32 MiB y sus trazas, no con el máximo de solicitudes del benchmark. Mismas limitaciones de muestreo de CPU/RSS, loopback y ausencia de prueba en Internet que el informe original.

@@ -1,3 +1,4 @@
+import {checkAdaptive} from './check-adaptive.mjs';
 import {spawn} from 'node:child_process';
 import {mkdtemp,mkdir,readFile} from 'node:fs/promises';
 import path from 'node:path';
@@ -9,8 +10,8 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const probe=(args,input)=>new Promise((resolve,reject)=>{const p=spawn(exe('idg-probe'),args,{windowsHide:true,stdio:['pipe','pipe','ignore']});let out='';p.stdout.on('data',b=>out+=b);p.on('error',reject);p.on('exit',code=>{if(code!==0)return reject(Error(out||'probe unavailable'));try{resolve(out.trim()?JSON.parse(out):null);}catch(e){reject(e);}});p.stdin.end(input?JSON.stringify(input):undefined);});
 let exists=false;try{await probe(['ping']);exists=true;}catch{}if(exists)throw Error('Runtime previo activo; no se toca.');
 await mkdir('.local',{recursive:true});const dir=await mkdtemp(path.join(root,'.local/segments-'));const files=path.join(dir,'files');await mkdir(files);
-const fixture=await startSegments();let runtime;
-async function start(){runtime=spawn(exe('idg-runtime'),[],{windowsHide:true,env:{...process.env,IDG_DATA_DIR:path.join(dir,'state')},stdio:'ignore'});for(let i=0;i<100;i++){try{await probe(['ping']);return;}catch{await sleep(50);}}throw Error('start timeout');}
+const fixture=await startSegments();let runtime;const traces=[];
+async function start(){runtime=spawn(exe('idg-runtime'),[],{windowsHide:true,env:{...process.env,IDG_DATA_DIR:path.join(dir,'state'),IDG_ADAPTIVE_TRACE:'1'},stdio:['ignore','ignore','pipe']});let partial='';runtime.stderr.on('data',b=>{partial+=b;let end;while((end=partial.indexOf('\n'))>=0){const line=partial.slice(0,end);partial=partial.slice(end+1);if(line.startsWith('IDG_ADAPTIVE ')&&traces.length<2048)traces.push(JSON.parse(line.slice(13)));}if(partial.length>65536)throw Error('oversized diagnostic');});for(let i=0;i<100;i++){try{await probe(['ping']);return;}catch{await sleep(50);}}throw Error('start timeout');}
 async function stop(force=false){if(!runtime)return;const p=runtime;const exited=new Promise(r=>p.exitCode!==null?r():p.once('exit',r));if(force)p.kill();else await probe(['shutdown']);await exited;runtime=null;}
 async function wait(id,predicate){for(let i=0;i<600;i++){const {job}=await probe(['status',id]);if(predicate(job))return job;await sleep(30);}throw Error('timeout '+id);}
 const spec=(id,route='/file',mode={manual:{requests:4}})=>({input:{url:fixture.url+route,directory:files,name:id+'.bin',expected_sha256:expectedHash(fixture.size),conflict:'reject'},options:{mode,replay_safe:true}});
@@ -32,9 +33,9 @@ try{
  await probe(['add-segmented','pause-parallel'],spec('pause-parallel','/late'));await wait('pause-parallel',j=>j.ranges_total>0&&Number(j.received_bytes)>Number(j.durable_bytes));await probe(['pause','pause-parallel']);await wait('pause-parallel',j=>j.state==='paused');await probe(['resume','pause-parallel']);assert.equal((await wait('pause-parallel',j=>j.state==='completed'||j.state==='failed')).state,'completed');
  for(const [route,error] of [['/ignored','range_ignored'],['/overlap','invalid_range'],['/416','invalid_range'],['/changed','resource_changed']]){const id=route.slice(1);await probe(['add-segmented',id],spec(id,route));const failed=await wait(id,j=>j.state==='failed');assert.equal(failed.error,error);assert.equal(failed.verified_against_reference,false);}
  for(const route of ['/cut','/retry']){const id=route.slice(1);await probe(['add-segmented',id],spec(id,route));const done=await wait(id,j=>j.state==='completed'||j.state==='failed');assert.equal(done.state,'completed',JSON.stringify(done));assert.ok(done.retries>0);assert.equal(done.verified_against_reference,true);}
- await probe(['add-segmented','crash'],spec('crash','/late',{manual:{requests:4}}));
+ await probe(['add-segmented','crash'],spec('crash','/checkpoint-gap',{manual:{requests:4}}));
  await wait('crash',j=>j.ranges_durable>=2&&j.ranges_durable<j.ranges_total&&Number(j.received_bytes)>Number(j.durable_bytes));
- await stop(true);await start();const recovered=(await probe(['status','crash'])).job;assert.equal(recovered.state,'paused');
+ await stop(true);fixture.releaseCheckpointGap();await start();const recovered=(await probe(['status','crash'])).job;assert.equal(recovered.state,'paused');
  const before=(await probe(['ranges','crash'])).ranges.filter(r=>r.durable);const index=fixture.records.length;
  await probe(['resume','crash']);const done=await wait('crash',j=>j.state==='completed'||j.state==='failed');assert.equal(done.state,'completed',JSON.stringify(done));
  assert.ok(fixture.records.slice(index).every(r=>!before.some(b=>r.start===Number(b.start))));
@@ -53,17 +54,6 @@ try{
  const huge=await wait('retry-max',j=>j.state==='failed');assert.equal(huge.error,'retry_later');
  await assert.rejects(probe(['resume','retry-max']),/retry_later/);
  await probe(['cancel','retry-max']);assert.equal((await probe(['status','retry-max'])).job.state,'cancelled');
- for(const condition of ['per-request','shared']){
-  const measured=await startSegments({size:condition==='per-request'?64*1024*1024:32*1024*1024,rate:4*1024*1024,condition});
-  try{
-   const id='adaptive-'+condition;const input=spec(id,'/file','automatic');input.input.url=measured.url+'/file';input.input.expected_sha256=expectedHash(measured.size);await probe(['add-segmented',id],input);
-   const samples=[];let done;
-   for(let i=0;i<600;i++){const {job}=await probe(['status',id]);samples.push({at:performance.now(),target:job.target_requests});if(['completed','failed'].includes(job.state)){done=job;break;}await sleep(50);}
-   assert.equal(done?.state,'completed',JSON.stringify(done));const trial=samples.find(x=>x.target>=3);assert.ok(trial,'automatic measured trial');
-   if(condition==='per-request')assert.ok(samples.some(x=>x.at>=trial.at+2000&&x.target>=3),'retain sustained measured improvement');
-   else assert.ok(samples.some(x=>x.at>trial.at+500&&x.target===2),'reject shared-bottleneck trial');
-   console.log('PASS automático medido: '+condition+', objetivo máximo '+Math.max(...samples.map(x=>x.target)));
-  }finally{await measured.close();}
- }
+ await checkAdaptive({probe,directory:files,traces});
  console.log('PASS segmentación: modos 1/4/8/16/Automático, SHA completo, rangos inválidos/cambio/416, retries y Retry-After, kill/reinicio de rangos y cancelación de respuestas tardías.');
 }finally{await stop().catch(()=>{});await fixture.close();}

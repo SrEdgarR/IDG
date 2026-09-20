@@ -1,0 +1,1047 @@
+{
+  "fixture": "shared-credit-v2",
+  "repetitions_per_condition": 3,
+  "runs": [
+    {
+      "condition": "per-request",
+      "repetition": 1,
+      "probe_count": 18,
+      "probe_max_ms": 28.05639999999994,
+      "snapshot_targets": [
+        1,
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "decisions": [
+        {
+          "active": 2,
+          "at_ms": 1000,
+          "before": 2,
+          "decision": "measure",
+          "pressure": false,
+          "rate": 7435603.4157447135,
+          "received": 8486912,
+          "reference": 0,
+          "target": 2,
+          "total": 67108864,
+          "useful_bytes": 7438336,
+          "window_ms": 1000.3675000000001
+        },
+        {
+          "active": 1,
+          "at_ms": 2005,
+          "before": 2,
+          "decision": "measure",
+          "pressure": false,
+          "rate": 7187549.707373717,
+          "received": 15712256,
+          "reference": 7435603.4157447135,
+          "target": 2,
+          "total": 67108864,
+          "useful_bytes": 7225344,
+          "window_ms": 1005.2583
+        },
+        {
+          "active": 2,
+          "at_ms": 3008,
+          "before": 2,
+          "decision": "trial",
+          "pressure": false,
+          "rate": 7930205.125236771,
+          "received": 23658496,
+          "reference": 7187549.707373717,
+          "target": 3,
+          "total": 67108864,
+          "useful_bytes": 7946240,
+          "window_ms": 1002.0219999999999
+        },
+        {
+          "active": 3,
+          "at_ms": 4008,
+          "before": 3,
+          "decision": "trial_window",
+          "pressure": false,
+          "rate": 11496773.845306508,
+          "received": 35160064,
+          "reference": 7930205.125236771,
+          "target": 3,
+          "total": 67108864,
+          "useful_bytes": 11501568,
+          "window_ms": 1000.4169999999999
+        },
+        {
+          "active": 3,
+          "at_ms": 5011,
+          "before": 3,
+          "decision": "retain",
+          "pressure": false,
+          "rate": 11928699.40362088,
+          "received": 47120384,
+          "reference": 7930205.125236771,
+          "target": 3,
+          "total": 67108864,
+          "useful_bytes": 11960320,
+          "window_ms": 1002.6508000000001
+        },
+        {
+          "active": 3,
+          "at_ms": 6012,
+          "before": 3,
+          "decision": "cooldown",
+          "pressure": false,
+          "rate": 11973825.492351638,
+          "received": 59097088,
+          "reference": 11928699.40362088,
+          "target": 3,
+          "total": 67108864,
+          "useful_bytes": 11976704,
+          "window_ms": 1000.2404
+        }
+      ],
+      "server": [
+        {
+          "at_ms": 1001.5491999999999,
+          "window_ms": 1001.5491999999999,
+          "bytes": 5177344,
+          "rate": 5169335.665187492,
+          "active": 2
+        },
+        {
+          "at_ms": 2003.4134,
+          "window_ms": 1001.8642,
+          "bytes": 7192576,
+          "rate": 7179192.549249689,
+          "active": 2
+        },
+        {
+          "at_ms": 3004.883,
+          "window_ms": 1001.4695999999999,
+          "bytes": 7602176,
+          "rate": 7591020.236660205,
+          "active": 2
+        },
+        {
+          "at_ms": 4007.7356999999997,
+          "window_ms": 1002.8526999999999,
+          "bytes": 9650176,
+          "rate": 9622725.25167455,
+          "active": 3
+        },
+        {
+          "at_ms": 5011.4962,
+          "window_ms": 1003.7605000000003,
+          "bytes": 11763712,
+          "rate": 11719640.292679375,
+          "active": 3
+        },
+        {
+          "at_ms": 6013.561699999999,
+          "window_ms": 1002.0654999999997,
+          "bytes": 12075008,
+          "rate": 12050118.480278987,
+          "active": 3
+        },
+        {
+          "at_ms": 7014.6161999999995,
+          "window_ms": 1001.0545000000002,
+          "bytes": 11894784,
+          "rate": 11882254.16298513,
+          "active": 2
+        }
+      ]
+    },
+    {
+      "condition": "shared",
+      "repetition": 1,
+      "probe_count": 18,
+      "probe_max_ms": 26.68550000000141,
+      "snapshot_targets": [
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        3,
+        3,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "decisions": [
+        {
+          "active": 1,
+          "at_ms": 1004,
+          "before": 2,
+          "decision": "measure",
+          "pressure": false,
+          "rate": 4126395.880166292,
+          "received": 5193728,
+          "reference": 0,
+          "target": 2,
+          "total": 33554432,
+          "useful_bytes": 4145152,
+          "window_ms": 1004.5454000000001
+        },
+        {
+          "active": 2,
+          "at_ms": 2008,
+          "before": 2,
+          "decision": "measure",
+          "pressure": false,
+          "rate": 4246105.546997681,
+          "received": 9453568,
+          "reference": 4126395.880166292,
+          "target": 2,
+          "total": 33554432,
+          "useful_bytes": 4259840,
+          "window_ms": 1003.2346000000001
+        },
+        {
+          "active": 2,
+          "at_ms": 3020,
+          "before": 2,
+          "decision": "trial",
+          "pressure": false,
+          "rate": 4145833.813140431,
+          "received": 13647872,
+          "reference": 4246105.546997681,
+          "target": 3,
+          "total": 33554432,
+          "useful_bytes": 4194304,
+          "window_ms": 1011.6913000000001
+        },
+        {
+          "active": 3,
+          "at_ms": 4021,
+          "before": 3,
+          "decision": "reject",
+          "pressure": false,
+          "rate": 4190779.973120603,
+          "received": 17842176,
+          "reference": 4145833.813140431,
+          "target": 2,
+          "total": 33554432,
+          "useful_bytes": 4194304,
+          "window_ms": 1000.8409
+        },
+        {
+          "active": 2,
+          "at_ms": 5022,
+          "before": 2,
+          "decision": "cooldown",
+          "pressure": false,
+          "rate": 4240279.352113034,
+          "received": 22085368,
+          "reference": 4190779.973120603,
+          "target": 2,
+          "total": 33554432,
+          "useful_bytes": 4243192,
+          "window_ms": 1000.6869
+        },
+        {
+          "active": 2,
+          "at_ms": 6025,
+          "before": 2,
+          "decision": "cooldown",
+          "pressure": false,
+          "rate": 4147464.289682712,
+          "received": 26247168,
+          "reference": 4240279.352113034,
+          "target": 2,
+          "total": 33554432,
+          "useful_bytes": 4161800,
+          "window_ms": 1003.4565
+        },
+        {
+          "active": 2,
+          "at_ms": 7039,
+          "before": 2,
+          "decision": "cooldown",
+          "pressure": false,
+          "rate": 4202792.140049397,
+          "received": 30507008,
+          "reference": 4147464.289682712,
+          "target": 2,
+          "total": 33554432,
+          "useful_bytes": 4259840,
+          "window_ms": 1013.5738000000001
+        }
+      ],
+      "server": [
+        {
+          "at_ms": 1007.6963000000014,
+          "window_ms": 1007.6963000000014,
+          "bytes": 3981312,
+          "rate": 3950904.6525227833,
+          "active": 2
+        },
+        {
+          "at_ms": 2012.0283,
+          "window_ms": 1004.3319999999985,
+          "bytes": 4227072,
+          "rate": 4208839.3081172425,
+          "active": 2
+        },
+        {
+          "at_ms": 3012.3305,
+          "window_ms": 1000.3022000000001,
+          "bytes": 4194304,
+          "rate": 4193036.86425962,
+          "active": 2
+        },
+        {
+          "at_ms": 4015.1504999999997,
+          "window_ms": 1002.8199999999997,
+          "bytes": 4210688,
+          "rate": 4198847.250752878,
+          "active": 3
+        },
+        {
+          "at_ms": 5031.2556,
+          "window_ms": 1016.1051000000007,
+          "bytes": 4243456,
+          "rate": 4176197.9149597785,
+          "active": 2
+        },
+        {
+          "at_ms": 6031.2754,
+          "window_ms": 1000.0198,
+          "bytes": 4210688,
+          "rate": 4210604.630028325,
+          "active": 2
+        },
+        {
+          "at_ms": 7032.159900000001,
+          "window_ms": 1000.8845000000001,
+          "bytes": 4194304,
+          "rate": 4190597.41658503,
+          "active": 2
+        },
+        {
+          "at_ms": 8038.462300000001,
+          "window_ms": 1006.3024000000005,
+          "bytes": 4227072,
+          "rate": 4200598.150218064,
+          "active": 1
+        }
+      ]
+    },
+    {
+      "condition": "per-request",
+      "repetition": 2,
+      "probe_count": 18,
+      "probe_max_ms": 27.329099999999016,
+      "snapshot_targets": [
+        1,
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "decisions": [
+        {
+          "active": 2,
+          "at_ms": 1000,
+          "before": 2,
+          "decision": "measure",
+          "pressure": false,
+          "rate": 7726659.477463567,
+          "received": 8781824,
+          "reference": 0,
+          "target": 2,
+          "total": 67108864,
+          "useful_bytes": 7733248,
+          "window_ms": 1000.8527
+        },
+        {
+          "active": 2,
+          "at_ms": 2001,
+          "before": 2,
+          "decision": "measure",
+          "pressure": false,
+          "rate": 7847188.16296807,
+          "received": 16629760,
+          "reference": 7726659.477463567,
+          "target": 2,
+          "total": 67108864,
+          "useful_bytes": 7847936,
+          "window_ms": 1000.0953
+        },
+        {
+          "active": 2,
+          "at_ms": 3005,
+          "before": 2,
+          "decision": "trial",
+          "pressure": false,
+          "rate": 7878049.924126152,
+          "received": 24543232,
+          "reference": 7847188.16296807,
+          "target": 3,
+          "total": 67108864,
+          "useful_bytes": 7913472,
+          "window_ms": 1004.4963
+        },
+        {
+          "active": 3,
+          "at_ms": 4009,
+          "before": 3,
+          "decision": "trial_window",
+          "pressure": false,
+          "rate": 11639450.00875814,
+          "received": 36225024,
+          "reference": 7878049.924126152,
+          "target": 3,
+          "total": 67108864,
+          "useful_bytes": 11681792,
+          "window_ms": 1003.6378
+        },
+        {
+          "active": 3,
+          "at_ms": 5013,
+          "before": 3,
+          "decision": "retain",
+          "pressure": false,
+          "rate": 11762053.645185905,
+          "received": 48021504,
+          "reference": 7878049.924126152,
+          "target": 3,
+          "total": 67108864,
+          "useful_bytes": 11796480,
+          "window_ms": 1002.9269
+        },
+        {
+          "active": 3,
+          "at_ms": 6015,
+          "before": 3,
+          "decision": "cooldown",
+          "pressure": false,
+          "rate": 11660708.273370918,
+          "received": 59703296,
+          "reference": 11762053.645185905,
+          "target": 3,
+          "total": 67108864,
+          "useful_bytes": 11681792,
+          "window_ms": 1001.8081000000001
+        }
+      ],
+      "server": [
+        {
+          "at_ms": 1003.1228999999985,
+          "window_ms": 1003.1228999999985,
+          "bytes": 5308416,
+          "rate": 5291889.956853749,
+          "active": 2
+        },
+        {
+          "at_ms": 2004.8891999999978,
+          "window_ms": 1001.7662999999993,
+          "bytes": 7864320,
+          "rate": 7850453.743552768,
+          "active": 2
+        },
+        {
+          "at_ms": 3007.6728999999978,
+          "window_ms": 1002.7837,
+          "bytes": 7831552,
+          "rate": 7809811.826817688,
+          "active": 2
+        },
+        {
+          "at_ms": 4009.0123999999996,
+          "window_ms": 1001.3395000000019,
+          "bytes": 9830400,
+          "rate": 9817249.79390105,
+          "active": 3
+        },
+        {
+          "at_ms": 5011.026199999997,
+          "window_ms": 1002.013799999997,
+          "bytes": 11780096,
+          "rate": 11756420.91955224,
+          "active": 3
+        },
+        {
+          "at_ms": 6012.0903,
+          "window_ms": 1001.0641000000032,
+          "bytes": 11665408,
+          "rate": 11653008.034150822,
+          "active": 3
+        },
+        {
+          "at_ms": 7014.125599999999,
+          "window_ms": 1002.0352999999996,
+          "bytes": 11534336,
+          "rate": 11510907.849254418,
+          "active": 2
+        }
+      ]
+    },
+    {
+      "condition": "shared",
+      "repetition": 2,
+      "probe_count": 18,
+      "probe_max_ms": 26.74019999999655,
+      "snapshot_targets": [
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        3,
+        3,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "decisions": [
+        {
+          "active": 2,
+          "at_ms": 1000,
+          "before": 2,
+          "decision": "measure",
+          "pressure": false,
+          "rate": 4144254.3545068144,
+          "received": 5193728,
+          "reference": 0,
+          "target": 2,
+          "total": 33554432,
+          "useful_bytes": 4145152,
+          "window_ms": 1000.2165999999999
+        },
+        {
+          "active": 2,
+          "at_ms": 2012,
+          "before": 2,
+          "decision": "measure",
+          "pressure": false,
+          "rate": 4192717.410979293,
+          "received": 9437184,
+          "reference": 4144254.3545068144,
+          "target": 2,
+          "total": 33554432,
+          "useful_bytes": 4243456,
+          "window_ms": 1012.1016000000001
+        },
+        {
+          "active": 2,
+          "at_ms": 3025,
+          "before": 2,
+          "decision": "trial",
+          "pressure": false,
+          "rate": 4187817.4943337804,
+          "received": 13680640,
+          "reference": 4192717.410979293,
+          "target": 3,
+          "total": 33554432,
+          "useful_bytes": 4243456,
+          "window_ms": 1013.2858
+        },
+        {
+          "active": 3,
+          "at_ms": 4038,
+          "before": 3,
+          "decision": "reject",
+          "pressure": false,
+          "rate": 4208266.432391116,
+          "received": 17940480,
+          "reference": 4187817.4943337804,
+          "target": 2,
+          "total": 33554432,
+          "useful_bytes": 4259840,
+          "window_ms": 1012.2553
+        },
+        {
+          "active": 2,
+          "at_ms": 5040,
+          "before": 2,
+          "decision": "cooldown",
+          "pressure": false,
+          "rate": 4187827.524733001,
+          "received": 22134784,
+          "reference": 4208266.432391116,
+          "target": 2,
+          "total": 33554432,
+          "useful_bytes": 4194304,
+          "window_ms": 1001.5464999999999
+        },
+        {
+          "active": 2,
+          "at_ms": 6054,
+          "before": 2,
+          "decision": "cooldown",
+          "pressure": false,
+          "rate": 4202615.0916051585,
+          "received": 26394624,
+          "reference": 4187827.524733001,
+          "target": 2,
+          "total": 33554432,
+          "useful_bytes": 4259840,
+          "window_ms": 1013.6165
+        },
+        {
+          "active": 2,
+          "at_ms": 7059,
+          "before": 2,
+          "decision": "cooldown",
+          "pressure": false,
+          "rate": 4190593.684224774,
+          "received": 30605312,
+          "reference": 4202615.0916051585,
+          "target": 2,
+          "total": 33554432,
+          "useful_bytes": 4210688,
+          "window_ms": 1004.7950999999999
+        }
+      ],
+      "server": [
+        {
+          "at_ms": 1008.6414000000004,
+          "window_ms": 1008.6414000000004,
+          "bytes": 3981312,
+          "rate": 3947202.643080086,
+          "active": 2
+        },
+        {
+          "at_ms": 2023.7679000000026,
+          "window_ms": 1015.1265000000021,
+          "bytes": 4259840,
+          "rate": 4196363.704425006,
+          "active": 2
+        },
+        {
+          "at_ms": 3024.384900000001,
+          "window_ms": 1000.6169999999984,
+          "bytes": 4194304,
+          "rate": 4191717.71017283,
+          "active": 2
+        },
+        {
+          "at_ms": 4024.522200000003,
+          "window_ms": 1000.1373000000021,
+          "bytes": 4243456,
+          "rate": 4242873.453474829,
+          "active": 3
+        },
+        {
+          "at_ms": 5025.5658,
+          "window_ms": 1001.0435999999972,
+          "bytes": 4145152,
+          "rate": 4140830.629155425,
+          "active": 2
+        },
+        {
+          "at_ms": 6031.414900000003,
+          "window_ms": 1005.8491000000031,
+          "bytes": 4210688,
+          "rate": 4186202.483056342,
+          "active": 2
+        },
+        {
+          "at_ms": 7047.532500000001,
+          "window_ms": 1016.1175999999978,
+          "bytes": 4276224,
+          "rate": 4208394.776352667,
+          "active": 2
+        },
+        {
+          "at_ms": 8055.280500000001,
+          "window_ms": 1007.7479999999996,
+          "bytes": 4227072,
+          "rate": 4194572.45263697,
+          "active": 1
+        }
+      ]
+    },
+    {
+      "condition": "per-request",
+      "repetition": 3,
+      "probe_count": 18,
+      "probe_max_ms": 36.37229999999545,
+      "snapshot_targets": [
+        1,
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "decisions": [
+        {
+          "active": 2,
+          "at_ms": 1001,
+          "before": 2,
+          "decision": "measure",
+          "pressure": false,
+          "rate": 7739537.321471605,
+          "received": 8798208,
+          "reference": 0,
+          "target": 2,
+          "total": 67108864,
+          "useful_bytes": 7749632,
+          "window_ms": 1001.3042999999999
+        },
+        {
+          "active": 2,
+          "at_ms": 2002,
+          "before": 2,
+          "decision": "measure",
+          "pressure": false,
+          "rate": 7776951.4678016575,
+          "received": 16580608,
+          "reference": 7739537.321471605,
+          "target": 2,
+          "total": 67108864,
+          "useful_bytes": 7782400,
+          "window_ms": 1000.7006
+        },
+        {
+          "active": 2,
+          "at_ms": 3003,
+          "before": 2,
+          "decision": "trial",
+          "pressure": false,
+          "rate": 7871646.09683637,
+          "received": 24461312,
+          "reference": 7776951.4678016575,
+          "target": 3,
+          "total": 67108864,
+          "useful_bytes": 7880704,
+          "window_ms": 1001.1506999999999
+        },
+        {
+          "active": 3,
+          "at_ms": 4007,
+          "before": 3,
+          "decision": "trial_window",
+          "pressure": false,
+          "rate": 11955607.171517292,
+          "received": 36454400,
+          "reference": 7871646.09683637,
+          "target": 3,
+          "total": 67108864,
+          "useful_bytes": 11993088,
+          "window_ms": 1003.1350000000001
+        },
+        {
+          "active": 3,
+          "at_ms": 5008,
+          "before": 3,
+          "decision": "retain",
+          "pressure": false,
+          "rate": 11606901.99768007,
+          "received": 48070656,
+          "reference": 7871646.09683637,
+          "target": 3,
+          "total": 67108864,
+          "useful_bytes": 11616256,
+          "window_ms": 1000.8059000000001
+        },
+        {
+          "active": 3,
+          "at_ms": 6009,
+          "before": 3,
+          "decision": "cooldown",
+          "pressure": false,
+          "rate": 11784273.849147055,
+          "received": 59867136,
+          "reference": 11606901.99768007,
+          "target": 3,
+          "total": 67108864,
+          "useful_bytes": 11796480,
+          "window_ms": 1001.0357999999999
+        }
+      ],
+      "server": [
+        {
+          "at_ms": 1001.0273000000016,
+          "window_ms": 1001.0273000000016,
+          "bytes": 5193728,
+          "rate": 5188397.958776941,
+          "active": 2
+        },
+        {
+          "at_ms": 2003.6505000000034,
+          "window_ms": 1002.6232000000018,
+          "bytes": 7766016,
+          "rate": 7745697.486353783,
+          "active": 2
+        },
+        {
+          "at_ms": 3008.193500000001,
+          "window_ms": 1004.5429999999978,
+          "bytes": 7897088,
+          "rate": 7861373.7789223725,
+          "active": 2
+        },
+        {
+          "at_ms": 4011.9914000000063,
+          "window_ms": 1003.797900000005,
+          "bytes": 10059776,
+          "rate": 10021714.530385,
+          "active": 3
+        },
+        {
+          "at_ms": 5012.415300000001,
+          "window_ms": 1000.4238999999943,
+          "bytes": 11878400,
+          "rate": 11873366.879779728,
+          "active": 3
+        },
+        {
+          "at_ms": 6013.854900000006,
+          "window_ms": 1001.4396000000052,
+          "bytes": 11681792,
+          "rate": 11664999.067342594,
+          "active": 3
+        },
+        {
+          "at_ms": 7015.6946000000025,
+          "window_ms": 1001.8396999999968,
+          "bytes": 11468800,
+          "rate": 11447739.59346993,
+          "active": 2
+        }
+      ]
+    },
+    {
+      "condition": "shared",
+      "repetition": 3,
+      "probe_count": 18,
+      "probe_max_ms": 28.370800000004238,
+      "snapshot_targets": [
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        3,
+        3,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "decisions": [
+        {
+          "active": 2,
+          "at_ms": 1000,
+          "before": 2,
+          "decision": "measure",
+          "pressure": false,
+          "rate": 4125145.709552442,
+          "received": 5177344,
+          "reference": 0,
+          "target": 2,
+          "total": 33554432,
+          "useful_bytes": 4128768,
+          "window_ms": 1000.8781
+        },
+        {
+          "active": 2,
+          "at_ms": 2005,
+          "before": 2,
+          "decision": "measure",
+          "pressure": false,
+          "rate": 4192591.5172341624,
+          "received": 9388032,
+          "reference": 4125145.709552442,
+          "target": 2,
+          "total": 33554432,
+          "useful_bytes": 4210688,
+          "window_ms": 1004.3163
+        },
+        {
+          "active": 1,
+          "at_ms": 3016,
+          "before": 2,
+          "decision": "trial",
+          "pressure": false,
+          "rate": 4182219.370142964,
+          "received": 13615104,
+          "reference": 4192591.5172341624,
+          "target": 3,
+          "total": 33554432,
+          "useful_bytes": 4227072,
+          "window_ms": 1010.7246000000001
+        },
+        {
+          "active": 3,
+          "at_ms": 4030,
+          "before": 3,
+          "decision": "reject",
+          "pressure": false,
+          "rate": 4199843.968950354,
+          "received": 17874944,
+          "reference": 4182219.370142964,
+          "target": 2,
+          "total": 33554432,
+          "useful_bytes": 4259840,
+          "window_ms": 1014.2853
+        },
+        {
+          "active": 2,
+          "at_ms": 5040,
+          "before": 2,
+          "decision": "cooldown",
+          "pressure": false,
+          "rate": 4188640.801779592,
+          "received": 22102016,
+          "reference": 4199843.968950354,
+          "target": 2,
+          "total": 33554432,
+          "useful_bytes": 4227072,
+          "window_ms": 1009.1751
+        },
+        {
+          "active": 2,
+          "at_ms": 6047,
+          "before": 2,
+          "decision": "cooldown",
+          "pressure": false,
+          "rate": 4213353.276182983,
+          "received": 26345472,
+          "reference": 4188640.801779592,
+          "target": 2,
+          "total": 33554432,
+          "useful_bytes": 4243456,
+          "window_ms": 1007.1446
+        },
+        {
+          "active": 2,
+          "at_ms": 7060,
+          "before": 2,
+          "decision": "cooldown",
+          "pressure": false,
+          "rate": 4191867.5247464506,
+          "received": 30588928,
+          "reference": 4213353.276182983,
+          "target": 2,
+          "total": 33554432,
+          "useful_bytes": 4243456,
+          "window_ms": 1012.3068
+        }
+      ],
+      "server": [
+        {
+          "at_ms": 1014.1887999999963,
+          "window_ms": 1014.1887999999963,
+          "bytes": 4014080,
+          "rate": 3957921.8386162566,
+          "active": 2
+        },
+        {
+          "at_ms": 2018.4784,
+          "window_ms": 1004.2896000000037,
+          "bytes": 4210688,
+          "rate": 4192702.9812914366,
+          "active": 2
+        },
+        {
+          "at_ms": 3031.4753999999957,
+          "window_ms": 1012.9969999999958,
+          "bytes": 4243456,
+          "rate": 4189011.4185925703,
+          "active": 2
+        },
+        {
+          "at_ms": 4033.2004000000015,
+          "window_ms": 1001.7250000000058,
+          "bytes": 4210688,
+          "rate": 4203437.07105241,
+          "active": 3
+        },
+        {
+          "at_ms": 5038.999400000001,
+          "window_ms": 1005.7989999999991,
+          "bytes": 4210688,
+          "rate": 4186411.00259595,
+          "active": 2
+        },
+        {
+          "at_ms": 6054.489000000001,
+          "window_ms": 1015.4896000000008,
+          "bytes": 4259840,
+          "rate": 4194863.246260717,
+          "active": 2
+        },
+        {
+          "at_ms": 7061.313900000001,
+          "window_ms": 1006.8248999999996,
+          "bytes": 4227072,
+          "rate": 4198418.215520893,
+          "active": 2
+        },
+        {
+          "at_ms": 8068.938799999996,
+          "window_ms": 1007.6248999999953,
+          "bytes": 4227072,
+          "rate": 4195084.897167606,
+          "active": 1
+        }
+      ]
+    }
+  ]
+}

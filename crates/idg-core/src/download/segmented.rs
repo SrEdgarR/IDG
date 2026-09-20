@@ -272,6 +272,10 @@ pub(super) async fn transfer(
     let mut ready = vec![Instant::now(); job.ranges.len()];
     let mut cooldown = Instant::now();
     let mut last_sample = Instant::now();
+    // Opt-in, bounded numeric diagnostics; no job IDs, URLs or paths.
+    let trace_enabled = cfg!(debug_assertions) && std::env::var_os("IDG_ADAPTIVE_TRACE").is_some();
+    let trace_started = Instant::now();
+    let mut trace_count = 0;
     let mut sample_bytes = job.received;
     let mut pressure = false;
     let mut last_report = Instant::now();
@@ -340,7 +344,17 @@ pub(super) async fn transfer(
             }
             if last_report.elapsed()>=Duration::from_millis(250){store.progress(job);last_report=Instant::now();}
             if last_sample.elapsed()>=Duration::from_secs(1){
-                if matches!(job.options.mode,RequestMode::Automatic){adaptive.sample(job.received.saturating_sub(sample_bytes) as f64/last_sample.elapsed().as_secs_f64(),pressure);target=adaptive.target;}
+                if matches!(job.options.mode,RequestMode::Automatic){
+                    let elapsed=last_sample.elapsed().as_secs_f64();
+                    let useful=job.received.saturating_sub(sample_bytes);
+                    let reference=adaptive.reference();
+                    let before=adaptive.target;
+                    let decision=adaptive.sample(useful as f64/elapsed,pressure);target=adaptive.target;
+                    if trace_enabled && trace_count<128 {
+                        trace_count+=1;
+                        eprintln!("IDG_ADAPTIVE {}",serde_json::json!({"at_ms":trace_started.elapsed().as_millis(),"window_ms":elapsed*1000.0,"useful_bytes":useful,"rate":useful as f64/elapsed,"reference":reference,"before":before,"target":target,"active":budget.active_for(&job.id),"decision":decision,"received":job.received,"total":total,"pressure":pressure}));
+                    }
+                }
                 last_sample=Instant::now();sample_bytes=job.received;pressure=false;
             }
         }
