@@ -1,6 +1,6 @@
 # Estado de implementación
 
-Estado actual: **fase 03 integrada; corrección de fase 04 VERIFICADA localmente. CI del cambio correctivo e integración pendientes; fallo remoto anterior documentado al final**.
+Estado actual: **fase 03 integrada; corrección de fase 04 VERIFICADA localmente. CI del cambio correctivo APROBADO; cierre documental para integración autorizada en curso**.
 No marcar una fila completada solo por generar archivos. Completar evidencia conforme se ejecute cada fase.
 
 Estados: PLANIFICADO, EN_CURSO, IMPLEMENTADO_NO_VERIFICADO, VERIFICADO, BLOQUEADO, DIFERIDO.
@@ -84,7 +84,7 @@ Comprobación visual: captura auténtica del WebView2 revisada, estado/PID y con
 
 ## SIGUIENTE_PASO
 
-Comprobar CI del HEAD correctivo y revisar PR #4, incluyendo diagnóstico y benchmark separado. No integrar sin autorización ni avanzar a 05. No hay confirmación humana del motor.
+Comprobar CI del cierre documental de PR #4, fusionarla con la autorización recibida y desarrollar fase 05 en feat/05-app-funcional. No fusionar la futura PR de 05 ni avanzar a 06. No hay confirmación humana del motor.
 
 Revisión final local: 112 archivos inspeccionados, 106 enlaces Markdown locales válidos y cero patrones de tokens/claves privadas/URLs con credenciales. Revisión estática independiente sin hallazgos bloqueantes; precisó que el test Tauri termina el proceso y no pulsa la X (recorrido manual pendiente ya indicado). Diff sin errores de whitespace. Los binarios, perfiles, herramientas descargadas y capturas están excluidos; solo se versiona la clave pública de identidad Chromium.
 
@@ -216,3 +216,9 @@ La interfaz, tipografía, paleta, permisos y protocolo de producto no cambian. S
 Recorrido focalizado final: APROBADO, otras tres repeticiones por condición (nueve aprobadas por condición en total, sumando suite completa e integración). [Trazas finales con referencia, ventanas, decisiones, coste de probe y caudal del servidor](test-evidence/adaptive-after.json). Son comprobaciones automatizadas, no confirmación humana.
 
 Benchmark afectado repetido: release, 15/15 hashes correctos, cinco modos × tres repeticiones. [Serie compartida v2](BENCHMARK_04.md) y [datos](benchmarks/fase04-shared-v2.json). Las 45 mediciones originales se comprobaron idénticas byte a byte respecto a c73617f. No se atribuyen al fixture nuevo. Código probado sin modificaciones posteriores del algoritmo; SHA de publicación se registra en PR #4 y entrega.
+
+## Transición autorizada 04 → 05
+
+HEAD 08b17caed34eb68e2411ca7f629c88f2d6d6bf76: [push 35479388766](https://github.com/SrEdgarR/IDG/actions/runs/35479388766) y [PR 35479390196](https://github.com/SrEdgarR/IDG/actions/runs/35479390196) terminaron con ui, portable y Windows aprobados. La ejecución de PR usa el merge temporal 4b26c70d5664fcc20abb57047ed45dad1617b3ac; no es el commit de la rama. Se conservan diagnóstico, fallos originales y benchmarks separados. Sin confirmación humana de descargas.
+
+El propietario autorizó fusionar solo PR #4 si el HEAD correspondiente aprueba y no hay conflictos ni defectos bloqueantes conocidos. Este cierre modifica únicamente documentación; su CI también se comprobará antes de fusionar. Mientras tanto, fase 05 puede comenzar en una rama dependiente explícita. Las pruebas locales registradas se atribuyen a 08b17ca, no se finge otra prueba de producto por esta edición.
