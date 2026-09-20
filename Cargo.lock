@@ -1678,6 +1678,7 @@ name = "idg-platform-windows"
 version = "0.1.0"
 dependencies = [
  "idg-protocol",
+ "serde",
  "serde_json",
  "tokio",
  "windows-sys 0.61.2",

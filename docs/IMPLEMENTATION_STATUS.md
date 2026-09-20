@@ -1,6 +1,6 @@
 # Estado de implementación
 
-Estado actual: **fase 03 con CI e integración final comprobados en ed4e72e; cierre documental y transición autorizada a fase 04**.
+Estado actual: **fase 03 integrada; fase 04 VERIFICADA en el alcance local automatizado descrito abajo. Revisión de PR e integración pendientes**.
 No marcar una fila completada solo por generar archivos. Completar evidencia conforme se ejecute cada fase.
 
 Estados: PLANIFICADO, EN_CURSO, IMPLEMENTADO_NO_VERIFICADO, VERIFICADO, BLOQUEADO, DIFERIDO.
@@ -13,7 +13,7 @@ Estados: PLANIFICADO, EN_CURSO, IMPLEMENTADO_NO_VERIFICADO, VERIFICADO, BLOQUEAD
 | UI-01 a UI-08 | 02, 05, 14, 15 | EN_CURSO; capa visual 02 VERIFICADA localmente | App, DownloadList, Dialogs, Settings, galería y tokens; pruebas UI y Tauri. Backend de descargas, accesibilidad exhaustiva y rendimiento final pendientes. |
 | WIN-01 a WIN-06 | 05, 06, 08, 12, 13 | PLANIFICADO | — |
 | WIN-07 | 13, 15 | PLANIFICADO | — |
-| DL-01 HTTP/HTTPS | 03, 04 | VERIFICADO (secuencial local 03) | core/download, tests/http.rs y test-http-runtime; segmentación 04 pendiente. |
+| DL-01 HTTP/HTTPS | 03, 04 | VERIFICADO (local automatizado 03/04) | core/download, tests/http.rs, test-http-runtime y test-segments; benchmark controlado. |
 | DL-01 FTP/FTPS | 11 | PLANIFICADO | — |
 | DL-02 a DL-07 | 03, 04, 05 | EN_CURSO | Persistencia, pausa/reanudación y validación secuencial por IPC verificadas; UI y fases posteriores pendientes. |
 | DL-08 a DL-10 | 04, 05, 06, 11 | PLANIFICADO | — |
@@ -84,7 +84,7 @@ Comprobación visual: captura auténtica del WebView2 revisada, estado/PID y con
 
 ## SIGUIENTE_PASO
 
-Comprobar CI del cierre documental de PR #3 y fusionarla solo con checks aprobados y sin conflictos, conforme a autorización expresa. Desarrollar exclusivamente fase 04 en feat/04-segmentacion, inicialmente dependiente de ese cierre si sigue pendiente CI. No fusionar la PR de 04 ni avanzar a 05.
+Revisar la PR de fase 04 y comprobar ui/portable/windows del HEAD actual. Solicitar autorización del propietario antes de integrar; no fusionar 04 ni avanzar a 05. La prueba interactiva humana del motor sigue pendiente.
 
 Revisión final local: 112 archivos inspeccionados, 106 enlaces Markdown locales válidos y cero patrones de tokens/claves privadas/URLs con credenciales. Revisión estática independiente sin hallazgos bloqueantes; precisó que el test Tauri termina el proceso y no pulsa la X (recorrido manual pendiente ya indicado). Diff sin errores de whitespace. Los binarios, perfiles, herramientas descargadas y capturas están excluidos; solo se versiona la clave pública de identidad Chromium.
 
@@ -168,3 +168,20 @@ Precisión de privacidad: los documentos de trabajos se protegen con DPAPI antes
 ## Fase 04 — EN_CURSO
 
 Primer incremento: planificador de rangos semiabiertos, cobertura exacta y metadatos acotados a 4096 rangos, sin activar todavía transferencias paralelas. Dos pruebas aprobadas (`cargo test --locked -p idg-core ranges::tests`): casos generados deterministas (2000 tamaños, tres prefijos), fronteras hasta u64::MAX, huecos y solapes. Rama feat/04-segmentacion inicialmente dependiente del cierre 9bd2800 de PR #3; el código de 04 no se incorpora a esa PR.
+
+PR #3 integrada con autorización tras verificar HEAD `9bd28002fc9858ffee93ffeb53a1a17083bcf626`, sin conflictos y ui/portable/windows aprobados: [35476204831](https://github.com/SrEdgarR/IDG/actions/runs/35476204831) y [35476203071](https://github.com/SrEdgarR/IDG/actions/runs/35476203071). Merge remoto `c521a4f9c12a18eb0d70bb03d6fde9351d50e2fa`. La regresión final se ejecutó sobre ed4e72e; el cierre 9bd2800 solo documenta esos resultados.
+
+Segundo incremento de 04: rangos paralelos por IPC, writer único, checkpoints protegidos, migración 002 compatible, modo automático medido/manual, límites globales/individuales/origen y prioridades. Pruebas HTTP anteriores y nueva suite de segmentación aprobadas antes del último ajuste de observabilidad de solicitudes; ese ajuste y el benchmark se verifican en el cierre. Sin confirmación humana del motor. No se ha conectado la UI ni iniciado 05.
+
+### Cierre local de fase 04
+
+El conjunto de implementación de este cierre (su SHA se registra en la PR y entrega) pasó `Check.ps1 -Integration`: formato, Clippy, 31 pruebas Rust, tres pruebas de modelo UI, tipos/build, IPC, HTTP y segmentación, galería y regresiones Tauri/WebView2, Chromium y Firefox. Después se amplió únicamente la suite de segmentación con dos transferencias largas de Automático y se ejecutó otra vez completa con resultado aprobado. El fixture standalone también arrancó y anunció URL/hash reales. No se atribuye una nueva ejecución gráfica a esos cambios posteriores de pruebas/documentación.
+
+- VERIFICADO automáticamente: cobertura generada y fronteras hasta u64::MAX (sin escribir archivos físicos de ese tamaño), integridad de 1/4/8/16/Auto, respuestas inválidas, representación cambiada, pausa/cancelación, reintentos acotados y Retry-After extremo, recuperación tras muerte del proceso entre escritura/checkpoint sin volver a pedir rangos durables, migración desde 03 conservando el blob y límites/prioridades de tres trabajos.
+- Automático real: fixture de 64 MiB limitado por conexión conserva el aumento; fixture de 32 MiB con límite compartido vuelve de tres a dos. Se comprueba además el hash final.
+- Benchmark release: **45/45 archivos con hash esperado**, tres repeticiones por modo/condición. [Resultados, entorno y limitaciones](BENCHMARK_04.md), [datos completos](benchmarks/fase04.json). No acredita Internet ni superioridad sobre IDM.
+- Interacción real automatizada: Tauri/WebView2 y Native Messaging Chromium/Firefox; host de desarrollo retirado al finalizar, sin perfiles personales. No es revisión humana ni interacción con el menú nativo del popup.
+- Confirmado por el usuario: aceptación visual de fase 02; ninguna confirmación humana nueva del motor. Recorrido interactivo de PowerShell pendiente; no se reintentó el flujo adicional bloqueado anteriormente.
+- Pendiente: CI remoto del HEAD publicado y revisión/autorización de integración de 04. Windows 10, archivos físicos >4 GiB, energía física, diez trabajos/rendimiento prolongado, otros discos y matriz ampliada no se declaran verificados. UI de trabajos pertenece a 05; no se ha iniciado.
+
+La revisión detectó un posible desbordamiento con Retry-After extremo: ahora se conserva el plazo y se libera el slot sin crear una espera desmesurada; prueba de regresión aprobada. También se corrigieron la contabilidad de permisos HTTP activos y la limpieza de listeners del fixture. Documentos de trabajos y ajustes protegidos mediante DPAPI dentro de SQLite: **no cifrado integral de SQLite**. Guía reproducible: [segmentación y límites](SEGMENTATION_DEVELOPMENT.md).

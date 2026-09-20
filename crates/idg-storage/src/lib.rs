@@ -42,11 +42,50 @@ impl Store {
             0 => tx
                 .execute_batch(include_str!("../migrations/001.sql"))
                 .map_err(|_| DownloadError::Storage)?,
-            1 => {}
+            1 | 2 => {}
             _ => return Err(DownloadError::Storage),
+        }
+        if version < 2 {
+            tx.execute_batch(include_str!("../migrations/002.sql"))
+                .map_err(|_| DownloadError::Storage)?;
         }
         tx.commit().map_err(|_| DownloadError::Storage)?;
         Ok(Self { connection })
+    }
+    pub fn limits(&self) -> Result<idg_protocol::ResourceLimits, DownloadError> {
+        use rusqlite::OptionalExtension;
+        let bytes: Option<Vec<u8>> = self
+            .connection
+            .query_row(
+                "SELECT protected_limits FROM settings WHERE id=1",
+                [],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|_| DownloadError::Storage)?;
+        match bytes {
+            None => Ok(Default::default()),
+            Some(bytes) => {
+                let mut clear = protection::decrypt(&bytes)?;
+                let result = serde_json::from_slice::<idg_protocol::ResourceLimits>(&clear)
+                    .map_err(|_| DownloadError::Storage);
+                clear.fill(0);
+                let limits = result?;
+                limits.validate()?;
+                Ok(limits)
+            }
+        }
+    }
+    pub fn save_limits(
+        &mut self,
+        limits: &idg_protocol::ResourceLimits,
+    ) -> Result<(), DownloadError> {
+        limits.validate()?;
+        let mut clear = serde_json::to_vec(limits).map_err(|_| DownloadError::Storage)?;
+        let sealed = protection::encrypt(&clear);
+        clear.fill(0);
+        self.connection.execute("INSERT INTO settings VALUES(1,?1) ON CONFLICT(id) DO UPDATE SET protected_limits=excluded.protected_limits",params![sealed?]).map_err(|_|DownloadError::Storage)?;
+        Ok(())
     }
     pub fn load(&self) -> Result<LoadedJobs, DownloadError> {
         let mut statement = self
@@ -103,7 +142,7 @@ mod tests {
             .connection
             .query_row("SELECT COUNT(*) FROM schema_migrations", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(n, 1);
+        assert_eq!(n, 2);
     }
     #[test]
     fn interrupted_migration_rolls_back_and_reopens() {
@@ -124,7 +163,7 @@ mod tests {
         drop(Store::open(&path).unwrap());
         let other = Connection::open(&path).unwrap();
         other
-            .execute_batch("BEGIN IMMEDIATE; UPDATE schema_migrations SET version=2;")
+            .execute_batch("BEGIN IMMEDIATE; INSERT INTO schema_migrations VALUES(3);")
             .unwrap();
         assert!(matches!(Store::open(&path), Err(DownloadError::Storage)));
         other.execute_batch("COMMIT").unwrap();
@@ -134,7 +173,7 @@ mod tests {
                 r.get(0)
             })
             .unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
     }
     #[cfg(windows)]
     #[test]
@@ -181,5 +220,47 @@ mod tests {
             )
             .unwrap();
         assert_eq!(blob, b"broken");
+    }
+    #[cfg(windows)]
+    #[test]
+    fn migration_preserves_phase03_protected_job_and_defaults_new_fields() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("legacy.sqlite3");
+        let input = idg_protocol::NewDownload {
+            url: "https://example.org/old".into(),
+            directory: dir.path().to_string_lossy().into(),
+            name: "old.bin".into(),
+            expected_sha256: None,
+            conflict: idg_protocol::ConflictPolicy::Reject,
+        };
+        let job = idg_core::download::create_job("old", input).unwrap();
+        let mut old = serde_json::to_value(job).unwrap();
+        for key in ["options", "ranges", "transferred", "retries", "strategy"] {
+            old.as_object_mut().unwrap().remove(key);
+        }
+        let blob = protection::encrypt(&serde_json::to_vec(&old).unwrap()).unwrap();
+        let c = Connection::open(&path).unwrap();
+        c.execute_batch("CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY)")
+            .unwrap();
+        c.execute_batch(include_str!("../migrations/001.sql"))
+            .unwrap();
+        c.execute("INSERT INTO downloads VALUES('old',?1)", params![&blob])
+            .unwrap();
+        drop(c);
+        let store = Store::open(&path).unwrap();
+        let loaded = store.load().unwrap();
+        assert_eq!(loaded.jobs.len(), 1);
+        assert_eq!(loaded.jobs[0].id, "old");
+        assert!(loaded.jobs[0].ranges.is_empty());
+        let unchanged: Vec<u8> = store
+            .connection
+            .query_row(
+                "SELECT protected_job FROM downloads WHERE id='old'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(unchanged, blob);
+        assert_eq!(store.limits().unwrap(), Default::default());
     }
 }

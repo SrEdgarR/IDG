@@ -99,7 +99,7 @@ CI: `.github/workflows/check.yml` conserva portable (core/protocolo/migraciones 
 
 ## Límites y diagnóstico
 
-Hay motor HTTP/HTTPS secuencial y SQLite protegida, manejados solo mediante la utilidad de desarrollo. No hay bandeja, autoinicio ni AutoPick. La interfaz de fase 02 conserva su lista vacía real; las acciones futuras están deshabilitadas y explicadas. Los estados de conexión no se persisten. El pipe admite 16 clientes simultáneos, frames de 256 KiB y plazos de cinco segundos. La suscripción usa una conexión dedicada y snapshots completos, por lo que un salto de secuencia no exige reconstruir deltas. Un proceso malicioso con control del mismo usuario y capacidad de reemplazar binarios no queda aislado por este mecanismo.
+Hay motor HTTP/HTTPS secuencial y segmentado, manejado solo mediante la utilidad de desarrollo. Los documentos de trabajos se protegen con DPAPI dentro de SQLite; no es cifrado integral de la DB. No hay bandeja, autoinicio ni AutoPick. La interfaz de fase 02 conserva su lista vacía real; las acciones futuras están deshabilitadas y explicadas. Los estados de conexión no se persisten. El pipe admite 16 clientes simultáneos, frames de 256 KiB y plazos de cinco segundos. La suscripción usa una conexión dedicada y snapshots completos, por lo que un salto de secuencia no exige reconstruir deltas. Un proceso malicioso con control del mismo usuario y capacidad de reemplazar binarios no queda aislado por este mecanismo.
 
 Ante Desconectado: comprueba el runtime con `idg-probe.exe ping`, que los binarios estén juntos, registro/ID correctos y que el complemento se haya reconstruido. No pegues credenciales ni rutas privadas en issues. Estado, evidencias y pendientes en [IMPLEMENTATION_STATUS](IMPLEMENTATION_STATUS.md).
 
@@ -140,3 +140,7 @@ El propietario confirmó temas claro/oscuro, expansión, Nueva descarga y Config
 Sigue el [recorrido HTTP de desarrollo](HTTP_DEVELOPMENT.md). `node scripts/test-http-runtime.mjs` descarga bytes reales, observa eventos por IPC, pausa/cancela y mata/reinicia únicamente su runtime de prueba; verifica el sufijo solicitado y SHA-256 final. Check.ps1 lo ejecuta también en CI Windows. La prueba TLS, hash incorrecto y bloqueo real de destino está en `crates/idg-core/tests/http.rs`; el fallo de disco lleno se inyecta en la escritura, sin llenar el disco del usuario. SQLite/DPAPI y migraciones tienen pruebas propias.
 
 El host de Native Messaging no tiene permiso de iniciar ni consultar trabajos. El handshake del probe anuncia la consulta de capacidades; la del host/escritorio conserva comandos anteriores. Los snapshots de trabajos no contienen URL ni directorio. Datos persistentes por defecto en el directorio de aplicación del usuario, subcarpeta `IDG/development`; las pruebas usan `IDG_DATA_DIR` local al proceso. No compartas la DB como diagnóstico público.
+
+## Segmentación y recursos (fase 04)
+
+[Guía de comandos, límites y benchmark](SEGMENTATION_DEVELOPMENT.md). Check.ps1 añade `node scripts/test-segments.mjs`; las pruebas anteriores permanecen. No se requieren paquetes nuevos ni cambios de sistema. Migración 002 conserva los documentos de fase 03 y añade ajustes protegidos; no borres la base para actualizar. [ADR-012](decisions/012-segmentacion-recursos.md) precisa elegibilidad, rangos durables, políticas de recursos/reintento y límites de la evidencia.

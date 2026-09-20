@@ -1,8 +1,10 @@
-//! Versioned local protocol. No downloads or persistent user state in phase 01.
+//! Versioned local protocol for authenticated runtime clients.
 pub const VERSION: u32 = 1;
 pub const MAX_FRAME: usize = 256 * 1024;
 mod download;
 pub use download::*;
+mod resources;
+pub use resources::*;
 
 use serde::{Deserialize, Serialize};
 use std::{io, time::Duration};
@@ -20,12 +22,40 @@ pub enum Command {
     Subscribe,
     Shutdown,
     GetDownloadCapabilities,
-    AddDownload { input: NewDownload },
-    GetDownload { job_id: String },
-    ListDownloads { offset: u32 },
-    PauseDownload { job_id: String },
-    ResumeDownload { job_id: String },
-    CancelDownload { job_id: String },
+    AddDownload {
+        input: NewDownload,
+    },
+    AddDownloadWithOptions {
+        input: NewDownload,
+        options: TransferOptions,
+    },
+    SetDownloadOptions {
+        job_id: String,
+        options: TransferOptions,
+    },
+    SetResourceLimits {
+        limits: ResourceLimits,
+    },
+    GetResourceLimits,
+    GetDownloadRanges {
+        job_id: String,
+        offset: u32,
+    },
+    GetDownload {
+        job_id: String,
+    },
+    ListDownloads {
+        offset: u32,
+    },
+    PauseDownload {
+        job_id: String,
+    },
+    ResumeDownload {
+        job_id: String,
+    },
+    CancelDownload {
+        job_id: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -66,6 +96,13 @@ pub struct ConnectionState {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Payload {
+    ResourceLimits {
+        limits: ResourceLimits,
+    },
+    DownloadRanges {
+        ranges: Vec<RangeSnapshot>,
+        next_offset: Option<u32>,
+    },
     DownloadCapabilities {
         operations: Vec<String>,
         schema_version: u32,

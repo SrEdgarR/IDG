@@ -19,24 +19,37 @@ pub fn client() -> Result<Client, DownloadError> {
         .build()
         .map_err(|_| DownloadError::Tls)
 }
-fn network(e: reqwest::Error) -> DownloadError {
+pub(super) fn network(e: reqwest::Error) -> DownloadError {
     if e.is_timeout() {
         DownloadError::Timeout
     } else {
         DownloadError::Network
     }
 }
-fn header(response: &Response, name: HeaderName) -> Option<String> {
+pub(super) fn header(response: &Response, name: HeaderName) -> Option<String> {
     response
         .headers()
         .get(name)
         .and_then(|v| v.to_str().ok())
         .map(str::to_owned)
 }
-async fn get(client: &Client, job: &Job) -> Result<Response, DownloadError> {
+async fn get(
+    client: &Client,
+    job: &Job,
+    budget: &std::sync::Arc<resources::Resources>,
+    mut control: watch::Receiver<Control>,
+) -> Result<(Response, resources::Permit), DownloadError> {
     let mut url = Url::parse(&job.input.url).map_err(|_| DownloadError::InvalidInput)?;
     url.set_fragment(None);
     for hop in 0..=5 {
+        let permit = budget
+            .acquire(
+                &job.id,
+                &url.origin().ascii_serialization(),
+                job.options.priority.clone(),
+                &mut control,
+            )
+            .await?;
         let mut request = client.get(url.clone()).header(ACCEPT_ENCODING, "identity");
         if job.durable > 0 {
             request = request
@@ -64,11 +77,11 @@ async fn get(client: &Client, job: &Job) -> Result<Response, DownloadError> {
             url = next;
             continue;
         }
-        return Ok(response);
+        return Ok((response, permit));
     }
     Err(DownloadError::HttpStatus)
 }
-fn range(s: &str) -> Option<(u64, u64, u64)> {
+pub(super) fn range(s: &str) -> Option<(u64, u64, u64)> {
     let s = s.strip_prefix("bytes ")?;
     let (r, total) = s.split_once('/')?;
     let (start, end) = r.split_once('-')?;
@@ -99,7 +112,7 @@ async fn write_chunk<W: tokio::io::AsyncWrite + Unpin>(
 ) -> Result<(), DownloadError> {
     writer.write_all(chunk).await.map_err(file_error)
 }
-async fn finish(job: &mut Job, store: &mut dyn Checkpoint) -> Result<(), DownloadError> {
+pub(super) async fn finish(job: &mut Job, store: &mut dyn Checkpoint) -> Result<(), DownloadError> {
     if job.total.is_some_and(|n| n != job.durable) {
         return Err(DownloadError::SizeMismatch);
     }
@@ -131,6 +144,87 @@ pub async fn transfer(
     control: &mut watch::Receiver<Control>,
     store: &mut dyn Checkpoint,
 ) -> Result<(), DownloadError> {
+    transfer_managed(
+        client,
+        job,
+        control,
+        store,
+        resources::Resources::new(ResourceLimits::default()),
+    )
+    .await
+}
+pub async fn transfer_managed(
+    client: &Client,
+    job: &mut Job,
+    control: &mut watch::Receiver<Control>,
+    store: &mut dyn Checkpoint,
+    budget: std::sync::Arc<resources::Resources>,
+) -> Result<(), DownloadError> {
+    let mut attempts = 0;
+    let result = loop {
+        let result = transfer_inner(client, job, control, store, budget.clone()).await;
+        if !job.options.replay_safe
+            || !job.ranges.is_empty()
+            || attempts >= 3
+            || !matches!(
+                result,
+                Err(DownloadError::Network | DownloadError::Timeout | DownloadError::RetryLater)
+            )
+        {
+            break result;
+        }
+        let retry_after = Duration::from_secs(job.retry_after_seconds.unwrap_or(0) as u64);
+        if retry_after > Duration::from_secs(3600) {
+            break result;
+        }
+        attempts += 1;
+        job.retries += 1;
+        job.active_requests = 0;
+        let wait = retry_after.max(Duration::from_millis(
+            (250u64 << attempts) + (job.received % 101),
+        ));
+        let origin = Url::parse(&job.input.url)
+            .map_err(|_| DownloadError::InvalidInput)?
+            .origin()
+            .ascii_serialization();
+        if result == Err(DownloadError::RetryLater) {
+            budget.defer_origin(&origin, wait);
+        }
+        store.save(job)?;
+        if let Err(error) = resources::delay(wait, control).await {
+            break Err(error);
+        }
+    };
+    job.active_requests = 0;
+    budget.forget_file(&job.id);
+    if result == Err(DownloadError::InvalidState) && *control.borrow() != Control::Run {
+        job.received = job.durable;
+        job.state = if *control.borrow() == Control::Cancel {
+            TransferState::Cancelled
+        } else {
+            TransferState::Paused
+        };
+        store.save(job)?;
+        return Ok(());
+    }
+    result
+}
+async fn transfer_inner(
+    client: &Client,
+    job: &mut Job,
+    control: &mut watch::Receiver<Control>,
+    store: &mut dyn Checkpoint,
+    budget: std::sync::Arc<resources::Resources>,
+) -> Result<(), DownloadError> {
+    job.options.validate()?;
+    if !job.ranges.is_empty()
+        && !matches!(
+            job.state,
+            TransferState::PublishPending | TransferState::Verifying | TransferState::Completed
+        )
+    {
+        return super::segmented::transfer(client, job, control, store, budget).await;
+    }
     if matches!(
         job.state,
         TransferState::PublishPending | TransferState::Verifying
@@ -146,6 +240,12 @@ pub async fn transfer(
         return Err(DownloadError::UnsafeResume);
     }
     let (file, mut hash) = files::open_partial(job)?;
+    if job.durable > 0 && eligible(job) && job.total.is_some_and(|n| n > job.durable) {
+        drop(file);
+        job.ranges = ranges::plan(job.total.unwrap(), job.durable, &job.prefix_sha256)?;
+        store.save(job)?;
+        return super::segmented::transfer(client, job, control, store, budget).await;
+    }
     let mut file = tokio::fs::File::from_std(file);
     job.received = job.durable;
     if *control.borrow() != Control::Run {
@@ -157,8 +257,10 @@ pub async fn transfer(
         store.save(job)?;
         return Ok(());
     }
+    job.active_requests = 0;
+    job.target_requests = 1;
     let response = {
-        let pending = get(client, job);
+        let pending = get(client, job, &budget, control.clone());
         tokio::pin!(pending);
         loop {
             tokio::select! {
@@ -169,7 +271,7 @@ pub async fn transfer(
             }
         }
     };
-    let Some(response) = response else {
+    let Some((response, permit)) = response else {
         job.state = if *control.borrow() == Control::Cancel {
             TransferState::Cancelled
         } else {
@@ -178,6 +280,7 @@ pub async fn transfer(
         store.save(job)?;
         return Ok(());
     };
+    job.active_requests = 1;
     let status = response.status().as_u16();
     if matches!(status, 401 | 403) {
         return Err(DownloadError::AccessDenied);
@@ -271,6 +374,8 @@ pub async fn transfer(
         job.last_modified = header(&response, LAST_MODIFIED);
         job.effective_url = Some(response.url().to_string());
     }
+    let parallel_hint =
+        header(&response, ACCEPT_RANGES).is_some_and(|v| v.eq_ignore_ascii_case("bytes"));
     job.state = TransferState::Downloading;
     job.error = None;
     job.retry_after_seconds = None;
@@ -297,8 +402,17 @@ pub async fn transfer(
             }
         };
         let Some(bytes) = bytes else { break };
+        job.transferred = job.transferred.saturating_add(bytes.len() as u64);
         // Bound each file write even if a transport supplies a larger network chunk.
         for chunk in bytes.chunks(65536) {
+            if budget
+                .pace(&job.id, job.options.bytes_per_second, chunk.len(), control)
+                .await
+                .is_err()
+            {
+                checkpoint(&mut file, job, &hash, store).await?;
+                return Err(DownloadError::InvalidState);
+            }
             let next = job
                 .received
                 .checked_add(chunk.len() as u64)
@@ -314,6 +428,15 @@ pub async fn transfer(
             {
                 checkpoint(&mut file, job, &hash, store).await?;
                 last_checkpoint = Instant::now();
+                if parallel_hint && eligible(job) && job.durable < job.total.unwrap() {
+                    drop(file);
+                    drop(response);
+                    drop(permit);
+                    job.active_requests = 0;
+                    job.ranges = ranges::plan(job.total.unwrap(), job.durable, &job.prefix_sha256)?;
+                    store.save(job)?;
+                    return super::segmented::transfer(client, job, control, store, budget).await;
+                }
             }
         }
         if last_report.elapsed() >= Duration::from_millis(250) {
@@ -324,6 +447,12 @@ pub async fn transfer(
     checkpoint(&mut file, job, &hash, store).await?;
     drop(file);
     finish(job, store).await
+}
+fn eligible(job: &Job) -> bool {
+    job.options.replay_safe
+        && !matches!(job.options.mode, RequestMode::Manual { requests: 1 })
+        && job.etag.is_some()
+        && job.total.is_some_and(|n| n >= 4 * ranges::MIN_RANGE)
 }
 
 #[cfg(test)]
