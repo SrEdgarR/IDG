@@ -1,0 +1,12 @@
+{
+  "identifier": "mini",
+  "description": "Mini ventana: snapshots de trabajos y volver a la ventana principal; sin creación ni escritura.",
+  "windows": ["mini"],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "allow-download-command",
+    "allow-read-runtime-state",
+    "allow-show-desktop"
+  ]
+}

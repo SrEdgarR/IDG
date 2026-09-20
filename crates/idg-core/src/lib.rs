@@ -52,6 +52,7 @@ mod tests {
     use super::*;
     fn snapshot() -> Snapshot {
         Snapshot {
+            native_hosts: 0,
             runtime_id: "fixture".into(),
             process_id: 42,
             sequence: 9,

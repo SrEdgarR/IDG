@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-request-desktop-exit"
+description = "Enables the request_desktop_exit command without any pre-configured scope."
+commands.allow = ["request_desktop_exit"]
+
+[[permission]]
+identifier = "deny-request-desktop-exit"
+description = "Denies the request_desktop_exit command without any pre-configured scope."
+commands.deny = ["request_desktop_exit"]

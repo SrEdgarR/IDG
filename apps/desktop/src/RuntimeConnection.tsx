@@ -15,10 +15,11 @@ export function RuntimeConnection() {
     setNotice("");
     try {
       await invoke(command);
+      if (command === "start_runtime") await invoke("connect_runtime");
       if (command === "ping_runtime") setNotice("El motor respondió al ping.");
-    } catch {
+    } catch (e) {
       setNotice(
-        "No se pudo conectar con el motor. Comprueba que esté iniciado",
+        typeof e === "string" ? e : "No se pudo conectar con el motor.",
       );
     } finally {
       setBusy(false);
@@ -36,7 +37,6 @@ export function RuntimeConnection() {
           return;
         }
         unlisten = stop;
-        await action("connect_runtime");
       })
       .catch(() =>
         setNotice(
@@ -59,11 +59,22 @@ export function RuntimeConnection() {
       <span className="runtime-detail muted">
         {state.snapshot
           ? `Motor ${state.snapshot.process_id} · ${state.snapshot.clients} clientes`
-          : "Inicia el motor manualmente para conectar."}
+          : "El motor está detenido o desconectado. Puedes iniciarlo explícitamente."}
       </span>
       <div className="runtime-actions">
-        <button disabled={busy} onClick={() => void action("connect_runtime")}>
-          Reconectar
+        <button
+          disabled={busy}
+          onClick={() => void action("request_desktop_exit")}
+        >
+          Salir completamente
+        </button>
+        <button
+          disabled={busy}
+          onClick={() =>
+            void action(state.connected ? "connect_runtime" : "start_runtime")
+          }
+        >
+          {state.connected ? "Reconectar" : "Iniciar motor"}
         </button>
         <button
           disabled={busy || !state.connected}

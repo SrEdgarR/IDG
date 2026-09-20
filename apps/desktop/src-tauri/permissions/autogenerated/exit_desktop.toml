@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-exit-desktop"
+description = "Enables the exit_desktop command without any pre-configured scope."
+commands.allow = ["exit_desktop"]
+
+[[permission]]
+identifier = "deny-exit-desktop"
+description = "Denies the exit_desktop command without any pre-configured scope."
+commands.deny = ["exit_desktop"]

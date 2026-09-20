@@ -1,9 +1,37 @@
-import type {DesktopApi} from "./desktop";
-import { useState, useRef } from "react";
+import type { DesktopApi } from "./desktop";
+import { DownloadFailure } from "./desktop";
+import { useState, useRef, useEffect } from "react";
+import type {
+  StartPolicy,
+  ConflictPolicy,
+} from "../../../packages/shared-types/protocol";
 import { Modal, Pending } from "./ui/Modal";
 import { validateDraft } from "./model";
-export function NewDownloadDialog({ onClose, backend }: { onClose: () => void; backend?: DesktopApi }) {
+export function NewDownloadDialog({
+  onClose,
+  backend,
+  initialUrl = "",
+}: {
+  onClose: () => void;
+  backend?: DesktopApi;
+  initialUrl?: string;
+}) {
   const [directory, setDirectory] = useState("");
+  const directoryEdited = useRef(false);
+  const [category, setCategory] = useState("Otros");
+  const [conflict, setConflict] = useState<ConflictPolicy>("reject");
+  const [conflictOpen, setConflictOpen] = useState(false);
+  const [recoverable, setRecoverable] = useState<string | null>(null);
+  const [pendingStart, setPendingStart] = useState<StartPolicy>("now");
+  useEffect(() => {
+    if (backend)
+      void backend
+        .preferences()
+        .then((p) => {
+          if (!directoryEdited.current) setDirectory(p.directory);
+        })
+        .catch(() => {});
+  }, [backend]);
   const [replaySafe, setReplaySafe] = useState(false);
   const [requests, setRequests] = useState("automatic");
   const [limit, setLimit] = useState("");
@@ -12,27 +40,81 @@ export function NewDownloadDialog({ onClose, backend }: { onClose: () => void; b
   const [busy, setBusy] = useState(false);
   const sending = useRef(false);
   const requestId = useRef(crypto.randomUUID());
-  async function submit() {
+  async function submit(
+    start: StartPolicy = "now",
+    policy: ConflictPolicy = conflict,
+  ) {
     if (!backend || sending.current) return;
-    setChecked(true);setFailure("");
-    if (Object.keys(validateDraft(name,url)).length || !directory) {setFailure("Revisa URL, nombre y carpeta.");return;}
-    sending.current=true;setBusy(true);
+    setChecked(true);
+    setFailure("");
+    if (Object.keys(validateDraft(name, url)).length || !directory) {
+      setFailure("Revisa URL, nombre y carpeta.");
+      return;
+    }
+    sending.current = true;
+    setBusy(true);
+    setRecoverable(null);
     try {
-      const result=await backend.add(requestId.current,{url,directory,name,expected_sha256:null,conflict:"reject"},{mode:requests==="automatic"?"automatic":{manual:{requests:Number(requests)}},replay_safe:replaySafe,bytes_per_second:limit?Number(limit)*1024:null,priority});
-      if(result.kind!=="download") throw new Error("El motor no confirmó el trabajo.");
+      if (policy === "reject") {
+        const match = await backend.recoverable({
+          url,
+          directory,
+          name,
+          expected_sha256: null,
+          conflict: policy,
+        });
+        if (match) {
+          setRecoverable(match);
+          setPendingStart(start);
+          setConflictOpen(true);
+          return;
+        }
+      }
+      const result = await backend.add(
+        requestId.current,
+        { url, directory, name, expected_sha256: null, conflict: policy },
+        {
+          mode:
+            requests === "automatic"
+              ? "automatic"
+              : { manual: { requests: Number(requests) } },
+          replay_safe: replaySafe,
+          bytes_per_second: limit ? Number(limit) * 1024 : null,
+          priority,
+        },
+        category,
+        start,
+      );
+      if (result.kind !== "download")
+        throw new Error("El motor no confirmó el trabajo.");
       onClose();
-    } catch(e) {setFailure(e instanceof Error?e.message:String(e));}
-    finally {sending.current=false;setBusy(false);}
+    } catch (e) {
+      setFailure(e instanceof Error ? e.message : String(e));
+      if (e instanceof DownloadFailure && e.code === "conflict") {
+        setPendingStart(start);
+        setConflictOpen(true);
+      }
+    } finally {
+      sending.current = false;
+      setBusy(false);
+    }
   }
   const [name, setName] = useState("");
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(initialUrl);
   const [reveal, setReveal] = useState(false);
   const [checked, setChecked] = useState(false);
   const errors = checked ? validateDraft(name, url) : {};
   return (
-    <Modal title="Nueva descarga" onClose={onClose}>
+    <Modal
+      title="Nueva descarga"
+      onClose={() => {
+        if (!sending.current) onClose();
+      }}
+    >
       <p className="muted">
-        {backend ? "Revisa el destino. No se consulta el enlace hasta aceptar la descarga." : "Prepara los datos del archivo. Todavía no se enviarán al motor."}
+        {backend
+          ? "Revisa el destino. No se consulta el enlace hasta aceptar la descarga."
+          : "Prepara los datos del archivo. Todavía no se enviarán al motor."}
       </p>
       <form
         onSubmit={(e) => {
@@ -84,12 +166,25 @@ export function NewDownloadDialog({ onClose, backend }: { onClose: () => void; b
         <div className="form-grid">
           <label className="field">
             Carpeta
-            <input disabled={!backend || busy} value={directory} onChange={e=>setDirectory(e.target.value)} placeholder="Elige una carpeta" />
+            <input
+              disabled={!backend || busy}
+              value={directory}
+              onChange={(e) => {
+                directoryEdited.current = true;
+                setDirectory(e.target.value);
+              }}
+              placeholder="Elige una carpeta"
+            />
           </label>
           <label className="field">
             Categoría
-            <select defaultValue="Automática">
-              <option>Automática</option>
+            <select
+              aria-label="Categoría"
+              value={backend ? category : undefined}
+              defaultValue={backend ? undefined : "Automática"}
+              onChange={(e) => setCategory(e.target.value)}
+            >
+              {!backend && <option>Automática</option>}
               {[
                 "Videos",
                 "Documentos",
@@ -102,7 +197,21 @@ export function NewDownloadDialog({ onClose, backend }: { onClose: () => void; b
             </select>
           </label>
         </div>
-        <button type="button" disabled={!backend || busy} onClick={()=>void backend?.chooseFolder().then(folder=>{if(folder)setDirectory(folder);}).catch(()=>setFailure("No se pudo elegir la carpeta."))}>
+        <button
+          type="button"
+          disabled={!backend || busy}
+          onClick={() =>
+            void backend
+              ?.chooseFolder()
+              .then((folder) => {
+                if (folder) {
+                  directoryEdited.current = true;
+                  setDirectory(folder);
+                }
+              })
+              .catch(() => setFailure("No se pudo elegir la carpeta."))
+          }
+        >
           Elegir carpeta…
         </button>
         <dl className="metadata">
@@ -119,20 +228,65 @@ export function NewDownloadDialog({ onClose, backend }: { onClose: () => void; b
             <dd>Desconocida</dd>
           </div>
         </dl>
+        {backend && (
+          <label className="field">
+            Si existe el destino
+            <select
+              value={conflict}
+              onChange={(e) => setConflict(e.target.value as ConflictPolicy)}
+            >
+              <option value="reject">Preguntar (conservar el archivo)</option>
+              <option value="rename">Renombrar automáticamente</option>
+              <option value="replace">
+                Reemplazar explícitamente al completar
+              </option>
+            </select>
+            <small>
+              Reemplazar solo publica tras verificar. Reanudar requiere el
+              trabajo original y su checkpoint; no basta el nombre.
+            </small>
+          </label>
+        )}
         <details>
           <summary>Avanzado</summary>
           <div className="form-grid">
             <label className="field">
               Conexiones
-              <select disabled={!backend || busy} value={requests} onChange={e=>setRequests(e.target.value)}><option value="automatic">Automáticas</option>{[1,2,4,8,16,32].map(n=><option key={n} value={n}>{n} solicitudes como máximo</option>)}</select>
+              <select
+                disabled={!backend || busy}
+                value={requests}
+                onChange={(e) => setRequests(e.target.value)}
+              >
+                <option value="automatic">Automáticas</option>
+                {[1, 2, 4, 8, 16, 32].map((n) => (
+                  <option key={n} value={n}>
+                    {n} solicitudes como máximo
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="field">
               Límite
-              <input type="number" min="1" max="4194303" disabled={!backend || busy} value={limit} onChange={e=>setLimit(e.target.value)} placeholder="Sin límite (KiB/s)" />
+              <input
+                type="number"
+                min="1"
+                max="4194303"
+                disabled={!backend || busy}
+                value={limit}
+                onChange={(e) => setLimit(e.target.value)}
+                placeholder="Sin límite (KiB/s)"
+              />
             </label>
             <label className="field">
               Prioridad
-              <select value={priority} onChange={e=>setPriority(e.target.value as typeof priority)}><option value="normal">Normal</option><option value="high">Alta</option><option value="low">Baja</option></select>
+              <select
+                value={priority}
+                onChange={(e) => setPriority(e.target.value as typeof priority)}
+              >
+                <option value="normal">Normal</option>
+                <option value="high">Alta</option>
+                <option value="low">Baja</option>
+              </select>
             </label>
             <label className="field">
               Cola
@@ -160,8 +314,31 @@ export function NewDownloadDialog({ onClose, backend }: { onClose: () => void; b
             />
           </label>
         </details>
-        {backend ? <><label className="check-field"><input type="checkbox" disabled={busy} checked={replaySafe} onChange={e=>setReplaySafe(e.target.checked)} />El enlace permite solicitudes repetidas</label><p className="muted">Actívalo solo para un enlace reutilizable. Ante dudas o enlaces de un solo uso se usa una solicitud secuencial; Automático no anula esta protección.</p></> : <Pending />}
-        {failure && <p role="alert" className="error-text">{failure}</p>}
+        {backend ? (
+          <>
+            <label className="check-field">
+              <input
+                type="checkbox"
+                disabled={busy}
+                checked={replaySafe}
+                onChange={(e) => setReplaySafe(e.target.checked)}
+              />
+              El enlace permite solicitudes repetidas
+            </label>
+            <p className="muted">
+              Actívalo solo para un enlace reutilizable. Ante dudas o enlaces de
+              un solo uso se usa una solicitud secuencial; Automático no anula
+              esta protección.
+            </p>
+          </>
+        ) : (
+          <Pending />
+        )}
+        {failure && (
+          <p role="alert" className="error-text">
+            {failure}
+          </p>
+        )}
         <button type="submit">Validar datos</button>
         {checked && (
           <p role="status">
@@ -174,36 +351,84 @@ export function NewDownloadDialog({ onClose, backend }: { onClose: () => void; b
           <button type="button" disabled={busy} onClick={onClose}>
             Cancelar
           </button>
-          <button type="button" disabled aria-describedby="backend-pending">
+          <button
+            type="button"
+            disabled={!backend || busy}
+            onClick={() => void submit("later")}
+          >
             Descargar después
           </button>
-          <button type="button" disabled aria-describedby="backend-pending">
+          <button
+            type="button"
+            disabled={!backend || busy}
+            onClick={() => void submit("queue")}
+          >
             Añadir a cola
           </button>
           <button
             type="button"
             className="primary"
             disabled={!backend || busy}
-            onClick={()=>void submit()}
+            onClick={() => void submit()}
           >
             Descargar ahora
           </button>
         </footer>
       </form>
+      {conflictOpen && (
+        <ExistingFileDialog
+          name={name}
+          onResume={
+            recoverable
+              ? () => {
+                  void backend
+                    ?.action(recoverable, "resume")
+                    .then(() => onClose())
+                    .catch((e) => {
+                      setFailure(String(e));
+                      setConflictOpen(false);
+                    });
+                }
+              : undefined
+          }
+          onResolve={(choice) => {
+            setConflict(choice);
+            setConflictOpen(false);
+            void submit(pendingStart, choice);
+          }}
+          onClose={() => setConflictOpen(false)}
+        />
+      )}
     </Modal>
   );
 }
-export function ExistingFileDialog({ onClose }: { onClose: () => void }) {
+export function ExistingFileDialog({
+  onClose,
+  name,
+  onResolve,
+  onResume,
+}: {
+  onClose: () => void;
+  name?: string;
+  onResolve?: (choice: ConflictPolicy) => void;
+  onResume?: () => void;
+}) {
   const [choice, setChoice] = useState("rename");
   return (
     <Modal title="Ya existe un archivo con este nombre" onClose={onClose}>
       <p className="sample-note">
-        Muestra de galería. No se consulta ni modifica el disco.
+        {onResolve
+          ? "El runtime rechazó el destino. El archivo existente se conserva hasta una publicación autorizada y verificada."
+          : "Muestra de galería. No se consulta ni modifica el disco."}
       </p>
       <div className="file-conflict">
-        <strong>Manual de ejemplo.pdf</strong>
-        <p className="muted">Descargas / Manual de ejemplo.pdf</p>
-        <small>2,4 MiB · 19 septiembre 2026 · datos de ejemplo</small>
+        <strong>{name ?? "Manual de ejemplo.pdf"}</strong>
+        {!onResolve && (
+          <>
+            <p className="muted">Descargas / Manual de ejemplo.pdf</p>
+            <small>2,4 MiB · 19 septiembre 2026 · datos de ejemplo</small>
+          </>
+        )}
       </div>
       <label className="check-field">
         <input
@@ -215,8 +440,9 @@ export function ExistingFileDialog({ onClose }: { onClose: () => void }) {
         Renombrar automáticamente
       </label>
       <p className="muted">
-        Vista previa: Manual de ejemplo (1).pdf. El motor deberá reservar el
-        nombre.
+        {onResolve
+          ? "El motor elegirá un nombre disponible al publicar."
+          : "Vista previa: Manual de ejemplo (1).pdf. El motor deberá reservar el nombre."}
       </p>
       <label className="check-field">
         <input
@@ -230,23 +456,45 @@ export function ExistingFileDialog({ onClose }: { onClose: () => void }) {
       {choice === "replace" && (
         <p role="alert" className="error-text">
           Se requiere confirmar el reemplazo del archivo indicado. No se borrará
-          nada en esta galería.
+          nada{" "}
+          {onResolve
+            ? "antes de completar y verificar la descarga nueva"
+            : "en esta galería"}
+          .
         </p>
       )}
       <label className="check-field">
-        <input type="radio" disabled name="conflict" />
+        <input
+          type="radio"
+          disabled={!onResume}
+          checked={choice === "resume"}
+          onChange={() => setChoice("resume")}
+          name="conflict"
+        />
         Reanudar
       </label>
       <p className="muted">
-        No disponible: la identidad del parcial no ha sido verificada.
+        {onResume
+          ? "Parcial identificado por URL, destino, validador y hashes durables. La respuesta HTTP debe validar la misma representación antes de continuar."
+          : "No disponible: la identidad del parcial no ha sido verificada."}
       </p>
-      <Pending />
+      {!onResolve && <Pending />}
       <footer className="dialog-actions">
         <button onClick={onClose}>Cancelar</button>
-        <button disabled aria-describedby="backend-pending">
-          {choice === "replace"
-            ? "Confirmar sobrescritura"
-            : "Usar nombre propuesto"}
+        <button
+          disabled={!onResolve}
+          onClick={() =>
+            choice === "resume"
+              ? onResume?.()
+              : onResolve?.(choice as ConflictPolicy)
+          }
+          aria-describedby={onResolve ? undefined : "backend-pending"}
+        >
+          {choice === "resume"
+            ? "Reanudar parcial validado"
+            : choice === "replace"
+              ? "Confirmar sobrescritura"
+              : "Usar nombre propuesto"}
         </button>
       </footer>
     </Modal>

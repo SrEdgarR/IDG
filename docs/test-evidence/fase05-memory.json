@@ -1,0 +1,18 @@
+{
+  "scenario": "debug; ventana oculta, transferencia local activa; muestra aislada, no comparación de liberación de RAM",
+  "webview": {
+    "count": 9,
+    "working_set_bytes": 494743552,
+    "private_bytes": 311406592
+  },
+  "runtime": {
+    "count": 1,
+    "working_set_bytes": 14458880,
+    "private_bytes": 4481024
+  },
+  "desktop": {
+    "count": 1,
+    "working_set_bytes": 39665664,
+    "private_bytes": 7561216
+  }
+}

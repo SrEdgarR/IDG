@@ -42,11 +42,15 @@ impl Store {
             0 => tx
                 .execute_batch(include_str!("../migrations/001.sql"))
                 .map_err(|_| DownloadError::Storage)?,
-            1 | 2 => {}
+            1..=3 => {}
             _ => return Err(DownloadError::Storage),
         }
         if version < 2 {
             tx.execute_batch(include_str!("../migrations/002.sql"))
+                .map_err(|_| DownloadError::Storage)?;
+        }
+        if version < 3 {
+            tx.execute_batch(include_str!("../migrations/003.sql"))
                 .map_err(|_| DownloadError::Storage)?;
         }
         tx.commit().map_err(|_| DownloadError::Storage)?;
@@ -75,6 +79,39 @@ impl Store {
                 Ok(limits)
             }
         }
+    }
+    pub fn preferences(&self) -> Result<idg_protocol::AppPreferences, DownloadError> {
+        use rusqlite::OptionalExtension;
+        let bytes: Option<Vec<u8>> = self
+            .connection
+            .query_row(
+                "SELECT protected_value FROM app_preferences WHERE id=1",
+                [],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|_| DownloadError::Storage)?;
+        let Some(bytes) = bytes else {
+            return Ok(Default::default());
+        };
+        let mut clear = protection::decrypt(&bytes)?;
+        let result = serde_json::from_slice::<idg_protocol::AppPreferences>(&clear)
+            .map_err(|_| DownloadError::Storage);
+        clear.fill(0);
+        let preferences = result?;
+        preferences.validate()?;
+        Ok(preferences)
+    }
+    pub fn save_preferences(
+        &mut self,
+        preferences: &idg_protocol::AppPreferences,
+    ) -> Result<(), DownloadError> {
+        preferences.validate()?;
+        let mut clear = serde_json::to_vec(preferences).map_err(|_| DownloadError::Storage)?;
+        let sealed = protection::encrypt(&clear);
+        clear.fill(0);
+        self.connection.execute("INSERT INTO app_preferences VALUES(1,?1) ON CONFLICT(id) DO UPDATE SET protected_value=excluded.protected_value",params![sealed?]).map_err(|_|DownloadError::Storage)?;
+        Ok(())
     }
     pub fn save_limits(
         &mut self,
@@ -142,7 +179,35 @@ mod tests {
             .connection
             .query_row("SELECT COUNT(*) FROM schema_migrations", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(n, 2);
+        assert_eq!(n, 3);
+    }
+    #[cfg(windows)]
+    #[test]
+    fn preferences_survive_reopen_without_plaintext() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("prefs.sqlite3");
+        let mut store = Store::open(&file).unwrap();
+        let prefs = idg_protocol::AppPreferences {
+            welcome_done: true,
+            directory: dir.path().to_string_lossy().into_owned(),
+            theme: "dark".into(),
+            queue_running: true,
+            ..Default::default()
+        };
+        store.save_preferences(&prefs).unwrap();
+        let bytes: Vec<u8> = store
+            .connection
+            .query_row("SELECT protected_value FROM app_preferences", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert!(
+            !bytes
+                .windows(prefs.directory.len())
+                .any(|w| w == prefs.directory.as_bytes())
+        );
+        drop(store);
+        assert_eq!(Store::open(&file).unwrap().preferences().unwrap(), prefs);
     }
     #[test]
     fn interrupted_migration_rolls_back_and_reopens() {
@@ -163,7 +228,7 @@ mod tests {
         drop(Store::open(&path).unwrap());
         let other = Connection::open(&path).unwrap();
         other
-            .execute_batch("BEGIN IMMEDIATE; INSERT INTO schema_migrations VALUES(3);")
+            .execute_batch("BEGIN IMMEDIATE; INSERT INTO schema_migrations VALUES(4);")
             .unwrap();
         assert!(matches!(Store::open(&path), Err(DownloadError::Storage)));
         other.execute_batch("COMMIT").unwrap();
@@ -173,7 +238,7 @@ mod tests {
                 r.get(0)
             })
             .unwrap();
-        assert_eq!(version, 3);
+        assert_eq!(version, 4);
     }
     #[cfg(windows)]
     #[test]

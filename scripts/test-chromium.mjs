@@ -27,7 +27,8 @@ if (existing) throw new Error("Detén el runtime antes de esta prueba aislada.")
 await mkdir(".local", { recursive: true });
 await mkdir("artifacts", { recursive: true });
 const profile = await mkdtemp(path.join(root, ".local/chromium-"));
-let runtime = spawn(exe, [], { windowsHide: true, stdio: "ignore" });
+const runtimeOptions={windowsHide:true,stdio:"ignore",env:{...process.env,IDG_DATA_DIR:path.join(profile,"state")}};
+let runtime = spawn(exe, [], runtimeOptions);
 let context;
 try {
   for (let i = 0; i < 40; i++) {
@@ -100,7 +101,7 @@ try {
     await new Promise((r) =>
       runtime.exitCode !== null ? r() : runtime.once("exit", r),
     );
-    runtime = spawn(exe, [], { windowsHide: true, stdio: "ignore" });
+    runtime = spawn(exe, [], runtimeOptions);
     for (let i = 0; i < 40; i++) {
       try {
         ping();

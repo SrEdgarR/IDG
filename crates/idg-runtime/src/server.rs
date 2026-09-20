@@ -16,9 +16,12 @@ struct State {
     stop: watch::Sender<bool>,
 }
 impl State {
-    fn update(&self, delta: i32, stopping: bool) {
+    fn update(&self, delta: i32, stopping: bool, native: bool) {
         let mut snapshot = self.snapshot.lock().unwrap();
         snapshot.clients = snapshot.clients.saturating_add_signed(delta);
+        if native {
+            snapshot.native_hosts = snapshot.native_hosts.saturating_add_signed(delta);
+        }
         snapshot.sequence = snapshot.sequence.wrapping_add(1);
         snapshot.stopping |= stopping;
         self.events.send_replace(snapshot.clone());
@@ -31,6 +34,7 @@ impl State {
 pub async fn run() -> io::Result<()> {
     let mut pending = listener(true)?;
     let snapshot = Snapshot {
+        native_hosts: 0,
         runtime_id: format!(
             "{}-{}",
             std::process::id(),
@@ -66,19 +70,20 @@ pub async fn run() -> io::Result<()> {
                 // Keep an instance alive continuously, including between accepting clients.
                 let connected = std::mem::replace(&mut pending, listener(false)?);
                 if verify_client(&connected).is_err() { continue; }
+                let native=!idg_platform_windows::is_development_probe(&connected)&&!idg_platform_windows::is_desktop(&connected);
                 let Ok(permit) = slots.clone().try_acquire_owned() else { continue; };
                 let state = state.clone();
                 tasks.spawn(async move {
                     let _permit = permit;
-                    state.update(1, false);
+                    state.update(1, false,native);
                     let _ = serve(connected, state.clone()).await;
-                    state.update(-1, false);
+                    state.update(-1, false,native);
                 });
             }
             Some(_) = tasks.join_next(), if !tasks.is_empty() => {}
         }
     }
-    state.update(0, true);
+    state.update(0, true, false);
     state.stop.send_replace(true);
     state.downloads.shutdown().await;
     while tasks.join_next().await.is_some() {}

@@ -2,7 +2,7 @@
 
 Un proyecto de gestor de descargas **gratuito y open source para Windows 10 y Windows 11**, pensado para descargar y organizar archivos con una interfaz sencilla y moderna.
 
-> **Estado actual: motor HTTP/HTTPS de desarrollo (fase 04).** Ya permite probar descargas secuenciales o por rangos paralelos, modo Automático, límites de recursos, pausa y recuperación mediante una utilidad para desarrolladores. La ventana conserva temas, filtros y diálogos, pero todavía no permite iniciar ni gestionar esas descargas. No hay instalador, versión publicada ni extensión en tiendas.
+> **Estado actual: aplicación de desarrollo (fase 05).** La ventana permite crear descargas HTTP/HTTPS, ver progreso real, pausar, recuperar, guardar para después y usar una cola básica. El motor se inicia al abrir IDG. No hay instalador, versión publicada ni extensión en tiendas. No se presenta como una versión estable para uso habitual.
 
 ## ¿Qué es IDG?
 
@@ -20,7 +20,7 @@ Consulta la [guía de instalación y estado de las versiones](docs/INSTALACION.m
 
 ## ¿Cómo probar la conexión hoy?
 
-Solo para desarrollo: sigue la [guía de compilación y carga local](docs/DESARROLLO.md). Con el motor iniciado, abre la ventana o el popup de la extensión: mostrará **Conectado**. **Reconectar** vuelve a comprobar el enlace. Cerrar el popup o la ventana conserva el motor; **Detener motor** lo cierra. La extensión no captura descargas ni solicita acceso a tus páginas. Esta carga local no es una instalación final para usuarios.
+Solo para desarrollo: sigue la [guía de compilación y carga local](docs/DESARROLLO.md) y el [recorrido desde la ventana con un archivo local](docs/APP_DEVELOPMENT.md). Abrir IDG inicia su motor validado; el popup de la extensión muestra **Conectado**. **Reconectar** comprueba el enlace, pero la extensión no inicia el motor. X oculta la ventana y conserva las descargas; **Salir completamente** confirma y guarda el estado antes de detenerlo. La extensión no captura descargas ni solicita acceso a tus páginas. Esta carga local no es una instalación final para usuarios.
 
 ## ¿Cómo se plantea usarlo?
 
@@ -35,8 +35,8 @@ Este es el flujo previsto, no una afirmación de que ya esté disponible:
 
 | Área | Qué se pretende ofrecer | Estado del kit |
 |---|---|---|
-| Descargas | HTTP/HTTPS, segmentación adaptable, recuperación, límites, colas y horarios; FTP en una fase posterior | Motor secuencial y segmentado HTTP/HTTPS probado por utilidad de desarrollo; integración visual y demás funciones pendientes |
-| Interfaz | Sidebar, temas suaves claro/oscuro/sistema, búsqueda, filtros, acciones masivas y gráficas dentro de las filas | Interfaz y galería de componentes implementadas; acciones de descarga pendientes |
+| Descargas | HTTP/HTTPS, segmentación adaptable, recuperación, límites, colas y horarios; FTP en una fase posterior | Descargas desde la ventana, pausa, recuperación, Después y cola básica; horarios, colas avanzadas y FTP pendientes |
+| Interfaz | Sidebar, temas suaves claro/oscuro/sistema, búsqueda, filtros, acciones masivas y gráficas dentro de las filas | Trabajos reales, acciones compatibles y preferencias persistentes; galería separada |
 | Navegadores | Extensión para Chrome, Edge, Firefox y otros navegadores contemplados en la matriz de pruebas; sin Safari | Puente real probado en Chrome for Testing y Firefox; captura pendiente |
 | Multimedia | Detección de contenido compatible sin DRM, selección de calidad, audio y procesamiento con FFmpeg | Planificado |
 | Organización y privacidad | Carpetas y reglas, historial, modo privado y funcionamiento local sin cuenta obligatoria | Planificado |
@@ -48,7 +48,7 @@ BitTorrent y sincronización entre equipos son ampliaciones opcionales, no requi
 
 Una herramienta de escritorio sobria, inspirada en la claridad visual de Vercel: fondos suaves, bordes discretos y la lista de descargas como elemento principal. No un panel lleno de tarjetas decorativas.
 
-La [especificación de interfaz](docs/INTERFAZ.md) explica cada pantalla y su comportamiento. El [sistema visual](docs/DESIGN_SYSTEM.md) define colores, tamaños y componentes. La ventana actual solo comprueba la conexión; todavía no representa la interfaz completa especificada.
+La [especificación de interfaz](docs/INTERFAZ.md) explica cada pantalla y su comportamiento. El [sistema visual](docs/DESIGN_SYSTEM.md) define colores, tamaños y componentes. La ventana conecta con trabajos reales; las funciones posteriores permanecen identificadas como pendientes.
 
 ## Privacidad y seguridad previstas
 
@@ -72,14 +72,16 @@ Consulta el [índice de documentación](docs/README.md), la [guía de instalaci�
 
 El proyecto se distribuye bajo **GPL-3.0-only**, únicamente la versión 3; consulta el [texto completo](LICENSE) y los [avisos de terceros](THIRD_PARTY_NOTICES.md). No se presentan los prompts como una implementación terminada del programa.
 
-![Aplicación Tauri real en tema claro](docs/images/fase02-app-light.png)
+![Descargas reales en tema claro](docs/screenshots/fase05/progreso-light.png)
 
-![Aplicación Tauri real en tema oscuro](docs/images/fase02-app-dark.png)
+![Descargas reales en tema oscuro](docs/screenshots/fase05/progreso-dark.png)
 
-Capturas auténticas en Windows 11. La lista vacía es real: todavía no hay motor de descargas. Las filas, gráficas, conflictos y opciones futuras se revisan en una **galería de desarrollo separada**, con muestras identificadas; no se guardan en el historial ni se incluyen en la compilación de producción. Consulta [cómo abrir la galería y las capturas de sus pantallas](docs/DESARROLLO.md#galería-de-interfaz-fase-02).
+![Nueva descarga real, carpeta ocultada](docs/screenshots/fase05/nueva-descarga.png)
+
+Capturas auténticas de Tauri en Windows 11 descargando archivos locales controlados. La **galería de desarrollo separada** conserva sus muestras identificadas; no aparecen en el historial real ni en el build de producción.
 
 Para desarrolladores: [recorrido del archivo de prueba](docs/HTTP_DEVELOPMENT.md), con inicio, pausa, reanudación y comprobación de SHA-256. Es una prueba del motor, no una aplicación final para usuarios.
 
 También está disponible la [prueba de segmentación y límites](docs/SEGMENTATION_DEVELOPMENT.md). Más solicitudes no garantizan mayor velocidad: las mediciones se limitan a servidores locales controlados.
 
-Fase 05 está en desarrollo: Nueva descarga ya conecta el formulario con el motor y muestra progreso real. Aún no se considera una aplicación lista para uso habitual; consulte el [estado de implementación](docs/IMPLEMENTATION_STATUS.md).
+El modo Automático conserva una solicitud cuando no se ha confirmado que el enlace admite peticiones repetidas. Editar Nueva descarga no consume el enlace. Guardar AutoPick no activa captura. Mini ventana y zona flotante son opcionales. Los avisos internos ofrecen acciones; la presentación de notificaciones Windows de desarrollo requiere comprobación manual. Consulte el [estado de implementación](docs/IMPLEMENTATION_STATUS.md) para distinguir pruebas automatizadas y pendientes; no hay confirmación humana del motor.

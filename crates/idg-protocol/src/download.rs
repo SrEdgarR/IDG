@@ -50,6 +50,8 @@ impl std::fmt::Debug for NewDownload {
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum TransferState {
+    Deferred,
+    Queued,
     Probing,
     Downloading,
     Paused,
@@ -139,6 +141,9 @@ impl DownloadError {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct DownloadSnapshot {
+    pub category: String,
+    pub domain: String,
+    pub created_at: String,
     pub options: crate::TransferOptions,
     pub active_requests: u32,
     pub target_requests: u32,

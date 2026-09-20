@@ -1,8 +1,10 @@
-import type {DownloadSnapshot} from "../../../packages/shared-types/protocol";
+import type { DownloadSnapshot } from "../../../packages/shared-types/protocol";
 // Presentation-only view model using the states in ARCHITECTURE. Not an IPC contract.
 export type TransferState =
   | "Downloading"
   | "Paused"
+  | "Deferred"
+  | "Cancelled"
   | "Queued"
   | "Completed"
   | "Failed"
@@ -29,6 +31,8 @@ export type DownloadView = {
 export const stateLabels: Record<TransferState, string> = {
   Downloading: "Descargando",
   Paused: "Pausadas",
+  Deferred: "Para después",
+  Cancelled: "Canceladas",
   Queued: "En cola",
   Completed: "Completadas",
   Failed: "Fallidas",
@@ -67,9 +71,13 @@ export function autoExpanded(count: number, availableHeight: number) {
 export function formatBytes(value: number | bigint | null) {
   if (typeof value === "bigint") {
     const units = ["B", "KiB", "MiB", "GiB"];
-    let unit = 1n, index = 0;
-    while (value >= unit * 1024n && index < 3) { unit *= 1024n; index++; }
-    const tenths = value * 10n / unit;
+    let unit = 1n,
+      index = 0;
+    while (value >= unit * 1024n && index < 3) {
+      unit *= 1024n;
+      index++;
+    }
+    const tenths = (value * 10n) / unit;
     return `${(tenths / 10n).toLocaleString("es")}${tenths % 10n ? "," + String(tenths % 10n) : ""} ${units[index]}`;
   }
   if (value === null) return "Tamaño desconocido";

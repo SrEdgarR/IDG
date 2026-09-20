@@ -120,3 +120,9 @@ Las pruebas de proceso matan solo su hijo propio, no procesos personales. Disco 
 - La prueba de crash usa una barrera HTTP para mantener un rango parcialmente escrito sin checkpoint hasta que se observa. Mata solo su runtime y libera la barrera antes de reanudar; conserva validación de rangos durables y hash final.
 
 La temporización se fundamenta en tiempo transcurrido: [Node no garantiza el instante exacto de los callbacks](https://nodejs.org/api/timers.html). La prueba no presupone que todos los runners tengan temporizadores de 16 ms.
+
+## Regresión de aplicación — fase 05
+
+`scripts/test-desktop.mjs` ejecuta test-app-download y test-desktop-start-failure: Tauri real, alta durable, doble clic/recibo, Después/Cola, pausa/hash, SC_CLOSE con progreso, reapertura única, checkpoint de salida, persistencia, Explorer, archivo bloqueado/republicación, mini con permisos mínimos y drop sin alta. Caída durante primera petición de cola recupera pausado sin repetir enlace. Arranque sin runtime adjunto debe fallar visiblemente. Solo procesos/directorios propios.
+
+`Check.ps1 -Integration` conserva HTTP/segmentación, incluido fixture compartido con callbacks tardíos de fase 04, galería y puentes Chromium/Firefox aislados. `test:ui` no sustituye estos recorridos. Clic físico de X, menú de bandeja, selector de Windows, notificación del sistema y arrastre físico: [checklist manual](APP_DEVELOPMENT.md), pendiente. Disco lleno en core se inyecta; no se llena el volumen del usuario ni se afirma E2E visual ENOSPC. [Evidencia y límites](IMPLEMENTATION_STATUS.md).

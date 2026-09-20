@@ -1,6 +1,6 @@
 # Desarrollo de IDG
 
-La fase 01 contiene un esqueleto ejecutable de conexión. No descarga archivos. La [instalación para usuarios](INSTALACION.md) sigue pendiente de una publicación; cargar esta extensión local es una prueba de desarrollo.
+La fase 05 conecta la ventana con descargas HTTP/HTTPS, preferencias y ciclo de vida reales. La [instalación para usuarios](INSTALACION.md) sigue pendiente de una publicación; cargar esta extensión local es una prueba de desarrollo.
 
 ## Entorno y versiones comprobados
 
@@ -29,23 +29,17 @@ npx --yes pnpm@12.4.2 extension:build
 
 `desktop:build` genera un ejecutable debug con frontend integrado, sin instalador. No basta compilar el HTML ni abrirlo en el navegador. Mantén los tres ejecutables junto a `idg-probe.exe` en `target/debug`: la autenticación del pipe verifica sus rutas. `0.1.0` es una versión interna de paquetes, no una release publicada.
 
-## Abrir y usar el esqueleto
+## Abrir y usar la aplicación
 
-En una terminal desde la raíz:
-
-```powershell
-.\target\debug\idg-runtime.exe
-```
-
-En otra terminal:
+Después de compilar, basta abrir desde la raíz:
 
 ```powershell
 .\target\debug\idg-desktop.exe
 ```
 
-La ventana muestra **Conectado** tras un handshake real. **Comprobar conexión** envía ping; **Reconectar** sustituye la conexión; **Detener motor** cierra el runtime y desconecta todos los clientes. Cerrar la ventana conserva el runtime. Inícialo otra vez manualmente y pulsa Reconectar. Sin runtime muestra Desconectado; ningún cliente lo relanza automáticamente.
+La apertura explícita inicia el runtime adyacente validado o conecta con el existente. Asistente y preferencias se conservan. X oculta por defecto sin detener descargas; Salir completamente advierte y guarda checkpoints. Si detienes el motor con la ventana abierta, Iniciar motor permite arrancarlo deliberadamente. La reconexión del host no lo relanza.
 
-Para desarrollo con recarga: inicia el runtime por separado y ejecuta `npx --yes pnpm@12.4.2 dev`. `npx --yes pnpm@12.4.2 build` solo construye frontend. El ejecutable `idg-probe.exe ping` comprueba estado y `idg-probe.exe shutdown` solicita salida explícita.
+Sigue el [recorrido con archivo local y checklist manual](APP_DEVELOPMENT.md). Para recarga del frontend usa `npx --yes pnpm@12.4.2 dev`; `build` solo construye frontend. `idg-probe.exe ping` consulta y `idg-probe.exe shutdown` solicita salida.
 
 ## Extensiones de desarrollo y host
 
@@ -69,7 +63,7 @@ Retirada reversible:
 .\scripts\Unregister-NativeHost.ps1
 ```
 
-Retira únicamente los registros que todavía apuntan a esta copia; conserva manifiestos y archivos. Quita la extensión local desde el navegador. Puedes volver a registrarla. Los scripts admiten `-Browser Chromium` o `-Browser Firefox`. La prueba de registro/desregistro y host ausente pasó aquí. Al entregar se retiran los registros usados por las pruebas: regístralos para tu prueba manual.
+Retira únicamente los registros que todavía apuntan a esta copia; conserva manifiestos y archivos. Quita la extensión local desde el navegador. Puedes volver a registrarla. Los scripts admiten `-Browser Chromium` o `-Browser Firefox`. La prueba de registro/desregistro y host ausente pasó aquí. En fase 05 los registros preexistentes de esta copia se conservan. No retires registros de otra instalación.
 
 ## Comprobaciones reproducibles
 
@@ -88,7 +82,7 @@ $env:PLAYWRIGHT_BROWSERS_PATH = "$PWD/tools/browsers"
 npx --yes pnpm@12.4.2 exec playwright install chromium
 .\scripts\Register-NativeHost.ps1
 .\scripts\Check.ps1 -Integration
-.\scripts\Unregister-NativeHost.ps1
+# Retira el registro al terminar solo si lo creaste exclusivamente para esta prueba.
 ```
 
 También puedes ejecutar `node scripts/test-desktop.mjs`, `node scripts/test-chromium.mjs` y `node scripts/test-firefox.mjs` individualmente. Firefox permite una ruta alternativa en `IDG_FIREFOX_BINARY`. Selenium Manager obtiene geckodriver oficial. Los perfiles son temporales/aislados; no se usan tus sesiones. Las capturas reales quedan en `artifacts/`; solo una selección revisada y saneada se versiona en `docs/images`.
@@ -139,12 +133,14 @@ El propietario confirmó temas claro/oscuro, expansión, Nueva descarga y Config
 
 Sigue el [recorrido HTTP de desarrollo](HTTP_DEVELOPMENT.md). `node scripts/test-http-runtime.mjs` descarga bytes reales, observa eventos por IPC, pausa/cancela y mata/reinicia únicamente su runtime de prueba; verifica el sufijo solicitado y SHA-256 final. Check.ps1 lo ejecuta también en CI Windows. La prueba TLS, hash incorrecto y bloqueo real de destino está en `crates/idg-core/tests/http.rs`; el fallo de disco lleno se inyecta en la escritura, sin llenar el disco del usuario. SQLite/DPAPI y migraciones tienen pruebas propias.
 
-El host de Native Messaging no tiene permiso de iniciar ni consultar trabajos. El handshake del probe anuncia la consulta de capacidades; la del host/escritorio conserva comandos anteriores. Los snapshots de trabajos no contienen URL ni directorio. Datos persistentes por defecto en el directorio de aplicación del usuario, subcarpeta `IDG/development`; las pruebas usan `IDG_DATA_DIR` local al proceso. No compartas la DB como diagnóstico público.
+El host de Native Messaging no tiene permiso de iniciar ni consultar trabajos. El handshake del probe anuncia la consulta de capacidades; la del host conserva comandos anteriores; desde fase 05 el escritorio validado recibe los comandos tipados de aplicación. Los snapshots de trabajos no contienen URL ni directorio. Datos persistentes por defecto en el directorio de aplicación del usuario, subcarpeta `IDG/development`; las pruebas usan `IDG_DATA_DIR` local al proceso. No compartas la DB como diagnóstico público.
 
 ## Segmentación y recursos (fase 04)
 
 [Guía de comandos, límites y benchmark](SEGMENTATION_DEVELOPMENT.md). Check.ps1 añade `node scripts/test-segments.mjs`; las pruebas anteriores permanecen. No se requieren paquetes nuevos ni cambios de sistema. Migración 002 conserva los documentos de fase 03 y añade ajustes protegidos; no borres la base para actualizar. [ADR-012](decisions/012-segmentacion-recursos.md) precisa elegibilidad, rangos durables, políticas de recursos/reintento y límites de la evidencia.
 
-### Desarrollo de fase 05 (en curso)
+## Aplicación conectada (fase 05)
 
-La ventana permite crear una descarga HTTP real con Nueva descarga, URL, nombre y carpeta. Compilar con `pnpm desktop:build`; en este primer incremento aún se inicia `target/debug/idg-runtime.exe` antes de `target/debug/idg-desktop.exe`. La opción de enlace reutilizable es explícita: ante incertidumbre se conserva una única solicitud secuencial. `node scripts/test-app-download.mjs` prueba el recorrido con un servidor local y carpetas aisladas; no usa enlaces personales. Las acciones de filas y el ciclo de bandeja siguen pendientes del siguiente incremento.
+[Guía completa](APP_DEVELOPMENT.md) y [ADR-013](decisions/013-aplicacion-y-ciclo-de-vida.md). `test-desktop.mjs` ejecuta descarga desde Tauri, ciclo de vida, recuperación, preferencias, mini/drop y fallo de arranque. `Check.ps1 -Integration` conserva las regresiones anteriores y agrega estas pruebas; CI no ejecuta esa matriz gráfica ni navegadores. El selector nativo, clic físico de X, menú de bandeja y entrega visual del toast tienen checklist manual. El test usa mensaje nativo SC_CLOSE, no una revisión humana.
+
+Migración 003 conserva trabajos y añade preferencias protegidas. No borres la base para actualizar. Inventario de dependencias regenerado en DEPENDENCIES.json; no hay instalador ni release. La galería anterior sigue aislada; capturas reales de 05 en screenshots/fase05.

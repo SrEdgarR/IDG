@@ -13,6 +13,7 @@
     "windows": [
       {
         "label": "main",
+        "dragDropEnabled": false,
         "title": "IDG — Internet Download Genious (desarrollo)",
         "width": 1180,
         "height": 760,

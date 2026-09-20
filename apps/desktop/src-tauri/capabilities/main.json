@@ -2,9 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
   "description": "Comandos de descargas tipados y selector de carpeta; sin filesystem ni shell genéricos.",
-  "windows": [
-    "main"
-  ],
+  "windows": ["main"],
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
@@ -12,6 +10,19 @@
     "allow-ping-runtime",
     "allow-shutdown-runtime",
     "allow-download-command",
-    "allow-choose-download-folder"
+    "allow-choose-download-folder",
+    "allow-reveal-download",
+    "allow-start-runtime",
+    "allow-default-download-directory",
+    "allow-exit-desktop",
+    "allow-hide-desktop",
+    "allow-set-mini-window",
+    "allow-show-desktop",
+    "allow-read-runtime-state",
+    "allow-detect-browsers",
+    "allow-request-desktop-exit",
+    "allow-set-drop-window",
+    "allow-review-dropped-url",
+    "allow-notify-download"
   ]
 }

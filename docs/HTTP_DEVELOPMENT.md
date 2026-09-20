@@ -1,6 +1,6 @@
 # Probar el motor HTTP de desarrollo
 
-Requiere el setup y build de [DESARROLLO](DESARROLLO.md), Windows y los ejecutables juntos en `target/debug`. Esto no es un instalador ni habilita descargas en la ventana o extensión. Usa una carpeta propia de prueba. Cierra tu runtime de desarrollo antes de una prueba aislada; no termines procesos ajenos. La base contiene datos protegidos para tu cuenta Windows, por lo que no es portable entre usuarios/equipos.
+Requiere el setup y build de [DESARROLLO](DESARROLLO.md), Windows y los ejecutables juntos en `target/debug`. Esta guía prueba la utilidad técnica; la ventana ya dispone de su [recorrido propio](APP_DEVELOPMENT.md). No es un instalador y la extensión todavía no captura descargas. Usa una carpeta propia de prueba. Cierra tu runtime de desarrollo antes de una prueba aislada; no termines procesos ajenos. La base contiene datos protegidos para tu cuenta Windows, por lo que no es portable entre usuarios/equipos.
 
 ## Recorrido reproducible
 

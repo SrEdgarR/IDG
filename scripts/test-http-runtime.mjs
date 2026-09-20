@@ -16,7 +16,7 @@ async function wait(id,predicate){for(let i=0;i<200;i++){const {job}=await probe
 const spec=(route,name)=>({url:f.url+route,directory:files,name,expected_sha256:expectedHash(),conflict:'reject'});
 try{
  await start();
- const capabilities=await probe(['capabilities']);assert.equal(capabilities.schema_version,2);assert.equal(capabilities.max_write_bytes,65536);assert.equal(capabilities.strong_validator_required,true);assert.ok(capabilities.operations.includes('add_download_with_options'));
+ const capabilities=await probe(['capabilities']);assert.equal(capabilities.schema_version,3);assert.equal(capabilities.max_write_bytes,65536);assert.equal(capabilities.strong_validator_required,true);assert.ok(capabilities.operations.includes('add_download_with_options'));assert.ok(capabilities.operations.includes('create_download'));
  await probe(['limits','set'],{max_downloads:1,global_requests:16,origin_requests:8,bytes_per_second:null});
  watcher=spawn(exe('idg-probe'),['watch'],{windowsHide:true,stdio:['ignore','pipe','ignore']});
  watcher.stdout.on('data',b=>watched+=b);
