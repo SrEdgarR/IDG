@@ -139,6 +139,14 @@ impl DownloadError {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct DownloadSnapshot {
+    pub options: crate::TransferOptions,
+    pub active_requests: u32,
+    pub target_requests: u32,
+    pub ranges_total: u32,
+    pub ranges_durable: u32,
+    pub transferred_bytes: String,
+    pub retries: u32,
+    pub strategy: String,
     pub resume_capability: ResumeCapability,
     pub integrity: IntegrityState,
     pub id: String,

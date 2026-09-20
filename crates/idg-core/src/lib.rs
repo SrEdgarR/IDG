@@ -1,4 +1,4 @@
-//! Phase 01 session state machine. No network downloads or desktop dependency.
+//! Transfer engine and IPC session logic, independent of the desktop.
 use idg_protocol::{Command, ErrorCode, Payload, Request, Response, Snapshot, VERSION};
 pub mod download;
 

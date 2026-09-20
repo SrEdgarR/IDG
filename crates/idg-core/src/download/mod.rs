@@ -1,12 +1,29 @@
 mod files;
 mod http;
+pub mod ranges;
+pub mod resources;
+mod segmented;
 pub use files::{create_job, recover, validate_input};
-pub use http::{client, transfer};
+pub use http::{client, transfer, transfer_managed};
 use idg_protocol::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Job {
+    #[serde(default)]
+    pub options: TransferOptions,
+    #[serde(default)]
+    pub ranges: Vec<ranges::DurableRange>,
+    #[serde(default)]
+    pub transferred: u64,
+    #[serde(default)]
+    pub retries: u32,
+    #[serde(skip)]
+    pub active_requests: u32,
+    #[serde(skip)]
+    pub target_requests: u32,
+    #[serde(default)]
+    pub strategy: String,
     pub id: String,
     pub input: NewDownload,
     pub final_path: String,
@@ -30,6 +47,14 @@ pub struct Job {
 impl Job {
     pub fn snapshot(&self) -> DownloadSnapshot {
         DownloadSnapshot {
+            options: self.options.clone(),
+            active_requests: self.active_requests,
+            target_requests: self.target_requests,
+            ranges_total: self.ranges.len() as u32,
+            ranges_durable: self.ranges.iter().filter(|r| r.sha256.is_some()).count() as u32,
+            transferred_bytes: self.transferred.to_string(),
+            retries: self.retries,
+            strategy: self.strategy.clone(),
             resume_capability: if self.range_confirmed {
                 ResumeCapability::RangeVerified
             } else if self.etag.is_some() {

@@ -11,7 +11,7 @@ use tokio::sync::watch;
 struct Inner {
     store: Store,
     jobs: BTreeMap<String, Job>,
-    active: Option<(String, watch::Sender<Control>)>,
+    active: BTreeMap<String, watch::Sender<Control>>,
     stopping: bool,
     unavailable: BTreeMap<String, DownloadError>,
 }
@@ -20,6 +20,7 @@ pub struct Downloads {
     inner: Arc<Mutex<Inner>>,
     events: watch::Sender<Option<(u32, DownloadSnapshot)>>,
     sequence: Arc<std::sync::atomic::AtomicU32>,
+    resources: Arc<download::resources::Resources>,
 }
 impl Downloads {
     pub fn open() -> Result<Self, DownloadError> {
@@ -35,6 +36,7 @@ impl Downloads {
         }
         std::fs::create_dir_all(&directory).map_err(|_| DownloadError::Storage)?;
         let mut store = Store::open(&directory.join("jobs.sqlite3"))?;
+        let resources = download::resources::Resources::new(store.limits()?);
         let mut jobs = BTreeMap::new();
         let loaded = store.load()?;
         for mut job in loaded.jobs {
@@ -47,20 +49,27 @@ impl Downloads {
             inner: Arc::new(Mutex::new(Inner {
                 store,
                 jobs,
-                active: None,
+                active: BTreeMap::new(),
                 stopping: false,
                 unavailable: loaded.unavailable.into_iter().collect(),
             })),
             events,
+            resources,
             sequence: Arc::new(std::sync::atomic::AtomicU32::new(0)),
         })
+    }
+    fn snapshot(&self, job: &Job) -> DownloadSnapshot {
+        let mut snapshot = job.snapshot();
+        snapshot.active_requests = self.resources.active_for(&job.id);
+        snapshot
     }
     fn emit(&self, job: &Job) {
         let sequence = self
             .sequence
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
             .wrapping_add(1);
-        self.events.send_replace(Some((sequence, job.snapshot())));
+        self.events
+            .send_replace(Some((sequence, self.snapshot(job))));
     }
     pub fn subscribe(&self) -> watch::Receiver<Option<(u32, DownloadSnapshot)>> {
         self.events.subscribe()
@@ -86,16 +95,25 @@ impl Downloads {
             return Err(DownloadError::Busy);
         }
         let target = match &request.command {
-            Command::AddDownload { .. } => Some(&request.id),
+            Command::AddDownload { .. } | Command::AddDownloadWithOptions { .. } => {
+                Some(&request.id)
+            }
             Command::GetDownload { job_id }
             | Command::ResumeDownload { job_id }
             | Command::PauseDownload { job_id }
-            | Command::CancelDownload { job_id } => Some(job_id),
+            | Command::CancelDownload { job_id }
+            | Command::SetDownloadOptions { job_id, .. }
+            | Command::GetDownloadRanges { job_id, .. } => Some(job_id),
             _ => None,
         };
         if let Some(error) = target.and_then(|id| inner.unavailable.get(id)) {
             return Err(error.clone());
         }
+        let requested_options = match &request.command {
+            Command::AddDownloadWithOptions { options, .. } => options.clone(),
+            _ => TransferOptions::default(),
+        };
+        requested_options.validate()?;
         match request.command {
             Command::GetDownloadCapabilities => Ok(Payload::DownloadCapabilities {
                 operations: [
@@ -105,31 +123,37 @@ impl Downloads {
                     "pause_download",
                     "resume_download",
                     "cancel_download",
+                    "add_download_with_options",
+                    "set_download_options",
+                    "get_download_ranges",
+                    "set_resource_limits",
+                    "get_resource_limits",
                 ]
                 .map(str::to_owned)
                 .to_vec(),
-                schema_version: 1,
-                max_active: 1,
+                schema_version: 2,
+                max_active: self.resources.limits().max_downloads,
                 max_write_bytes: 65536,
                 strong_validator_required: true,
             }),
-            Command::AddDownload { input } => {
+            Command::AddDownload { input } | Command::AddDownloadWithOptions { input, .. } => {
                 if let Some(job) = inner.jobs.get(&request.id) {
-                    return if job.input == input {
+                    return if job.input == input && job.options == requested_options {
                         Ok(Payload::Download {
-                            job: job.snapshot(),
+                            job: self.snapshot(job),
                         })
                     } else {
                         Err(DownloadError::Conflict)
                     };
                 }
-                if inner.active.is_some() {
+                if inner.active.len() >= self.resources.limits().max_downloads as usize {
                     return Err(DownloadError::Busy);
                 }
                 if inner.jobs.len() >= 10000 {
                     return Err(DownloadError::Busy);
                 }
-                let job = download::create_job(&request.id, input)?;
+                let mut job = download::create_job(&request.id, input)?;
+                job.options = requested_options;
                 if let Err(error) = inner.store.save(&job) {
                     // This path was created exclusively by this request and is still empty.
                     let _ = std::fs::remove_file(&job.temporary);
@@ -138,15 +162,11 @@ impl Downloads {
                 inner.jobs.insert(job.id.clone(), job.clone());
                 self.start(&mut inner, job.clone())?;
                 Ok(Payload::Download {
-                    job: job.snapshot(),
+                    job: self.snapshot(&job),
                 })
             }
             Command::GetDownload { job_id } => Ok(Payload::Download {
-                job: inner
-                    .jobs
-                    .get(&job_id)
-                    .ok_or(DownloadError::NotFound)?
-                    .snapshot(),
+                job: self.snapshot(inner.jobs.get(&job_id).ok_or(DownloadError::NotFound)?),
             }),
             Command::ListDownloads { offset } => {
                 let jobs = inner
@@ -154,7 +174,7 @@ impl Downloads {
                     .values()
                     .skip(offset as usize)
                     .take(50)
-                    .map(Job::snapshot)
+                    .map(|job| self.snapshot(job))
                     .collect::<Vec<_>>();
                 let next = ((offset as usize).saturating_add(50)
                     < inner.jobs.len().max(inner.unavailable.len()))
@@ -180,12 +200,12 @@ impl Downloads {
                     .get(&job_id)
                     .ok_or(DownloadError::NotFound)?
                     .clone();
-                if inner.active.as_ref().is_some_and(|(id, _)| *id == job_id) {
+                if inner.active.contains_key(&job_id) {
                     return Ok(Payload::Download {
-                        job: job.snapshot(),
+                        job: self.snapshot(&job),
                     });
                 }
-                if inner.active.is_some() {
+                if inner.active.len() >= self.resources.limits().max_downloads as usize {
                     return Err(DownloadError::Busy);
                 }
                 if matches!(
@@ -206,7 +226,7 @@ impl Downloads {
                 job.error = None;
                 self.start(&mut inner, job.clone())?;
                 Ok(Payload::Download {
-                    job: job.snapshot(),
+                    job: self.snapshot(&job),
                 })
             }
             Command::PauseDownload { job_id } | Command::CancelDownload { job_id } => {
@@ -215,16 +235,14 @@ impl Downloads {
                     .get(&job_id)
                     .ok_or(DownloadError::NotFound)?
                     .clone();
-                if let Some((id, control)) = &inner.active
-                    && *id == job_id
-                {
+                if let Some(control) = inner.active.get(&job_id) {
                     control.send_replace(if cancel {
                         Control::Cancel
                     } else {
                         Control::Pause
                     });
                     return Ok(Payload::Download {
-                        job: job.snapshot(),
+                        job: self.snapshot(&job),
                     });
                 }
                 if matches!(
@@ -234,7 +252,7 @@ impl Downloads {
                         | TransferState::PublishPending
                 ) {
                     return Ok(Payload::Download {
-                        job: job.snapshot(),
+                        job: self.snapshot(&job),
                     });
                 }
                 job.state = if cancel {
@@ -245,7 +263,52 @@ impl Downloads {
                 inner.store.save(&job)?;
                 inner.jobs.insert(job.id.clone(), job.clone());
                 Ok(Payload::Download {
-                    job: job.snapshot(),
+                    job: self.snapshot(&job),
+                })
+            }
+            Command::GetResourceLimits => Ok(Payload::ResourceLimits {
+                limits: self.resources.limits(),
+            }),
+            Command::SetResourceLimits { limits } => {
+                limits.validate()?;
+                inner.store.save_limits(&limits)?;
+                self.resources.update(limits.clone())?;
+                Ok(Payload::ResourceLimits { limits })
+            }
+            Command::SetDownloadOptions { job_id, options } => {
+                options.validate()?;
+                if inner.active.contains_key(&job_id) {
+                    return Err(DownloadError::Busy);
+                }
+                let mut job = inner
+                    .jobs
+                    .get(&job_id)
+                    .ok_or(DownloadError::NotFound)?
+                    .clone();
+                job.options = options;
+                inner.store.save(&job)?;
+                inner.jobs.insert(job_id, job.clone());
+                Ok(Payload::Download {
+                    job: self.snapshot(&job),
+                })
+            }
+            Command::GetDownloadRanges { job_id, offset } => {
+                let job = inner.jobs.get(&job_id).ok_or(DownloadError::NotFound)?;
+                let ranges = job
+                    .ranges
+                    .iter()
+                    .skip(offset as usize)
+                    .take(50)
+                    .map(|r| RangeSnapshot {
+                        start: r.start.to_string(),
+                        end_exclusive: r.end.to_string(),
+                        durable: r.sha256.is_some(),
+                    })
+                    .collect();
+                let next = offset.saturating_add(50);
+                Ok(Payload::DownloadRanges {
+                    ranges,
+                    next_offset: ((next as usize) < job.ranges.len()).then_some(next),
                 })
             }
             _ => Err(DownloadError::InvalidInput),
@@ -253,8 +316,10 @@ impl Downloads {
     }
     fn start(&self, inner: &mut Inner, mut job: Job) -> Result<(), DownloadError> {
         let (control, mut commands) = watch::channel(Control::Run);
-        inner.active = Some((job.id.clone(), control));
+        inner.active.insert(job.id.clone(), control);
+        let active_id = job.id.clone();
         let this = self.clone();
+        let worker_id = active_id.clone();
         std::thread::Builder::new()
             .name("idg-transfer".into())
             .spawn(move || {
@@ -265,11 +330,12 @@ impl Downloads {
                     .map_err(|_| DownloadError::Network)
                     .and_then(|rt| {
                         let client = download::client()?;
-                        rt.block_on(download::transfer(
+                        rt.block_on(download::transfer_managed(
                             &client,
                             &mut job,
                             &mut commands,
                             &mut sink,
+                            this.resources.clone(),
                         ))
                     });
                 if let Err(error) = result {
@@ -281,12 +347,12 @@ impl Downloads {
                 }
                 if let Ok(mut inner) = this.inner.lock() {
                     inner.jobs.insert(job.id.clone(), job.clone());
-                    inner.active = None;
+                    inner.active.remove(&worker_id);
                 }
                 this.emit(&job);
             })
             .map_err(|_| {
-                inner.active = None;
+                inner.active.remove(&active_id);
                 DownloadError::Busy
             })?;
         Ok(())
@@ -294,7 +360,7 @@ impl Downloads {
     pub async fn shutdown(&self) {
         if let Ok(mut inner) = self.inner.lock() {
             inner.stopping = true;
-            if let Some((_, control)) = &inner.active {
+            for control in inner.active.values() {
                 control.send_replace(Control::Pause);
             }
         }
@@ -302,7 +368,7 @@ impl Downloads {
             let active = self
                 .inner
                 .lock()
-                .map(|i| i.active.is_some())
+                .map(|i| !i.active.is_empty())
                 .unwrap_or(false);
             if !active {
                 break;

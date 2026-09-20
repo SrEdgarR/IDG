@@ -72,3 +72,7 @@ La prueba de runtime se niega a comenzar si detecta otra instancia. Crea su serv
 Ante `busy`, espera o pausa la transferencia activa; aún no hay colas. `unsafe_resume`, `range_ignored`, `resource_changed` o `invalid_range` conservan el parcial: no existe reinicio automático desde cero. Un enlace de un solo uso consumido puede no permitir recuperación. `publish_pending` permite `resume` tras liberar el bloqueo, sin descargar otra vez. `retry_later` no programa reintentos. TLS/DNS/conexión pueden compartir error de red sanitizado; no se registran errores HTTP con URLs completas. Los fallos de operación CLI producen salida distinta de cero.
 
 Contrato: [tipos generados](../packages/shared-types/protocol.ts), [protocolo Rust](../crates/idg-protocol/src/download.rs), [ADR-011](decisions/011-http-secuencial.md). La lista real de trabajos todavía no se presenta en la interfaz gráfica.
+
+## Continuidad en fase 04
+
+`add` conserva su contrato y el camino prudente sin autorización de GET repetidos. El runtime ahora admite hasta tres trabajos por defecto; los límites y opciones se amplían en la [guía de segmentación](SEGMENTATION_DEVELOPMENT.md). Las cifras de una transferencia activa y ausencia de reintentos anteriores describen fase 03: en 04 pueden configurarse presupuestos y autorizar reintentos/rangos mediante `replay_safe`. Los documentos están protegidos con DPAPI dentro de SQLite, no el archivo SQLite entero.

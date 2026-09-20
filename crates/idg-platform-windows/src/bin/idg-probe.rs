@@ -23,9 +23,57 @@ async fn run() -> std::io::Result<()> {
         return Err(io::Error::other("handshake"));
     };
     match mode.as_str() {
-        "add" | "status" | "pause" | "resume" | "cancel" | "list" | "capabilities" => {
+        "add" | "add-segmented" | "options" | "limits" | "ranges" | "status" | "pause"
+        | "resume" | "cancel" | "list" | "capabilities" => {
             let id = std::env::args().nth(2).unwrap_or_else(|| "list".into());
             let command = match mode.as_str() {
+                "add-segmented" | "options" | "limits" => {
+                    if mode == "limits" && std::env::args().nth(2).as_deref() != Some("set") {
+                        Command::GetResourceLimits
+                    } else {
+                        use std::io::Read;
+                        let mut bytes = Vec::new();
+                        std::io::stdin()
+                            .take((MAX_FRAME + 1) as u64)
+                            .read_to_end(&mut bytes)?;
+                        if bytes.len() > MAX_FRAME {
+                            return Err(io::Error::other("input too large"));
+                        }
+                        match mode.as_str() {
+                            "limits" => Command::SetResourceLimits {
+                                limits: serde_json::from_slice(&bytes)
+                                    .map_err(|_| io::Error::other("invalid limits"))?,
+                            },
+                            "options" => Command::SetDownloadOptions {
+                                job_id: id.clone(),
+                                options: serde_json::from_slice(&bytes)
+                                    .map_err(|_| io::Error::other("invalid options"))?,
+                            },
+                            _ => {
+                                #[derive(serde::Deserialize)]
+                                #[serde(deny_unknown_fields)]
+                                struct Input {
+                                    input: NewDownload,
+                                    options: TransferOptions,
+                                }
+                                let value: Input = serde_json::from_slice(&bytes)
+                                    .map_err(|_| io::Error::other("invalid input"))?;
+                                Command::AddDownloadWithOptions {
+                                    input: value.input,
+                                    options: value.options,
+                                }
+                            }
+                        }
+                    }
+                }
+                "ranges" => Command::GetDownloadRanges {
+                    job_id: id.clone(),
+                    offset: std::env::args()
+                        .nth(3)
+                        .unwrap_or_default()
+                        .parse()
+                        .unwrap_or(0),
+                },
                 "capabilities" => Command::GetDownloadCapabilities,
                 "add" => {
                     use std::io::Read;

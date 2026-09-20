@@ -4,6 +4,11 @@ use ts_rs::TS;
 fn main() {
     let config = ts_rs::Config::default();
     let text = [
+        RequestMode::decl(&config),
+        Priority::decl(&config),
+        TransferOptions::decl(&config),
+        ResourceLimits::decl(&config),
+        RangeSnapshot::decl(&config),
         ResumeCapability::decl(&config),
         IntegrityState::decl(&config),
         ConflictPolicy::decl(&config),
@@ -21,7 +26,15 @@ fn main() {
         ConnectionState::decl(&config),
     ]
     .into_iter()
-    .map(|line| format!("export {line}\n"))
+    .map(|line| {
+        format!(
+            "export {}\n",
+            line.lines()
+                .map(str::trim_end)
+                .collect::<Vec<_>>()
+                .join("\n")
+        )
+    })
     .collect::<String>();
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packages/shared-types");
     std::fs::create_dir_all(&root).unwrap();

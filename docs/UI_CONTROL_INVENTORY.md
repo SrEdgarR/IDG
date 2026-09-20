@@ -171,3 +171,7 @@ UX-01 asistente (galería); UX-02 shell real y estados; UX-03 filas (galería); 
 ## Transición de fase 03
 
 No se habilitan nuevos controles gráficos. El backend de iniciar/pausar/reanudar/cancelar existe y se prueba por `idg-probe`, sin declarar VERIFICADO el recorrido de los botones correspondientes. Nueva descarga, acciones de fila/masivas y configuración del motor conservan la disponibilidad explícita de fase 02; conexión, ping y reconexión sí se vuelven a probar. Las filas de muestra permanecen exclusivamente en la galería. El cierre autorizado de fase 02 aumentó 1 px la escala tipográfica compartida, sin cambiar layout, paleta ni zoom.
+
+## Transición de fase 04
+
+El motor incorpora modo Automático/manual, límites y prioridades por IPC de desarrollo; no se habilitan los controles gráficos correspondientes hasta conectarlos de extremo a extremo en su fase. La UI aprobada y la escala tipográfica se conservan. `active_requests` significa solicitudes HTTP en curso, no conexiones TCP. Pruebas de CLI/core no equivalen a pruebas de esos botones.

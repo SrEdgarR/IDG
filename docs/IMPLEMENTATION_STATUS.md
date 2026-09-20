@@ -1,6 +1,6 @@
 # Estado de implementación
 
-Estado actual: **fase 03 con CI e integración final comprobados en ed4e72e; cierre documental y transición autorizada a fase 04**.
+Estado actual: **fase 03 integrada; corrección de fase 04 VERIFICADA localmente. CI del cambio correctivo APROBADO; cierre documental para integración autorizada en curso**.
 No marcar una fila completada solo por generar archivos. Completar evidencia conforme se ejecute cada fase.
 
 Estados: PLANIFICADO, EN_CURSO, IMPLEMENTADO_NO_VERIFICADO, VERIFICADO, BLOQUEADO, DIFERIDO.
@@ -13,7 +13,7 @@ Estados: PLANIFICADO, EN_CURSO, IMPLEMENTADO_NO_VERIFICADO, VERIFICADO, BLOQUEAD
 | UI-01 a UI-08 | 02, 05, 14, 15 | EN_CURSO; capa visual 02 VERIFICADA localmente | App, DownloadList, Dialogs, Settings, galería y tokens; pruebas UI y Tauri. Backend de descargas, accesibilidad exhaustiva y rendimiento final pendientes. |
 | WIN-01 a WIN-06 | 05, 06, 08, 12, 13 | PLANIFICADO | — |
 | WIN-07 | 13, 15 | PLANIFICADO | — |
-| DL-01 HTTP/HTTPS | 03, 04 | VERIFICADO (secuencial local 03) | core/download, tests/http.rs y test-http-runtime; segmentación 04 pendiente. |
+| DL-01 HTTP/HTTPS | 03, 04 | VERIFICADO (local automatizado 03/04) | core/download, tests/http.rs, test-http-runtime y test-segments; benchmark controlado. |
 | DL-01 FTP/FTPS | 11 | PLANIFICADO | — |
 | DL-02 a DL-07 | 03, 04, 05 | EN_CURSO | Persistencia, pausa/reanudación y validación secuencial por IPC verificadas; UI y fases posteriores pendientes. |
 | DL-08 a DL-10 | 04, 05, 06, 11 | PLANIFICADO | — |
@@ -84,7 +84,7 @@ Comprobación visual: captura auténtica del WebView2 revisada, estado/PID y con
 
 ## SIGUIENTE_PASO
 
-Comprobar CI del cierre documental de PR #3 y fusionarla solo con checks aprobados y sin conflictos, conforme a autorización expresa. Desarrollar exclusivamente fase 04 en feat/04-segmentacion, inicialmente dependiente de ese cierre si sigue pendiente CI. No fusionar la PR de 04 ni avanzar a 05.
+Comprobar CI del cierre documental de PR #4, fusionarla con la autorización recibida y desarrollar fase 05 en feat/05-app-funcional. No fusionar la futura PR de 05 ni avanzar a 06. No hay confirmación humana del motor.
 
 Revisión final local: 112 archivos inspeccionados, 106 enlaces Markdown locales válidos y cero patrones de tokens/claves privadas/URLs con credenciales. Revisión estática independiente sin hallazgos bloqueantes; precisó que el test Tauri termina el proceso y no pulsa la X (recorrido manual pendiente ya indicado). Diff sin errores de whitespace. Los binarios, perfiles, herramientas descargadas y capturas están excluidos; solo se versiona la clave pública de identidad Chromium.
 
@@ -164,3 +164,61 @@ HEAD inspeccionado y conservado: `ed4e72e88cd10f493e50984b1a802b3f12e81587`. CI 
 Sobre ese mismo HEAD se ejecutó nuevamente `Check.ps1 -Integration`: 24 pruebas Rust, modelo/UI, compilación, tipos, IPC/HTTP y regresiones Tauri/WebView2, Chromium y Firefox aprobadas. Interacciones reales automatizadas; no confirmación humana del motor ni gesto del menú nativo. Antes de registrar se verificó que los cuatro registros de desarrollo estaban ausentes; se crearon para las pruebas y se retiraron al terminar, restaurando ese estado. No se encontraron procesos IDG personales activos ni se usaron perfiles personales. No se repitió ni eludió el recorrido adicional de PowerShell bloqueado anteriormente: permanece no ejecutado.
 
 Precisión de privacidad: los documentos de trabajos se protegen con DPAPI antes de almacenarlos como blobs dentro de SQLite/WAL. Esto **no es cifrado integral del archivo SQLite**: esquema e identificadores quedan visibles. La prueba manual del propietario sigue PENDIENTE. No aparecieron regresiones ni defectos bloqueantes conocidos en este cierre; el cambio es documental, sin reconstruir fase 03. La fusión de PR #3 queda autorizada únicamente tras aprobar el HEAD documental; la PR de fase 04 no tiene autorización de fusión.
+
+## Fase 04 — EN_CURSO
+
+Primer incremento: planificador de rangos semiabiertos, cobertura exacta y metadatos acotados a 4096 rangos, sin activar todavía transferencias paralelas. Dos pruebas aprobadas (`cargo test --locked -p idg-core ranges::tests`): casos generados deterministas (2000 tamaños, tres prefijos), fronteras hasta u64::MAX, huecos y solapes. Rama feat/04-segmentacion inicialmente dependiente del cierre 9bd2800 de PR #3; el código de 04 no se incorpora a esa PR.
+
+PR #3 integrada con autorización tras verificar HEAD `9bd28002fc9858ffee93ffeb53a1a17083bcf626`, sin conflictos y ui/portable/windows aprobados: [35476204831](https://github.com/SrEdgarR/IDG/actions/runs/35476204831) y [35476203071](https://github.com/SrEdgarR/IDG/actions/runs/35476203071). Merge remoto `c521a4f9c12a18eb0d70bb03d6fde9351d50e2fa`. La regresión final se ejecutó sobre ed4e72e; el cierre 9bd2800 solo documenta esos resultados.
+
+Segundo incremento de 04: rangos paralelos por IPC, writer único, checkpoints protegidos, migración 002 compatible, modo automático medido/manual, límites globales/individuales/origen y prioridades. Pruebas HTTP anteriores y nueva suite de segmentación aprobadas antes del último ajuste de observabilidad de solicitudes; ese ajuste y el benchmark se verifican en el cierre. Sin confirmación humana del motor. No se ha conectado la UI ni iniciado 05.
+
+### Cierre local de fase 04
+
+El conjunto de implementación de este cierre (su SHA se registra en la PR y entrega) pasó `Check.ps1 -Integration`: formato, Clippy, 31 pruebas Rust, tres pruebas de modelo UI, tipos/build, IPC, HTTP y segmentación, galería y regresiones Tauri/WebView2, Chromium y Firefox. Después se amplió únicamente la suite de segmentación con dos transferencias largas de Automático y se ejecutó otra vez completa con resultado aprobado. El fixture standalone también arrancó y anunció URL/hash reales. No se atribuye una nueva ejecución gráfica a esos cambios posteriores de pruebas/documentación.
+
+- VERIFICADO automáticamente: cobertura generada y fronteras hasta u64::MAX (sin escribir archivos físicos de ese tamaño), integridad de 1/4/8/16/Auto, respuestas inválidas, representación cambiada, pausa/cancelación, reintentos acotados y Retry-After extremo, recuperación tras muerte del proceso entre escritura/checkpoint sin volver a pedir rangos durables, migración desde 03 conservando el blob y límites/prioridades de tres trabajos.
+- Automático real: fixture de 64 MiB limitado por conexión conserva el aumento; fixture de 32 MiB con límite compartido vuelve de tres a dos. Se comprueba además el hash final.
+- Benchmark release: **45/45 archivos con hash esperado**, tres repeticiones por modo/condición. [Resultados, entorno y limitaciones](BENCHMARK_04.md), [datos completos](benchmarks/fase04.json). No acredita Internet ni superioridad sobre IDM.
+- Interacción real automatizada: Tauri/WebView2 y Native Messaging Chromium/Firefox; host de desarrollo retirado al finalizar, sin perfiles personales. No es revisión humana ni interacción con el menú nativo del popup.
+- Confirmado por el usuario: aceptación visual de fase 02; ninguna confirmación humana nueva del motor. Recorrido interactivo de PowerShell pendiente; no se reintentó el flujo adicional bloqueado anteriormente.
+- Pendiente: CI remoto del HEAD publicado y revisión/autorización de integración de 04. Windows 10, archivos físicos >4 GiB, energía física, diez trabajos/rendimiento prolongado, otros discos y matriz ampliada no se declaran verificados. UI de trabajos pertenece a 05; no se ha iniciado.
+
+La revisión detectó un posible desbordamiento con Retry-After extremo: ahora se conserva el plazo y se libera el slot sin crear una espera desmesurada; prueba de regresión aprobada. También se corrigieron la contabilidad de permisos HTTP activos y la limpieza de listeners del fixture. Documentos de trabajos y ajustes protegidos mediante DPAPI dentro de SQLite: **no cifrado integral de SQLite**. Guía reproducible: [segmentación y límites](SEGMENTATION_DEVELOPMENT.md).
+
+### Publicación de fase 04
+
+Implementación probada: `128c01e` más el planificador previo `6457fde`. Se incorporó main mediante merge `93ede986d66dfdf6c82e30bbbf154b7ed4aae4ce`, sin cambiar el árbol probado. Push y SHA remoto comprobados. [PR #4](https://github.com/SrEdgarR/IDG/pull/4) abierta hacia main, sin fusionar.
+
+CI observado para 93ede986: [push 35477828885](https://github.com/SrEdgarR/IDG/actions/runs/35477828885), ui aprobado y portable/windows en curso; [PR 35477856928](https://github.com/SrEdgarR/IDG/actions/runs/35477856928), ui/portable/windows en curso. No se declaran aprobados los jobs pendientes ni se atribuyen estos runs al posterior commit documental. La entrega/PR registra la consulta del HEAD final; no se promete seguimiento en segundo plano. El workflow no ejecuta la integración gráfica ni navegadores.
+
+Revisión final: 168 archivos y 151 enlaces locales válidos, diff sin errores de espacios ni patrones de secretos detectados. No es certificación absoluta. Este registro posterior solo cambia documentación y no representa otra prueba completa del producto. SIGUIENTE_PASO: comprobar el CI del HEAD vigente y revisar PR #4; integrar únicamente con autorización posterior del propietario.
+
+## Corrección puntual del CI de fase 04
+
+El CI de c73617f terminó **FALLIDO en Windows** en ambas ejecuciones, no pendiente: [push 35477886488](https://github.com/SrEdgarR/IDG/actions/runs/35477886488) y [PR 35477888133](https://github.com/SrEdgarR/IDG/actions/runs/35477888133). ui y portable aprobaron. El push ejecutó c73617f y la PR el merge temporal d30b607, con el mismo árbol Git. [Diagnóstico y causa reproducida](CI04_DIAGNOSIS.md).
+
+El fixture compartido perdía crédito con callbacks tardíos. Reproducción controlada con mínimo 16 ms: misma aserción fallida, referencia de 1.945.262 bytes/s y dos ventanas de 2.942.916 / 2.934.997 bytes/s; conservar el aumento era correcto frente a esa mejora real. No se conoce el caudal interno exacto de las ejecuciones remotas antiguas, porque no lo registraron. La corrección usa presupuesto compartido con crédito acotado y comprueba su caudal real; no fuerza el objetivo a dos ni modifica la política de Adaptive. Trazas optativas permiten observar las decisiones sin perder transiciones por sondeo.
+
+Registro de ejecuciones, sin ocultar fallos:
+
+1. Reproducción con fixture antiguo y callbacks retrasados: FALLÓ la aserción original; evidencia numérica conservada.
+2. Primera suite completa tras corregir pacing: FALLÓ en `timeout crash`, antes de los casos Automático. Se reforzó la observación con una barrera HTTP sin alterar el motor ni sus hashes/checkpoints.
+3. Suite completa con barrera: APROBADA; tres repeticiones por conexión y tres compartidas.
+4. `Check.ps1 -Integration`: APROBADO, 35 pruebas Rust, tres del modelo UI, formato/Clippy, tipos/build, HTTP/IPC/recuperación, fixture con temporizadores retrasados y otras tres repeticiones de cada condición; galería, Tauri/WebView2 y Chromium/Firefox reales automatizados.
+
+Después se afinó únicamente la asociación de cada decisión con su prueba de aumento más reciente en la aserción diagnóstica; la política Rust y la UI no cambiaron. Esa comprobación se ejecuta otra vez en un recorrido HTTP/IPC focalizado de tres repeticiones por condición. Resultados finales del recorrido y benchmark se agregan debajo.
+
+Los cuatro registros de host ya estaban presentes por la prueba manual anterior y apuntaban a esta copia. Se conservaron sin modificaciones durante la regresión. El propietario cerró su aplicación/runtime; las pruebas administraron únicamente procesos y perfiles propios. No se declara confirmación humana del motor.
+
+La interfaz, tipografía, paleta, permisos y protocolo de producto no cambian. Sin fusión de PR #4, releases ni fase 05. CI del nuevo commit correctivo se consulta después del push y se registra en la PR/entrega; el resultado del commit fallido no se presenta como éxito ni como pendiente.
+
+Recorrido focalizado final: APROBADO, otras tres repeticiones por condición (nueve aprobadas por condición en total, sumando suite completa e integración). [Trazas finales con referencia, ventanas, decisiones, coste de probe y caudal del servidor](test-evidence/adaptive-after.json). Son comprobaciones automatizadas, no confirmación humana.
+
+Benchmark afectado repetido: release, 15/15 hashes correctos, cinco modos × tres repeticiones. [Serie compartida v2](BENCHMARK_04.md) y [datos](benchmarks/fase04-shared-v2.json). Las 45 mediciones originales se comprobaron idénticas byte a byte respecto a c73617f. No se atribuyen al fixture nuevo. Código probado sin modificaciones posteriores del algoritmo; SHA de publicación se registra en PR #4 y entrega.
+
+## Transición autorizada 04 → 05
+
+HEAD 08b17caed34eb68e2411ca7f629c88f2d6d6bf76: [push 35479388766](https://github.com/SrEdgarR/IDG/actions/runs/35479388766) y [PR 35479390196](https://github.com/SrEdgarR/IDG/actions/runs/35479390196) terminaron con ui, portable y Windows aprobados. La ejecución de PR usa el merge temporal 4b26c70d5664fcc20abb57047ed45dad1617b3ac; no es el commit de la rama. Se conservan diagnóstico, fallos originales y benchmarks separados. Sin confirmación humana de descargas.
+
+El propietario autorizó fusionar solo PR #4 si el HEAD correspondiente aprueba y no hay conflictos ni defectos bloqueantes conocidos. Este cierre modifica únicamente documentación; su CI también se comprobará antes de fusionar. Mientras tanto, fase 05 puede comenzar en una rama dependiente explícita. Las pruebas locales registradas se atribuyen a 08b17ca, no se finge otra prueba de producto por esta edición.

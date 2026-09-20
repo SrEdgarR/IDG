@@ -35,7 +35,7 @@ pub fn validate_input(input: &NewDownload) -> Result<(), DownloadError> {
     }
     Ok(())
 }
-fn ordinary(path: &Path) -> Result<(), DownloadError> {
+pub(super) fn ordinary(path: &Path) -> Result<(), DownloadError> {
     for parent in path.ancestors() {
         if let Ok(m) = std::fs::symlink_metadata(parent) {
             if m.file_type().is_symlink() {
@@ -90,6 +90,13 @@ pub fn create_job(id: &str, input: NewDownload) -> Result<Job, DownloadError> {
         .map_err(file_error)?;
     file.sync_all().map_err(file_error)?;
     Ok(Job {
+        options: TransferOptions::default(),
+        ranges: Vec::new(),
+        transferred: 0,
+        retries: 0,
+        active_requests: 0,
+        target_requests: 1,
+        strategy: "sequential".into(),
         id: id.into(),
         input,
         final_path: final_path.to_string_lossy().into(),

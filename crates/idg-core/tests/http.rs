@@ -217,6 +217,33 @@ async fn changed_last_modified_with_same_etag_is_not_appended() {
     assert_eq!(std::fs::read(&j.temporary).unwrap(), b"abc");
 }
 #[tokio::test]
+async fn legacy_phase03_partial_defaults_and_resumes_without_restart() {
+    let server = server(|request| {
+        assert!(request.to_lowercase().contains("range: bytes=3-"));
+        response(
+            206,
+            "Content-Length: 3\r\nContent-Range: bytes 3-5/6\r\nETag: \"v1\"\r\n",
+            b"def",
+        )
+    })
+    .await;
+    let dir = tempfile::tempdir().unwrap();
+    let mut original = create_job("legacy", input(&dir, server.url.clone())).unwrap();
+    partial(&mut original, b"abc", 6);
+    let mut old = serde_json::to_value(&original).unwrap();
+    for key in ["options", "ranges", "transferred", "retries", "strategy"] {
+        old.as_object_mut().unwrap().remove(key);
+    }
+    let mut recovered: Job = serde_json::from_value(old).unwrap();
+    assert!(recovered.ranges.is_empty());
+    assert_eq!(recovered.durable, 3);
+    run(&mut recovered, &mut MemoryStore::default())
+        .await
+        .unwrap();
+    assert_eq!(std::fs::read(&recovered.final_path).unwrap(), b"abcdef");
+    assert_eq!(server.requests.lock().unwrap().len(), 1);
+}
+#[tokio::test]
 async fn hash_mismatch_and_conflict_preserve_existing_file() {
     let server = server(|_| response(200, "Content-Length: 3\r\n", b"abc")).await;
     let dir = tempfile::tempdir().unwrap();

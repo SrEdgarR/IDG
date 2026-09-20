@@ -100,3 +100,23 @@ El README separa usuario y desarrollador, estado previsto y verificado, instalad
 CI portable ejecuta core/protocolo/storage en Linux (DPAPI y bloqueo de archivo Windows se excluyen por plataforma). CI Windows ejecuta Check.ps1 e incluye fixture HTTP y prueba de proceso; CI ui cubre galería. Ningún workflow certifica la matriz gráfica Windows/navegadores de -Integration. Referencias de runs/SHA en IMPLEMENTATION_STATUS.
 
 Pendiente: Windows 10, navegadores de consumo adicionales, gesto del popup desde menú nativo, accesibilidad exhaustiva/DPI real, archivos enormes y perfiles de rendimiento, cortes eléctricos físicos y almacenamiento externo/red. No son afirmaciones de éxito ni razón para activar funciones de fases 04+. No hay segmentación, colas, captura o multimedia en esta prueba.
+
+## Fase 04 — pruebas incorporadas
+
+- Planificador: 2000 tamaños generados deterministas × tres prefijos, fronteras cero/uno/no divisibles/u64::MAX, huecos, solapes y límite de 4096 metadatos. No se escribió un archivo físico de u64::MAX ni >4 GiB.
+- Resources: cancelación de permiso/tokens sin fugas, presupuestos global/origen, treinta tareas de tres prioridades que progresan y adaptación con medidas, prueba rechazada si no mejora e histéresis.
+- HTTP/SQLite: las pruebas anteriores se conservan; migración del blob protegido 03 sin cambios y recuperación de parcial con campos antiguos/defaults.
+- `test-segments.mjs`: bytes/hash reales en 1/4/8/16/Automático; pequeños/0/1; fallback; 200 ignorado, solape, 416, cambio; cortes, Retry-After y valor u64 extremo sin pánico; pausa/reasignación/cancelación con respuestas tardías; crash con bytes escritos todavía no durables, reinicio pausado y solicitud exclusiva de rangos pendientes; opciones por IPC, límites persistentes, tres trabajos/prioridades y velocidad combinada.
+- `benchmark-segments.mjs`: release, 16 MiB +13 bytes, tres repeticiones × cinco modos × tres condiciones; tiempos, cuerpos emitidos/repetidos, solicitudes, CPU y RSS del runtime. El sampler de proceso es de solo lectura. 45 ejecuciones aprobadas; datos y análisis en [BENCHMARK_04](BENCHMARK_04.md).
+
+Las pruebas de proceso matan solo su hijo propio, no procesos personales. Disco lleno sigue siendo fallo inyectado y no una prueba de volumen lleno. Benchmark local no acredita Internet, IDM, energía física, disco externo, rendimiento con miles de trabajos ni Windows 10. Matriz de UI/perfiles ampliada permanece pendiente.
+
+### Regresión del CI de Automático (PR #4)
+
+- Secuencias deterministas: caudal plano, dos ventanas consecutivas de ganancia contra referencia fija, mejora de una sola ventana y presión incluso con ganancia. Se conserva la lógica existente.
+- `node scripts/test-segment-fixture.mjs`: HTTP real, dos y tres clientes, callbacks retrasados al menos 16 ms, bytes/hash y caudal agregado >=90% del configurado, con crédito máximo 256 KiB. No cambia la resolución de temporizadores del equipo.
+- `test-segments.mjs` ejecuta tres repeticiones de cada escenario Automático. Cada transferencia tiene límite de 60 s. Conserva 64 MiB por conexión y 32 MiB compartidos; exige decisión antes de los últimos 2 MiB y resultado íntegro. El compartido exige rechazo y ninguna aceptación sin ganancia; el escenario por conexión exige dos ventanas de mejora y aceptación.
+- Diagnóstico optativo debug `IDG_ADAPTIVE_TRACE`: máximo 128 líneas numéricas por transferencia, tiempo, bytes útiles, caudal, referencia, presión, objetivo, permisos activos y decisión. No contiene ID, URL ni ruta. Sin variable no emite nada; release no emite estas trazas. La prueba consume stderr y conserva decisiones, no necesita capturar el instante con snapshots. Registra por separado coste del probe, objetivos sondeados y ventanas del servidor.
+- La prueba de crash usa una barrera HTTP para mantener un rango parcialmente escrito sin checkpoint hasta que se observa. Mata solo su runtime y libera la barrera antes de reanudar; conserva validación de rangos durables y hash final.
+
+La temporización se fundamenta en tiempo transcurrido: [Node no garantiza el instante exacto de los callbacks](https://nodejs.org/api/timers.html). La prueba no presupone que todos los runners tengan temporizadores de 16 ms.
