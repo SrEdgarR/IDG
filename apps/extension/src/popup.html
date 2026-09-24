@@ -3,53 +3,59 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>IDG · conexión de desarrollo</title>
+    <title>IDG · Chromium</title>
     <link rel="stylesheet" href="tokens.css" />
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
     <main>
-      <header>
-        <strong>IDG</strong><small>EXTENSIÓN DE DESARROLLO</small>
-      </header>
+      <header><strong>IDG</strong><small>CHROMIUM · DESARROLLO</small></header>
       <section aria-label="Conexión con el motor">
-        <h1 id="status" role="status">Desconectado</h1>
-        <p id="detail">Comprobando el host local…</p>
+        <h1 id="status" role="status">Conectando…</h1>
+        <p id="detail">Comprobando el motor local.</p>
         <button id="reconnect" type="button">Reconectar</button>
       </section>
       <section>
-        <h2>Captura de descargas</h2>
-        <label for="autopick">AutoPick</label
-        ><select id="autopick" disabled aria-describedby="pending">
-          <option>Preguntarme · pendiente</option>
-          <option>Siempre usar IDG</option>
-          <option>Usar el navegador</option>
+        <h2>AutoPick</h2>
+        <label for="autopick">Modo</label>
+        <select id="autopick" disabled>
+          <option value="always">Siempre usar IDG</option>
+          <option value="ask">Preguntarme</option>
+          <option value="browser">Usar el navegador</option>
         </select>
-        <p id="pending">
-          La captura se integrará en fases 07/08. Esta extensión no lee tus
-          páginas.
-        </p>
-        <label class="site"
-          ><input
-            type="checkbox"
-            disabled
-            aria-describedby="pending"
-          />Excepción para el sitio actual</label
-        >
+        <p>Solo se proponen GET públicos y repetibles. Chromium conserva el original hasta que IDG confirma datos durables; la aceptación requiere confirmarlo en el escritorio.</p>
+        <button id="capture-permission" type="button">Activar detección global</button>
+        <button id="suspend" type="button">Suspender una hora</button>
+        <label class="site"><input id="ignore-site" type="checkbox" disabled /> Ignorar este sitio</label>
+        <details>
+          <summary>Excepciones y tamaño</summary>
+          <label for="ignore-ext">Extensiones ignoradas, separadas por comas</label>
+          <input id="ignore-ext" type="text" placeholder="zip, exe" />
+          <label for="ignore-mime">Tipos MIME ignorados, separados por comas</label>
+          <input id="ignore-mime" type="text" placeholder="application/pdf" />
+          <label for="min-kib">Tamaño mínimo (KiB)</label>
+          <input id="min-kib" type="number" min="0" max="1048576" value="0" />
+          <label for="unknown">Si no se conoce el tamaño</label>
+          <select id="unknown"><option value="browser">Usar navegador</option><option value="offer">Ofrecer en IDG</option></select>
+          <button id="save-rules" type="button">Guardar excepciones</button>
+        </details>
       </section>
       <section>
-        <h2>Descargas</h2>
-        <p>
-          El motor de descargas aún no está disponible. No hay trabajos que
-          mostrar.
-        </p>
+        <h2>Descargas en IDG</h2>
+        <ul id="jobs"><li>Sin trabajos activos.</li></ul>
       </section>
-      <footer>
-        <button disabled aria-describedby="open-pending">Abrir IDG</button
-        ><small id="open-pending"
-          >Apertura desde la extensión: pendiente de integración.</small
-        >
-      </footer>
+      <section>
+        <h2>Propuestas de Chromium</h2>
+        <ul id="offers"><li>No hay propuestas pendientes.</li></ul>
+      </section>
+      <section>
+        <h2>Enlaces de esta página</h2>
+        <button id="find-links" type="button">Previsualizar enlaces</button>
+        <p>Solo se leen los enlaces al pulsar. Selecciona uno para abrir «Nueva descarga»; no se añaden todos.</p>
+        <ul id="links"></ul>
+      </section>
+      <p id="notice" role="status"></p>
+      <footer><button id="open" type="button">Abrir IDG</button><small>Sin publicación en tiendas</small></footer>
     </main>
     <script src="popup.js"></script>
   </body>

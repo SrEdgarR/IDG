@@ -19,6 +19,8 @@ jobs:
       - run: npx --yes pnpm@12.4.2 build
       - run: npx --yes pnpm@12.4.2 exec playwright install --with-deps chromium
       - run: npx --yes pnpm@12.4.2 test:ui
+      - run: npx --yes pnpm@12.4.2 extension:build
+      - run: node scripts/test-extension-shell.mjs
   portable:
     runs-on: ubuntu-latest
     steps:

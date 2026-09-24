@@ -24,6 +24,7 @@ Invoke-Checked { node scripts/test-http-runtime.mjs }
 Invoke-Checked { node scripts/test-segment-fixture.mjs }
 Invoke-Checked { node scripts/test-segments.mjs }
 if ($Integration) {
+    Invoke-Checked { node scripts/test-extension-shell.mjs }
     Invoke-Checked { node scripts/test-ui.mjs }
     # Register explicitly beforehand. No registry mutations are hidden in this check.
     Invoke-Checked { node scripts/test-desktop.mjs }
@@ -34,5 +35,6 @@ if ($Integration) {
     Invoke-Checked { node scripts/test-import.mjs }
     Invoke-Checked { node scripts/test-queue-limits.mjs }
     Invoke-Checked { node scripts/test-chromium.mjs }
+    Invoke-Checked { node scripts/test-chromium-capture.mjs }
     Invoke-Checked { node scripts/test-firefox.mjs }
 }

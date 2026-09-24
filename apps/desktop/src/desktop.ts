@@ -10,6 +10,7 @@ import type {
   TransferOptions,
   StartPolicy,
   AppPreferences,
+  CaptureProposal,
 } from "../../../packages/shared-types/protocol";
 import type { DownloadView } from "./model";
 
@@ -51,6 +52,7 @@ export const desktop = {
     queueId = "main",
     applyRules = true,
     ruleOverrides: string[] = [],
+    context = "",
   ) =>
     execute(
       {
@@ -63,7 +65,7 @@ export const desktop = {
             queue_id: queueId,
             apply_rules: applyRules,
             rule_overrides: ruleOverrides,
-            context: "",
+            context,
             private: false,
           },
         },
@@ -75,6 +77,14 @@ export const desktop = {
     if (result.kind !== "app_preferences")
       throw Error("No se pudieron leer las preferencias.");
     return result.preferences;
+  },
+  captureRequests: async (): Promise<CaptureProposal[]> => {
+    const result = await execute("get_capture_requests");
+    if (result.kind !== "capture_requests") throw Error("No se pudieron leer las solicitudes de Chromium.");
+    return result.proposals;
+  },
+  rejectCapture: async (captureId: string) => {
+    await execute({ reject_capture: { capture_id: captureId } });
   },
   savePreferences: async (preferences: AppPreferences) => {
     const result = await execute({ set_app_preferences: { preferences } });

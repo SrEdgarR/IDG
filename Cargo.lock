@@ -1926,6 +1926,7 @@ dependencies = [
  "idg-platform-windows",
  "idg-protocol",
  "idg-storage",
+ "reqwest",
  "serde_json",
  "tokio",
 ]

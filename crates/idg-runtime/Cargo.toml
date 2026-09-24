@@ -12,3 +12,4 @@ idg-platform-windows.workspace = true
 tokio.workspace = true
 serde_json.workspace = true
 idg-storage = { path = "../idg-storage" }
+reqwest.workspace = true

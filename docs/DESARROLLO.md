@@ -73,7 +73,7 @@ Chromium: abre `chrome://extensions` (Edge: `edge://extensions`), activa el modo
 
 Firefox: abre `about:debugging#/runtime/this-firefox`, elige **Cargar complemento temporal** y selecciona `apps/extension/build/firefox/manifest.json`. Abre IDG desde el menú de extensiones. Su ID es `idg-dev@sredgarr.github.io`; se retira al cerrar el perfil. No se deshabilita la firma de extensiones. Ambos IDs son de desarrollo, no de tienda.
 
-El popup muestra Conectado solo tras handshake/suscripción. Reconectar repite ese intercambio. Cierra y vuelve a abrir el popup: recibe un snapshot nuevo del mismo motor. No captura enlaces, páginas ni descargas; su único permiso es `nativeMessaging`.
+Firefox conserva el puente de fase 01: su popup muestra Conectado solo tras handshake/suscripción y solo usa `nativeMessaging`. Chromium añade el worker y popup de [fase 07](CHROMIUM_DEVELOPMENT.md): muestra trabajos reales, guarda modo AutoPick en el runtime y pide por separado el permiso opcional `downloads`. La carga local sigue siendo para desarrollo; el traspaso básico pasó con un fixture local, pero la matriz de fallos y compatibilidad está pendiente.
 
 Retirada reversible:
 

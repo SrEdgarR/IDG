@@ -4,7 +4,7 @@ import { usePreferences } from "./desktop";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { Modal } from "./ui/Modal";
-import type { DownloadSnapshot } from "../../../packages/shared-types/protocol";
+import type { DownloadSnapshot, CaptureProposal, ConnectionState } from "../../../packages/shared-types/protocol";
 import { useState, useRef, useEffect, type ReactNode } from "react";
 import { Icon } from "./ui/Icon";
 import { useAppearance, useViewMode, type Theme } from "./ui/appearance";
@@ -145,6 +145,31 @@ export function App({
   }, [backend]);
   const [expansions, setExpansions] = useState<Record<string, boolean>>({});
   const [dialog, setDialog] = useState<"new" | "settings" | null>(null);
+  const [captures, setCaptures] = useState<CaptureProposal[]>([]);
+  const [capture, setCapture] = useState<CaptureProposal | null>(null);
+  useEffect(() => {
+    if (!backend) return;
+    let disposed = false;
+    let runtimeId = "";
+    const offs: (() => void)[] = [];
+    const refresh = () => void backend.captureRequests().then((items) => {
+      if (!disposed) setCaptures(items);
+    }).catch(() => {});
+    void listen("capture-requested", refresh).then((off) => { if (disposed) off(); else offs.push(off); });
+    void listen<ConnectionState>("runtime-state", ({ payload }) => {
+      const next = payload.snapshot?.runtime_id ?? "";
+      if (next && next !== runtimeId) { runtimeId = next; refresh(); }
+      if (!next) runtimeId = "";
+    }).then((off) => { if (disposed) off(); else offs.push(off); });
+    refresh();
+    return () => { disposed = true; offs.forEach((off) => off()); };
+  }, [backend]);
+  useEffect(() => {
+    if (!dialog && !capture && captures.length) {
+      setCapture(captures[0]);
+      setDialog("new");
+    }
+  }, [capture, captures, dialog]);
   const [stats, setStats] = useState(false);
   const [droppedUrl, setDroppedUrl] = useState("");
   const [notifications, setNotifications] = useState<DownloadSnapshot[]>([]);
@@ -725,8 +750,20 @@ export function App({
       {dialog === "new" && (
         <NewDownloadDialog
           backend={backend}
-          initialUrl={droppedUrl}
+          initialUrl={capture?.url ?? droppedUrl}
+          initialName={capture?.name ?? ""}
+          captureId={capture?.id}
+          onAccepted={() => {
+            setCaptures((items) => items.filter((item) => item.id !== capture?.id));
+            setCapture(null);
+            setDialog(null);
+          }}
           onClose={() => {
+            if (capture && backend) {
+              void backend.rejectCapture(capture.id).catch(() => {});
+              setCaptures((items) => items.filter((item) => item.id !== capture.id));
+            }
+            setCapture(null);
             setDialog(null);
             setDroppedUrl("");
           }}

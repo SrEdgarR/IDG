@@ -14,10 +14,16 @@ export function NewDownloadDialog({
   onClose,
   backend,
   initialUrl = "",
+  initialName = "",
+  captureId,
+  onAccepted,
 }: {
   onClose: () => void;
   backend?: DesktopApi;
   initialUrl?: string;
+  initialName?: string;
+  captureId?: string;
+  onAccepted?: () => void;
 }) {
   const [directory, setDirectory] = useState("");
   const { state: organization } = useOrganization(Boolean(backend));
@@ -63,11 +69,15 @@ export function NewDownloadDialog({
       setFailure("Revisa URL, nombre y carpeta.");
       return;
     }
+    if (captureId && !replaySafe) {
+      setFailure("Para transferir desde Chromium, confirma que este GET público puede repetirse sin una sesión ni un token de un solo uso. Si tienes dudas, cancela y deja la descarga en el navegador.");
+      return;
+    }
     sending.current = true;
     setBusy(true);
     setRecoverable(null);
     try {
-      if (policy === "reject") {
+      if (policy === "reject" && !captureId) {
         const match = await backend.recoverable({
           url,
           directory,
@@ -83,7 +93,7 @@ export function NewDownloadDialog({
         }
       }
       const result = await backend.add(
-        requestId.current,
+        captureId ?? requestId.current,
         { url, directory, name, expected_sha256: null, conflict: policy },
         {
           mode:
@@ -95,14 +105,16 @@ export function NewDownloadDialog({
           priority,
         },
         category,
-        start,
+        captureId ? "later" : start,
         queueId,
         applyRules,
         ruleOverrides,
+        captureId ? `extension:${captureId}` : "",
       );
       if (result.kind !== "download")
         throw new Error("El motor no confirmó el trabajo.");
-      onClose();
+      if (captureId) onAccepted?.();
+      else onClose();
     } catch (e) {
       setFailure(e instanceof Error ? e.message : String(e));
       if (e instanceof DownloadFailure && e.code === "conflict") {
@@ -114,7 +126,7 @@ export function NewDownloadDialog({
       setBusy(false);
     }
   }
-  const [name, setName] = useState("");
+  const [name, setName] = useState(initialName);
   const [url, setUrl] = useState(initialUrl);
   const [reveal, setReveal] = useState(false);
   const [checked, setChecked] = useState(false);
@@ -127,7 +139,9 @@ export function NewDownloadDialog({
       }}
     >
       <p className="muted">
-        {backend
+        {captureId
+          ? "Chromium conserva la descarga original hasta que IDG confirme un trabajo persistido y reciba datos. Si cancelas, continúa en el navegador."
+          : backend
           ? "Revisa el destino. No se consulta el enlace hasta aceptar la descarga."
           : "Prepara los datos del archivo. Todavía no se enviarán al motor."}
       </p>
@@ -143,6 +157,7 @@ export function NewDownloadDialog({
           <input
             type={reveal ? "text" : "password"}
             value={url}
+            readOnly={!!captureId}
             autoComplete="off"
             spellCheck={false}
             required
@@ -169,6 +184,7 @@ export function NewDownloadDialog({
           Nombre del archivo
           <input
             value={name}
+            readOnly={!!captureId}
             required
             aria-invalid={!!errors.name}
             aria-describedby="name-error"
@@ -416,9 +432,7 @@ export function NewDownloadDialog({
               El enlace permite solicitudes repetidas
             </label>
             <p className="muted">
-              Actívalo solo para un enlace reutilizable. Ante dudas o enlaces de
-              un solo uso se usa una solicitud secuencial; Automático no anula
-              esta protección.
+              {captureId ? "Obligatorio para transferir desde Chromium: confirma que es un GET público, repetible y sin sesión. Si no estás seguro, cancela y usa el navegador." : "Actívalo solo para un enlace reutilizable. Ante dudas o enlaces de un solo uso se usa una solicitud secuencial; Automático no anula esta protección."}
             </p>
           </>
         ) : (
@@ -441,27 +455,27 @@ export function NewDownloadDialog({
           <button type="button" disabled={busy} onClick={onClose}>
             Cancelar
           </button>
-          <button
+          {!captureId && <button
             type="button"
             disabled={!backend || busy}
             onClick={() => void submit("later")}
           >
             Descargar después
-          </button>
-          <button
+          </button>}
+          {!captureId && <button
             type="button"
             disabled={!backend || busy}
             onClick={() => void submit("queue")}
           >
             Añadir a cola
-          </button>
+          </button>}
           <button
             type="button"
             className="primary"
             disabled={!backend || busy}
             onClick={() => void submit()}
           >
-            Descargar ahora
+            {captureId ? "Aceptar en IDG" : "Descargar ahora"}
           </button>
         </footer>
       </form>

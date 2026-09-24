@@ -7,6 +7,8 @@ mod resources;
 pub use resources::*;
 mod app;
 pub use app::*;
+mod extension;
+pub use extension::*;
 mod organization;
 pub use organization::*;
 mod rules;
@@ -37,6 +39,27 @@ pub enum Command {
         draft: CreateDownload,
     },
     GetAppPreferences,
+    GetExtensionState,
+    SetExtensionMode {
+        mode: String,
+    },
+    PrepareCapture {
+        proposal: CaptureProposal,
+    },
+    GetCaptureStatus {
+        capture_id: String,
+    },
+    GetCaptureRequests,
+    RejectCapture {
+        capture_id: String,
+    },
+    StartCapture {
+        capture_id: String,
+    },
+    AbortCapture {
+        capture_id: String,
+    },
+    OpenDesktop,
     GetDownloadDirectory {
         job_id: String,
     },
@@ -163,6 +186,22 @@ pub enum Payload {
     },
     AppPreferences {
         preferences: AppPreferences,
+    },
+    ExtensionState {
+        state: ExtensionState,
+    },
+    ExtensionChanged {
+        sequence: u32,
+    },
+    CaptureRequests {
+        proposals: Vec<CaptureProposal>,
+    },
+    CaptureStatus {
+        decision: CaptureDecision,
+        job: Option<DownloadSnapshot>,
+    },
+    CaptureChanged {
+        capture_id: String,
     },
     ResourceLimits {
         limits: ResourceLimits,
