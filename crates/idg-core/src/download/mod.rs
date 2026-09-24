@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Job {
     #[serde(default)]
+    pub organization: JobOrganization,
+    #[serde(default)]
     pub creation: Option<CreateDownload>,
     #[serde(default)]
     pub options: TransferOptions,
@@ -49,11 +51,15 @@ pub struct Job {
 impl Job {
     pub fn snapshot(&self) -> DownloadSnapshot {
         DownloadSnapshot {
-            category: self
-                .creation
-                .as_ref()
-                .map(|c| c.category.clone())
-                .unwrap_or_else(|| "Otros".into()),
+            queue_id: self.organization.queue_id.clone(),
+            queue_order: self.organization.order,
+            private: self.organization.private,
+            category: self.organization.category.clone().unwrap_or_else(|| {
+                self.creation
+                    .as_ref()
+                    .map(|c| c.category.clone())
+                    .unwrap_or_else(|| "Otros".into())
+            }),
             domain: reqwest::Url::parse(&self.input.url)
                 .ok()
                 .and_then(|u| u.host_str().map(str::to_owned))

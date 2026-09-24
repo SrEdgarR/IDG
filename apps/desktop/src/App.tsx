@@ -1,3 +1,4 @@
+import { useLibrarySearch, BulkControls, LibraryPreferences } from "./Library";
 import type { DesktopApi } from "./desktop";
 import { usePreferences } from "./desktop";
 import { listen } from "@tauri-apps/api/event";
@@ -11,6 +12,15 @@ import { type DownloadView, type Filters, filterDownloads } from "./model";
 import { DownloadList, supports, type RowAction } from "./DownloadList";
 import { NewDownloadDialog } from "./Dialogs";
 import { Settings, FirstRunWizard } from "./Settings";
+import {
+  QueueEditor,
+  EnergyNotice,
+  useOrganization,
+  organize,
+} from "./Organization";
+import { RuleEditor } from "./Rules";
+import { ImportDialog } from "./Import";
+import { ClipboardNotice } from "./Clipboard";
 export const states = [
   "Todas",
   "Descargando",
@@ -61,6 +71,11 @@ export function App({
     else setLocalTheme(t);
   };
   const [filters, setFilters] = useState(emptyFilters);
+  const { state: organization } = useOrganization(Boolean(backend));
+  const [queueEditor, setQueueEditor] = useState(false);
+  const [ruleEditor, setRuleEditor] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState("");
   const [collapsed, setCollapsed] = useState(false);
   const [selected, setSelected] = useState(new Set<string>());
   const { mode, setMode: setLocalMode } = useViewMode(!backend);
@@ -167,6 +182,10 @@ export function App({
   const [actionNotice, setActionNotice] = useState("");
   const pendingActions = useRef(new Set<string>());
   async function action(id: string, command: RowAction) {
+    if (command === "organize") {
+      setSelected(new Set([id]));
+      return;
+    }
     if (!backend || pendingActions.current.has(id)) return;
     pendingActions.current.add(id);
     try {
@@ -220,8 +239,12 @@ export function App({
     setFilters({ ...filters, ...change });
     setPage(0);
   };
-  const visible = filterDownloads(rows, filters);
-  const pageRows = visible.slice(page * 50, page * 50 + 50);
+  const library = useLibrarySearch(Boolean(backend), filters, page, rows);
+  const visible = backend
+    ? rows.filter((r) => library.ids.includes(r.id))
+    : filterDownloads(rows, filters);
+  const total = backend ? library.total : visible.length;
+  const pageRows = backend ? visible : visible.slice(page * 50, page * 50 + 50);
   const active =
     filters.query ||
     filters.view !== "Todas" ||
@@ -251,6 +274,11 @@ export function App({
             <span className="muted brand-caption">Download Genious</span>
           </div>
           <nav aria-label="Descargas">
+            {backend && (
+              <button onClick={() => update({ view: "Ocultas" })}>
+                Ocultas
+              </button>
+            )}
             <small>DESCARGAS</small>
             {states.map((s, i) => (
               <button
@@ -276,13 +304,17 @@ export function App({
               </button>
             ))}
             <small>CATEGORÍAS</small>
-            {categories.map((s, i) => (
+            {(organization?.categories ?? categories).map((s, i) => (
               <button
                 key={s}
                 aria-current={filters.view === s ? "page" : undefined}
                 onClick={() => update({ view: s })}
               >
-                <Icon name={["video", "file", "code", "box", "folder"][i]} />
+                <Icon
+                  name={
+                    ["video", "file", "code", "box", "folder"][i] ?? "folder"
+                  }
+                />
                 <span>{s}</span>
               </button>
             ))}
@@ -292,7 +324,7 @@ export function App({
               <Icon name="settings" />
               <span>Configuración</span>
             </button>
-            {stats && (
+            {(backend ? organization?.library.statistics_visible : stats) && (
               <button onClick={() => update({ view: "Estadísticas" })}>
                 Estadísticas
               </button>
@@ -309,7 +341,7 @@ export function App({
                 <option value="dark">Oscuro</option>
               </select>
             </label>
-            <small className="muted">Desarrollo · fase 05</small>
+            <small className="muted">Desarrollo · fase 06</small>
           </div>
         </aside>
         <div className="workspace">
@@ -401,6 +433,16 @@ export function App({
               <Icon name="plus" />
               Nueva descarga
             </button>
+            {backend && (
+              <button
+                onClick={() => {
+                  setImportText("");
+                  setImportOpen(true);
+                }}
+              >
+                Importar enlaces
+              </button>
+            )}
           </header>
           <main>
             {backend && preferences?.drop_target && (
@@ -452,13 +494,49 @@ export function App({
             )}
             {preferencesFailure && <p role="alert">{preferencesFailure}</p>}
             {actionNotice && <p role="status">{actionNotice}</p>}
+            {library.error && <p role="alert">{library.error}</p>}
+            {library.pending && (
+              <p role="status">Buscando en el historial del motor…</p>
+            )}
+            {backend && <EnergyNotice />}
+            {backend && (
+              <ClipboardNotice
+                enabled={organization?.library.clipboard ?? false}
+                onReview={(text) => {
+                  setImportText(text);
+                  setImportOpen(true);
+                }}
+              />
+            )}
             {backend && filters.view === "En cola" && (
               <div>
                 <button onClick={() => void queue(true)}>Iniciar cola</button>
                 <button onClick={() => void queue(false)}>Detener cola</button>
+                <button onClick={() => setQueueEditor(true)}>
+                  Gestionar colas
+                </button>
+                <button onClick={() => setRuleEditor(true)}>
+                  Gestionar reglas
+                </button>
               </div>
             )}
             <div className="view-heading">
+              {queueEditor && (
+                <QueueEditor onClose={() => setQueueEditor(false)} />
+              )}
+              {ruleEditor && (
+                <RuleEditor onClose={() => setRuleEditor(false)} />
+              )}
+              {importOpen && backend && (
+                <ImportDialog
+                  backend={backend}
+                  initialText={importText}
+                  onClose={() => {
+                    setImportOpen(false);
+                    setImportText("");
+                  }}
+                />
+              )}
               <div>
                 <p className="eyebrow">TU BIBLIOTECA</p>
                 <h1>
@@ -467,8 +545,7 @@ export function App({
                     : filters.view}
                 </h1>
                 <p className="muted count">
-                  {visible.length}{" "}
-                  {visible.length === 1 ? "archivo" : "archivos"}
+                  {total} {total === 1 ? "archivo" : "archivos"}
                   {galleryTools ? " de ejemplo" : ""}
                 </p>
               </div>
@@ -518,48 +595,13 @@ export function App({
                 <small>
                   {visible.filter((r) => selected.has(r.id)).length} visibles
                 </small>
-                {backend &&
-                  (["pause", "resume", "cancel"] as const).map((command) => (
-                    <button
-                      key={command}
-                      disabled={
-                        !rows.some(
-                          (r) => selected.has(r.id) && supports(r, command),
-                        )
-                      }
-                      onClick={() =>
-                        void (async () => {
-                          for (const r of rows.filter(
-                            (r) => selected.has(r.id) && supports(r, command),
-                          ))
-                            await action(r.id, command);
-                        })()
-                      }
-                    >
-                      {command === "pause"
-                        ? "Pausar compatibles"
-                        : command === "resume"
-                          ? "Reanudar compatibles"
-                          : "Cancelar compatibles"}
-                    </button>
-                  ))}
-                {[
-                  "Pausar",
-                  "Reanudar",
-                  "Reintentar",
-                  "Mover a cola",
-                  "Cambiar categoría",
-                  "Quitar del historial",
-                ].map((t) => (
-                  <button key={t} disabled aria-describedby="batch-pending">
-                    {t}
-                  </button>
-                ))}
+                {backend && <BulkControls ids={[...selected]} rows={rows} />}
                 <button onClick={() => setSelected(new Set())}>
                   Quitar selección
                 </button>
                 <small id="batch-pending">
-                  Acciones reales pendientes de backend · fases 05/06.
+                  Solo se aplican a estados compatibles. La selección se
+                  conserva al cambiar filtros.
                 </small>
               </section>
             )}
@@ -567,10 +609,11 @@ export function App({
               <section className="empty">
                 <Icon name="file" size={28} />
                 <h2>Estadísticas opcionales</h2>
-                <p>
-                  No hay recopilación ni métricas disponibles. Integración
-                  prevista en fase 06.
-                </p>
+                {backend ? (
+                  <LibraryPreferences />
+                ) : (
+                  <p>Sin recopilación en la galería.</p>
+                )}
               </section>
             ) : previewState === "loading" ? (
               <section className="empty" aria-busy="true" role="status">
@@ -632,7 +675,7 @@ export function App({
                   setOverrides={setExpansions}
                   onAction={backend ? action : undefined}
                 />
-                {visible.length > 50 && (
+                {total > 50 && (
                   <div className="pagination">
                     <button
                       disabled={page === 0}
@@ -642,7 +685,7 @@ export function App({
                     </button>
                     <span>Página {page + 1}</span>
                     <button
-                      disabled={(page + 1) * 50 >= visible.length}
+                      disabled={(page + 1) * 50 >= total}
                       onClick={() => setPage(page + 1)}
                     >
                       Siguiente
@@ -691,14 +734,36 @@ export function App({
       )}{" "}
       {dialog === "settings" && (
         <Settings
+          onQueues={() => {
+            setDialog(null);
+            setQueueEditor(true);
+          }}
+          onRules={() => {
+            setDialog(null);
+            setRuleEditor(true);
+          }}
           backend={backend}
           preferences={preferences}
           savePreferences={savePreferences}
           onClose={() => setDialog(null)}
           theme={theme}
           setTheme={setTheme}
-          stats={stats}
-          setStats={setStats}
+          stats={
+            backend
+              ? (organization?.library.statistics_visible ?? false)
+              : stats
+          }
+          setStats={(value) => {
+            if (backend && organization)
+              void organize({
+                action: "set_library_settings",
+                settings: {
+                  ...organization.library,
+                  statistics_visible: value,
+                },
+              }).catch((e) => setActionNotice(String(e)));
+            else setStats(value);
+          }}
           mode={mode}
           setMode={setMode}
         />

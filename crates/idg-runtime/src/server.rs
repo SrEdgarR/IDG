@@ -61,8 +61,11 @@ pub async fn run() -> io::Result<()> {
     });
     let slots = Arc::new(Semaphore::new(16));
     let mut tasks = tokio::task::JoinSet::new();
+    let mut clock = tokio::time::interval(std::time::Duration::from_secs(1));
+    clock.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     loop {
         tokio::select! {
+            _ = clock.tick() => {let downloads=state.downloads.clone();let _=tokio::task::spawn_blocking(move||downloads.tick()).await;},
             _ = stopped.changed() => break,
             _ = tokio::signal::ctrl_c() => break,
             result = pending.connect() => {

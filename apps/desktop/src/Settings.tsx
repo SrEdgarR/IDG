@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { LibraryPreferences } from "./Library";
 import { execute, type DesktopApi } from "./desktop";
 import type {
   AppPreferences,
@@ -76,6 +77,8 @@ export function Settings({
   backend,
   preferences,
   savePreferences,
+  onQueues,
+  onRules,
 }: {
   onClose: () => void;
   theme: Theme;
@@ -87,6 +90,8 @@ export function Settings({
   backend?: DesktopApi;
   preferences?: AppPreferences | null;
   savePreferences?: (change: Partial<AppPreferences>) => Promise<void>;
+  onQueues?: () => void;
+  onRules?: () => void;
 }) {
   const [section, setSection] = useState(sections[0]);
   const [error, setError] = useState("");
@@ -150,8 +155,8 @@ export function Settings({
                 Mostrar sección de estadísticas
               </label>
               <p className="muted">
-                Solo muestra su estado vacío durante esta sesión; no recopila
-                datos.
+                Mostrar la sección no activa la recopilación. La recopilación se
+                configura en Privacidad.
               </p>
               {[
                 "Idioma: Español",
@@ -159,7 +164,6 @@ export function Settings({
                 "Comportamiento de X",
                 "Mini ventana",
                 "Zona de arrastre",
-                "Monitorizar portapapeles",
               ]
                 .filter(
                   (t) =>
@@ -281,11 +285,17 @@ export function Settings({
                 intercepta descargas.
               </p>
             </>
+          ) : backend && section === "Privacidad" ? (
+            <LibraryPreferences />
           ) : backend && section === "Colas y programación" ? (
-            <p>
-              La cola básica se inicia o detiene desde En cola. Edición avanzada
-              y horarios: fase 06.
-            </p>
+            <div>
+              <p>
+                Los editores guardan en el motor. Programar requiere Windows
+                despierto y el motor activo.
+              </p>
+              <button onClick={onQueues}>Gestionar colas</button>
+              <button onClick={onRules}>Gestionar reglas y categorías</button>
+            </div>
           ) : (
             <>
               <p className="muted">

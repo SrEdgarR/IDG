@@ -2,7 +2,7 @@
 
 Un proyecto de gestor de descargas **gratuito y open source para Windows 10 y Windows 11**, pensado para descargar y organizar archivos con una interfaz sencilla y moderna.
 
-> **Estado actual: aplicación de desarrollo (fase 05).** La ventana permite crear descargas HTTP/HTTPS, ver progreso real, pausar, recuperar, guardar para después y usar una cola básica. El motor se inicia al abrir IDG. No hay instalador, versión publicada ni extensión en tiendas. No se presenta como una versión estable para uso habitual.
+> **Estado actual: aplicación de desarrollo (fase 06, en revisión).** Permite descargas HTTP/HTTPS reales, colas con horarios, reglas de carpeta/categoría, importación de enlaces, búsqueda e historial. El motor se inicia al abrir IDG. No hay instalador, versión publicada ni extensión en tiendas. No se presenta como una versión estable para uso habitual.
 
 ## ¿Qué es IDG?
 
@@ -22,6 +22,8 @@ Consulta la [guía de instalación y estado de las versiones](docs/INSTALACION.m
 
 Solo para desarrollo: sigue la [guía de compilación y carga local](docs/DESARROLLO.md) y el [recorrido desde la ventana con un archivo local](docs/APP_DEVELOPMENT.md). Abrir IDG inicia su motor validado; el popup de la extensión muestra **Conectado**. **Reconectar** comprueba el enlace, pero la extensión no inicia el motor. X oculta la ventana y conserva las descargas; **Salir completamente** confirma y guarda el estado antes de detenerlo. La extensión no captura descargas ni solicita acceso a tus páginas. Esta carga local no es una instalación final para usuarios.
 
+El [recorrido de organización de fase 06](docs/FASE06_PRUEBA_MANUAL.md) explica cómo importar enlaces, usar dos colas, programar un inicio y revisar reglas. Al guardar un horario, el editor distingue la fecha aún sin guardar de la programación confirmada por el motor. Los horarios necesitan el motor activo y Windows despierto. Estadísticas y monitor del portapapeles están apagados por defecto; este último propone enlaces, nunca descarga silenciosamente. Quitar del historial conserva el archivo. Eliminarlo del disco requiere otra confirmación y no permite deshacer. Las pruebas de energía usan simulación, sin apagar ni suspender el equipo.
+
 ## ¿Cómo se plantea usarlo?
 
 Este es el flujo previsto, no una afirmación de que ya esté disponible:
@@ -35,11 +37,11 @@ Este es el flujo previsto, no una afirmación de que ya esté disponible:
 
 | Área | Qué se pretende ofrecer | Estado del kit |
 |---|---|---|
-| Descargas | HTTP/HTTPS, segmentación adaptable, recuperación, límites, colas y horarios; FTP en una fase posterior | Descargas desde la ventana, pausa, recuperación, Después y cola básica; horarios, colas avanzadas y FTP pendientes |
-| Interfaz | Sidebar, temas suaves claro/oscuro/sistema, búsqueda, filtros, acciones masivas y gráficas dentro de las filas | Trabajos reales, acciones compatibles y preferencias persistentes; galería separada |
+| Descargas | HTTP/HTTPS, segmentación adaptable, recuperación, límites, colas y horarios; FTP en una fase posterior | Descargas reales, pausa, recuperación, Después, colas nombradas y horarios únicos; FTP pendiente |
+| Interfaz | Sidebar, temas suaves claro/oscuro/sistema, búsqueda, filtros, acciones masivas y gráficas dentro de las filas | Búsqueda en el motor, acciones masivas con resultados parciales y preferencias persistentes; galería separada |
 | Navegadores | Extensión para Chrome, Edge, Firefox y otros navegadores contemplados en la matriz de pruebas; sin Safari | Puente real probado en Chrome for Testing y Firefox; captura pendiente |
 | Multimedia | Detección de contenido compatible sin DRM, selección de calidad, audio y procesamiento con FFmpeg | Planificado |
-| Organización y privacidad | Carpetas y reglas, historial, modo privado y funcionamiento local sin cuenta obligatoria | Planificado |
+| Organización y privacidad | Carpetas y reglas, historial, modo privado y funcionamiento local sin cuenta obligatoria | Reglas, categorías, TXT/CSV, historial reversible y estadísticas locales opcionales; modo privado completo y detección de archivos movidos pendientes |
 | Distribución | Instalador Windows y actualizaciones verificadas desde GitHub Releases, aceptadas por el usuario | Planificado |
 
 BitTorrent y sincronización entre equipos son ampliaciones opcionales, no requisitos de la primera versión. La compatibilidad definitiva se publicará solo después de probarla.
@@ -78,10 +80,10 @@ El proyecto se distribuye bajo **GPL-3.0-only**, únicamente la versión 3; cons
 
 ![Nueva descarga real, carpeta ocultada](docs/screenshots/fase05/nueva-descarga.png)
 
-Capturas auténticas de Tauri en Windows 11 descargando archivos locales controlados. La **galería de desarrollo separada** conserva sus muestras identificadas; no aparecen en el historial real ni en el build de producción.
+Capturas auténticas conservadas de fase 05: Tauri en Windows 11 descargando archivos locales controlados. La **galería de desarrollo separada** conserva sus muestras identificadas; no aparecen en el historial real ni en el build de producción.
 
 Para desarrolladores: [recorrido del archivo de prueba](docs/HTTP_DEVELOPMENT.md), con inicio, pausa, reanudación y comprobación de SHA-256. Es una prueba del motor, no una aplicación final para usuarios.
 
 También está disponible la [prueba de segmentación y límites](docs/SEGMENTATION_DEVELOPMENT.md). Más solicitudes no garantizan mayor velocidad: las mediciones se limitan a servidores locales controlados.
 
-El modo Automático conserva una solicitud cuando no se ha confirmado que el enlace admite peticiones repetidas. Editar Nueva descarga no consume el enlace. Guardar AutoPick no activa captura. Mini ventana y zona flotante son opcionales. Los avisos internos ofrecen acciones; la presentación de notificaciones Windows de desarrollo requiere comprobación manual. Consulte el [estado de implementación](docs/IMPLEMENTATION_STATUS.md) para distinguir pruebas automatizadas y pendientes; no hay confirmación humana del motor.
+El modo Automático conserva una solicitud cuando no se ha confirmado que el enlace admite peticiones repetidas. Editar Nueva descarga no consume el enlace. Guardar AutoPick no activa captura. Mini ventana y zona flotante son opcionales. Los avisos internos ofrecen acciones; la presentación de notificaciones Windows depende de sus políticas. El propietario confirmó el recorrido general de fase 05; la revisión manual nueva de fase 06 está pendiente. Consulta el [estado de implementación](docs/IMPLEMENTATION_STATUS.md) para distinguir esa confirmación de las pruebas automatizadas y sus límites.

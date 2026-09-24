@@ -1,0 +1,37 @@
+# ADR 014 — Organización durable y programación de una sola ejecución
+
+Estado: aceptado para fase 06. No cambia stack ni alcance.
+
+Organización adicional: reglas declarativas (menor orden y después ID, primera asignación de cada campo), búsqueda en el runtime y recibos durables de lotes. El motor conserva las solicitudes originales para idempotencia y aplica sus metadatos de organización por separado. Una vista previa no realiza GET; aplicar a trabajos anteriores requiere aceptación de un resultado todavía coincidente y no mueve destinos existentes.
+
+Los lotes reclaman su intención antes de ejecutar operaciones. Tras una caída, los elementos sin respuesta se muestran «sin confirmación», no se repiten automáticamente y no se presentan como éxito. Las importaciones usan CreateDownload con identificador estable por entrada. URL completa y contexto distinguen posibles duplicados; nombre o URL redactada nunca bastan. El hash esperado, cuando existe, se compara con el conocido. La coincidencia es una advertencia, no una fusión ni un borrado automático.
+
+La búsqueda recorre trabajos dentro del runtime; devuelve solo identificadores, total y paginación de 50. Consulta nombre, dominio, categoría y carpeta; la parte segura de URL es el origen. Excluye consulta, fragmento, credenciales y segmentos arbitrarios de ruta URL. No crea un índice en texto claro ni envía la base descifrada al escritorio.
+
+Historial permanente por defecto. La retención opcional oculta trabajos terminados y conserva los datos protegidos de recuperación; no es borrado de datos personales ni de archivos. Restaurar inicia un nuevo período de visibilidad sin falsificar la fecha de finalización. Borrar un archivo es otra operación: confirmación con ruta enumerada, estado completado, tamaño y SHA-256 verificados con el mismo handle exclusivo, padres retenidos sin compartir borrado y rechazo de puntos de reanálisis. No usa papelera ni promete deshacer; conserva el historial. La detección general de archivos movidos sigue en 12.
+
+La eliminación explícita conserva la identidad del archivo mediante el handle verificado hasta su disposición final. No se ha conectado una operación de papelera basada en ruta que obligue a soltar esa protección. Por ello el diálogo exige aceptar eliminación permanente; quitar del historial sigue siendo reversible. No se presenta esta limitación como recuperación de archivos ni como papelera implementada.
+
+La verificación del archivo libera el mutex del runtime después de reclamar la intención durable. Se registra como operación pendiente: otra eliminación del mismo trabajo se rechaza, la salida coordinada espera su fin y energía no puede dispararse durante la operación. Iniciarla cancela una cuenta atrás existente aun si finalmente se rechaza el archivo por haber cambiado. Una respuesta IPC interrumpida consulta el recibo y no repite el borrado.
+
+Estadísticas locales opt-in: una finalización cuenta una vez, junto con bytes del archivo verificado, mediante un marcador durable por trabajo y actualización atómica de contadores. Excluye private y no reconstruye estadísticas borradas. Habilitarlas no cuenta archivos antiguos. El modo privado completo sigue en su fase.
+
+La media es de ciclo completo: suma de bytes verificados de muestras con intervalo positivo dividida por suma de segundos desde alta hasta observación de finalización, incluyendo cola, pausas y verificación. Resolución de un segundo; intervalos nulos o negativos (retroceso de reloj) se excluyen de la media, sin inventar duración. No mide velocidad instantánea ni compara rendimiento de red. Se conservan hasta 32 dominios sin ruta/query/credenciales, ordenados por número exacto de archivos y dominio; los siguientes se agrupan en Otros sin atribuirles un ranking individual. Borrar estadísticas elimina también tiempos y sitios. Estos límites evitan un agregado ilimitado o sensible.
+
+Portapapeles: sin observar estando desactivado; activarlo toma solo una secuencia inicial. Después consulta cambios una vez por segundo, copia como máximo 64 KiB y propone hasta 32 URLs durante cinco minutos, sin alta automática. Guarda propuestas únicamente en memoria, deduplica por hash del conjunto completo de URLs y las descarta al desactivar. Las pruebas usan una fuente aislada de desarrollo; nunca el portapapeles del propietario. La API nativa queda separada del core testeable.
+
+Referencias adicionales: [SetFileInformationByHandle](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-setfileinformationbyhandle), [GetClipboardData](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getclipboarddata), [GetClipboardSequenceNumber](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getclipboardsequencenumber). API verificadas en documentación oficial y bindings windows-sys 0.61.2; no se añadieron versiones nuevas del stack.
+
+El runtime es el único escritor. La migración 004 conserva los trabajos y preferencias anteriores; añade configuración de organización y recibos de operaciones protegidos mediante DPAPI. Los cambios de cola y sus trabajos se confirman en una transacción. Reutilizar un identificador con otra operación se rechaza; repetir la misma operación devuelve el recibo original.
+
+Cada trabajo conserva su solicitud de creación original. Su cola y posición son metadatos separados; no se mueve un trabajo activo para evitar sobrescribir el checkpoint del trabajador. Eliminar una cola exige una cola de destino y no elimina trabajos ni archivos. Detener una cola impide nuevos inicios; pausar activas es otra operación.
+
+El planificador reparte plazas por turnos entre colas ejecutables, empezando por prioridad y manteniendo un cursor que evita inanición. Aplica el menor límite disponible entre capacidad global y concurrencia de cola; los presupuestos globales, por origen y por trabajo del motor siguen vigentes. Una descarga explícita tampoco elude la concurrencia de su cola.
+
+La programación inicial es un instante único UTC (segundos hasta 2106), elegido mediante fecha ISO y zona explícita. La interfaz muestra también la hora del equipo. El estado aplicado se persiste antes de iniciar trabajos: retroceder el reloj o repetir una hora por horario de verano no vuelve a aplicarlo. Hasta 15 minutos de retraso se recupera; después se marca vencido. Requiere runtime activo y Windows despierto. Editar el mismo instante no restablece un horario consumido.
+
+La energía requiere una activación explícita independiente de guardar la cola. Se consume durablemente antes de iniciar una cuenta atrás monotónica de 60 segundos. Reiniciar el runtime cancela esa cuenta; nunca la restaura ni reintenta la acción. Solo todos los trabajos completados y publicados, sin trabajadores, registros inaccesibles ni horarios pendientes permiten continuar. Errores, cancelaciones, pausas y descargas diferidas bloquean; acciones distintas entre colas también bloquean. Cambiar la organización cancela la cuenta atrás.
+
+Windows recibe una operación fija, sin shell, elevación ni cierre forzado de aplicaciones. Se habilita temporalmente un privilegio ya presente en el token y se restaura; su ausencia es un error. La aceptación de Windows no acredita que el apagado termine. Las pruebas usan exclusivamente el adaptador simulado.
+
+Fuentes oficiales verificadas: [ExitWindowsEx](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-exitwindowsex), [SetSuspendState](https://learn.microsoft.com/en-us/windows/win32/api/powrprof/nf-powrprof-setsuspendstate).

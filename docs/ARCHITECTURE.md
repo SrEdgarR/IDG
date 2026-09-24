@@ -2,6 +2,10 @@
 
 Las decisiones de fase 00 y sus hipótesis de validación están en [ADR](decisions/README.md); la asignación a fases está en [Trazabilidad](TRACEABILITY.md). Documentación no equivale a implementación.
 
+Concreción 06: [ADR-014](decisions/014-organizacion-y-programacion.md). OrganizationCommand y LibraryCommand son IPC del escritorio principal; mini ventana conserva su lista restringida de lectura. El runtime mantiene colas, horarios, reglas y biblioteca; el core evalúa políticas sin React ni Tauri. Migración 004 añade configuración/recibos DPAPI sin reinicializar trabajos, preferencias o límites. Los snapshots de búsqueda contienen identificadores y conteo, sin URLs completas.
+
+Importaciones usan CreateDownload, nunca un motor paralelo. La idempotencia de lote se reclama durablemente antes de efectos: una caída puede dejar resultados sin confirmación, pero nunca inicia un replay automático. Planificación y estadísticas persisten su consumo antes de una repetición posible. Retención es ocultación reversible, no borrado físico. Energía y borrado confirmado se realizan mediante adaptadores Windows específicos. El monitor del portapapeles solo observa cambios cuando está habilitado y mantiene propuestas en memoria, con caducidad y límites.
+
 ## 1. Procesos y responsabilidades
 
 ```text

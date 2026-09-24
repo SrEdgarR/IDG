@@ -2,6 +2,21 @@
 
 Este documento exige evidencia, no resultados anticipados. Todos los archivos de prueba pertenecen a fixtures o directorios temporales creados por las pruebas. No borrar descargas personales ni usar páginas de terceros como único banco de pruebas.
 
+## Cobertura añadida en fase 06
+
+| Prueba | Requisitos comprobados |
+|---|---|
+| core organization/power/rules/library/clipboard | Reloj controlado, vencimiento/no repetición, otras tareas bloquean energía, cancelación, precedencia/desconocidos, búsqueda Unicode/61 trabajos/paginación/sintaxis, URL completa/contexto, retención, media de ciclo/sitios acotados/privados/retroceso de reloj, monitor apagado sin llamadas al adaptador y caducidad. |
+| storage | Migración 05→06 conserva blob, preferencias y límites; defaults, reapertura, transacción/recibo y rollback conjunto. |
+| `test-ui.mjs` / `gallery/PreferencesFixture.tsx` | Regresión de formulario: preferencias diferidas no modifican la carpeta enfocada antes del primer carácter, en Nueva descarga e Importar. Fixture excluido del bundle de producción; es una prueba de UI controlada, no de IPC. |
+| `test-organization.mjs` | Tauri/HTTP: crear, ordenar, mover, concurrencia, detener frente a pausar, rechazo seguro cuando se llena la cola, horario único, reasignación, hashes y cancelar energía simulada. |
+| `test-rules.mjs` | Editor Tauri/categorías, vista previa sin GET, carpeta/categoría reales, elección explícita y aceptación retroactiva sin mover archivos. |
+| `test-library.mjs` | Búsqueda y selección en Tauri, lotes parciales/repetidos por IPC, ocultar/restaurar conservando archivo, estadísticas opt-in/exclusión/borrado, archivo cambiado rechazado y borrado confirmado de fixture desde Tauri. Iniciar verificación de borrado cancela una cuenta atrás de energía simulada. |
+| `test-import-parser.mjs` / `test-import.mjs` | UTF-8/16, comillas/BOM/filas vacías, límites y errores; CSV y drop DOM en Tauri, corregir/excluir, duplicados, alta idempotente y hashes; monitor de fixture sin altas automáticas y desactivación. |
+| `test-queue-limits.mjs` | Colas comparten presupuestos; turno de prioridad baja, cola de concurrencia uno, límite por trabajo/origen/global, cancelar espera sin GET, caída sin replay, cierre nativo y reapertura conservando singleton/configuración. |
+
+Los scripts gráficos pertenecen a `-Integration`; CI ui/portable/windows no los ejecuta por aprobar el workflow normal. Mantener las regresiones HTTP, segmentación, integridad y enlaces de un solo uso de 03/04/05. Las acciones físicas de energía nunca se ejecutan. El adaptador de portapapeles real, el arrastre físico desde Windows, Windows 10 y accesibilidad exhaustiva se distinguen de las pruebas con fuentes/eventos controlados. Estado y ejecuciones efectivas en [IMPLEMENTATION_STATUS](IMPLEMENTATION_STATUS.md).
+
 ## 1. Servidor HTTP/HTTPS controlado
 
 Crear un servidor local determinista con endpoints para los siguientes comportamientos. Las peticiones y bytes servidos se cuentan para verificar reanudación y duplicados.

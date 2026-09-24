@@ -24,3 +24,5 @@ Concreción y evidencia de fase 01: [ADR-009](009-esqueleto-verificado.md).
 - [ADR-012 — Segmentación y recursos](012-segmentacion-recursos.md): writer coordinado, recuperación por rangos, modos, presupuestos y migración compatible.
 
 - [ADR-013 — Aplicación conectada y ciclo de vida](013-aplicacion-y-ciclo-de-vida.md): alta durable, cola básica, preferencias, bandeja, ventanas y permisos de escritorio.
+
+- [ADR-014 — Organización y programación](014-organizacion-y-programacion.md): colas, reglas, biblioteca, importaciones, retención, estadísticas y adaptadores de energía/portapapeles.

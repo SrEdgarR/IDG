@@ -377,6 +377,14 @@ async fn transfer_inner(
     let parallel_hint =
         header(&response, ACCEPT_RANGES).is_some_and(|v| v.eq_ignore_ascii_case("bytes"));
     job.state = TransferState::Downloading;
+    job.organization.media_type = header(&response, CONTENT_TYPE)
+        .and_then(|s| {
+            s.split(';')
+                .next()
+                .map(str::trim)
+                .map(str::to_ascii_lowercase)
+        })
+        .filter(|s| s.len() <= 120 && !s.chars().any(char::is_control));
     job.error = None;
     job.retry_after_seconds = None;
     store.save(job)?;

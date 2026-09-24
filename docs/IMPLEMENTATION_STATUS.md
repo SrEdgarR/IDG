@@ -1,6 +1,6 @@
 # Estado de implementación
 
-Estado actual: **fase 04 integrada en main; fase 05 implementada y VERIFICADA en las pruebas automáticas locales descritas debajo. Revisión manual parcial y CI del HEAD de entrega pendientes.** No se declara verificación completa de la matriz Windows ni confirmación humana del motor.
+Estado actual: **fase 05 integrada; fase 06 implementada, EN_CURSO de revisión**. Comprobaciones locales del conjunto final aprobadas; ver cierre 06 y límites de verificación. El propietario confirma que el recorrido manual de 05 funciona correctamente. Es un resultado comunicado por el propietario, no una prueba automatizada ni una certificación de Windows 10, accesibilidad exhaustiva o matriz completa.
 No marcar una fila completada solo por generar archivos. Completar evidencia conforme se ejecute cada fase.
 
 Estados: PLANIFICADO, EN_CURSO, IMPLEMENTADO_NO_VERIFICADO, VERIFICADO, BLOQUEADO, DIFERIDO.
@@ -16,9 +16,12 @@ Estados: PLANIFICADO, EN_CURSO, IMPLEMENTADO_NO_VERIFICADO, VERIFICADO, BLOQUEAD
 | DL-01 HTTP/HTTPS | 03, 04 | VERIFICADO (local automatizado 03/04) | core/download, tests/http.rs, test-http-runtime y test-segments; benchmark controlado. |
 | DL-01 FTP/FTPS | 11 | PLANIFICADO | — |
 | DL-02 a DL-07 | 03, 04, 05 | EN_CURSO | Persistencia, pausa/reanudación y validación secuencial por IPC verificadas; UI conectada en 05; funciones de fases posteriores pendientes. |
-| DL-08 a DL-10 | 04, 05, 06, 11 | PLANIFICADO | — |
-| ORG-01 a ORG-03 | 06, 07 | PLANIFICADO | — |
-| ORG-04 a ORG-06 | 06, 12 | PLANIFICADO | — |
+| DL-08 | 04, 06 | IMPLEMENTADO; ver cierre 06 y límites | Colas, planificación y energía opt-in; límites compartidos/equidad probados. Energía física no ejecutada. |
+| DL-09 a DL-10 | 03, 04, 05, 11 | EN_CURSO | Runtime independiente y cierre con progreso probados; proxies/compatibilidad ampliada pendientes. |
+| ORG-01 a ORG-02 | 06 | IMPLEMENTADO; ver cierre 06 | Reglas/categorías y lotes con resultados parciales, recibos y confirmación. |
+| ORG-03 | 06, 07 | EN_CURSO | Importación/preview y monitor opt-in; recogida de enlaces desde páginas pendiente de 07. |
+| ORG-04 | 06, 12 | EN_CURSO | Retención/historial restaurable; presencia/identificación general de archivos en 12. |
+| ORG-05 a ORG-06 | 06, 12 | IMPLEMENTADO; ver cierre 06 y límites | URL/contexto/hash, estadísticas locales opt-in con método documentado. Modo privado completo en 12. |
 | EXT-01 a EXT-08 | 01, 07, 08 | EN_CURSO | Puente y estado de conexión verificados en 01; captura/AutoPick y matriz completa PLANIFICADOS. |
 | MEDIA-01 a MEDIA-03 | 09, 10 | PLANIFICADO | — |
 | MEDIA-04 a MEDIA-07 | 10 | PLANIFICADO | — |
@@ -275,3 +278,96 @@ Revisión adicional: orden estable por creación/ID para que un snapshot no reor
 ### Procedencia del cierre
 
 Código y pruebas finales guardados en `2544f944fff4d3d5adcc1d64c4ec5b776e934882`. Incorporación de main en `627aa353668dff18e76bc91004ad60f2324f63d3`: árbol idéntico `978147a077d7d3cd3c6104bfde2dd378a0d18780`, sin cambios en el conjunto probado. Este registro posterior solo modifica documentación. Rama `feat/05-app-funcional`; el SHA de entrega, push y CI de su HEAD se consultan y registran en la PR. No se atribuye CI de 04 ni de 69f07a1 a este código.
+
+## Transición 05 → 06
+
+El propietario comunica que el recorrido manual de fase 05 funciona correctamente. No ha proporcionado mediciones, capturas ni resultados individuales nuevos; no se inventan. Esta confirmación sustituye la solicitud de volver a confirmar el recorrido, sin ampliar la cobertura Windows 10/accesibilidad/compatibilidad.
+
+HEAD `36bd38019884542f4c515f39eb617bf87a8f1712`: [push 35484084966](https://github.com/SrEdgarR/IDG/actions/runs/35484084966) y [PR 35484087792](https://github.com/SrEdgarR/IDG/actions/runs/35484087792) APROBADOS en ui/portable/windows. PR #5 integrada con autorización expresa y HEAD comprobado, sin conflictos; merge verificado `71827ad68df22f2bd41a5b44c3e1e4cdbd1309b4`. Fase 06 parte de ese main en `feat/06-colas-y-organizacion`, sin dependencia pendiente.
+
+SIGUIENTE_PASO vigente: implementar y verificar 06 por incrementos (colas/programación, reglas, búsqueda/lotes y organización restante), manteniendo runtime como único escritor. Energía simulada en pruebas, nunca apagar/suspender/hibernar el equipo o CI. No iniciar 07 ni fusionar la PR de 06.
+
+### Incremento 06-A — colas y programación (EN_CURSO)
+
+Publicado en `1523f00db1eadf3eceb566e7cbaf5ebbda1d03fa`, remoto verificado. La revisión detectó y corrigió el rechazo por cola llena antes de crear un registro Probing huérfano; prueba de regresión añadida. Regresiones HTTP/runtime e integridad aprobadas. No se atribuye CI a este SHA sin consultar su ejecución.
+
+Implementados protocolo tipado, migración 004 DPAPI, colas nombradas/orden/concurrencia/prioridad, reasignación sin eliminar archivos, recibos idempotentes y horario único. Código: `crates/idg-runtime/src/downloads/organization.rs`, `crates/idg-core/src/organization.rs`, `apps/desktop/src/Organization.tsx`. Decisiones en [ADR 014](decisions/014-organizacion-y-programacion.md).
+
+Verificado automáticamente en el conjunto de cambios 06-A: tests del workspace, clippy estricto, tipos TypeScript, build Tauri y migración/rollback/recibos. Interacción real automatizada (`node scripts/test-organization.mjs`): crear cola desde Tauri, altas por formulario, orden, concurrencia uno, detener frente a pausar, mover idempotentemente, ejecución programada y reasignación sin borrar; archivos comprobados por SHA-256. La automatización inicialmente falló al localizar un selector por etiqueta; se corrigió para usar su rol/nombre accesible y se repitió correctamente. No es confirmación humana.
+
+Energía: política y adaptador implementados; tests unitarios con reloj controlado y adaptador simulado aprobados. Integración Tauri repetida y aprobada: Después bloquea, completar permite cuenta atrás visible, el botón de cancelar la consume sin reactivarla. Clippy estricto y build Tauri repetidos con energía. Nunca se ejecutaron apagado, suspensión ni hibernación reales. 06 no está completa.
+
+### Incremento 06-B — reglas y categorías
+
+Implementados reglas declarativas, categorías personalizadas, precedencia por orden/ID para cada campo y respeto de elecciones explícitas. Nuevos trabajos evalúan reglas sin preflight ni modificación de replay_safe. Tipo HTTP y tamaño permanecen desconocidos hasta obtener metadatos reales; las condiciones correspondientes no coinciden antes. Reglas horarias usan minutos UTC y admiten cruce de medianoche. Configuración limitada a 64 reglas/categorías y 96 KiB para conservar margen de IPC.
+
+Guardar reglas no modifica trabajos anteriores. Aplicación retroactiva exige una vista previa coincidente y aceptación; archivos/parciales no cambian de destino, trabajos activos se rechazan. Código en `crates/idg-core/src/rules.rs`, `crates/idg-runtime/src/downloads/rules.rs` y `apps/desktop/src/Rules.tsx`.
+
+Verificación automática del conjunto 06-B: clippy estricto, tests workspace y TypeScript aprobados; build Tauri aprobado. Interacción real automatizada `node scripts/test-rules.mjs`: categoría y regla desde editor, preview sin GET, carpeta/categoría efectivas, hash, elección explícita y aceptación retroactiva sin mover archivo. `test-organization.mjs` repetido y aprobado. No es revisión humana ni matriz Windows 10.
+
+SIGUIENTE_PASO vigente: completar búsqueda del backend, acciones masivas, importaciones, portapapeles opt-in, retención y estadísticas; ampliar pruebas de límites combinados/persistencia, comprobaciones generales y entrega de PR 06. No iniciar 07.
+
+## Cierre de implementación de fase 06 — 2026-09-20
+
+Este cierre sustituye los siguientes pasos de los incrementos anteriores. 06-A está en `1523f00db1eadf3eceb566e7cbaf5ebbda1d03fa` y 06-B en `e38c744b0a9814c86748067998615ea8d8abf2ca`, ambos publicados y comprobados en origin. El conjunto final incluye esos incrementos y el cierre de biblioteca/importación guardado en la rama `feat/06-colas-y-organizacion`; el SHA concreto se registra en la entrega y descripción de la PR para no introducir una autorreferencia. La consulta remota de CI se atribuye al SHA correspondiente, nunca a una ejecución anterior.
+
+### Código y trazabilidad
+
+| Requisito | Implementación y prueba |
+|---|---|
+| Colas, orden, prioridades, límites combinados | `downloads/organization.rs`, `Organization.tsx`; `test-organization.mjs`, `test-queue-limits.mjs`. Concurrencia por cola y presupuestos global/origen/trabajo compartidos, equidad entre prioridades y espera cancelable. Lista del editor paginada; Subir opera por ID sin enviar toda la cola. |
+| Persistencia, cierre, caída, migración | Migración 004 y transacciones DPAPI en `idg-storage`; pruebas preservan trabajos y preferencias/límites previos, rollback y recibos. `test-queue-limits.mjs` comprueba cambio persistido, caída con descarga activa recuperada pausada sin repetir GET, cierre nativo y reapertura con el mismo PID de runtime. |
+| Calendario y energía | Core `organization.rs` y `power.rs`, runtime y adaptador Windows; reloj controlado prueba vencimiento, repetición y cambio horario sin tocar el reloj del equipo. Cuenta atrás cancelable real en Tauri, **adaptador de energía simulado**. |
+| Reglas y categorías | Core/runtime `rules.rs`, `Rules.tsx`, diálogo Nueva descarga; conflictos deterministas, desconocido distinto de cero, respeto de elección explícita y preview sin GET. `test-rules.mjs` verifica carpeta/categoría, hash y aceptación retroactiva sin mover archivos. |
+| Búsqueda global y lotes | Core/runtime `library.rs`, `Library.tsx`, App/menús; consulta segura sobre todo el historial, páginas de 50, selección estable. Tests de caracteres Unicode/especiales y 61 resultados entre páginas; `test-library.mjs` prueba UI, aceptados/omitidos/fallidos y reintento durable. |
+| Importar y detectar duplicados | `Import.tsx`, `import-parser.ts`, CreateDownload existente. TXT/CSV/URLs, UTF-8/UTF-16 BOM, comillas, corrección/exclusión, límites 1 MiB/1000 y detener procesamiento. Tests de parser y `test-import.mjs`: arrastre DOM, preview sin GET, duplicados por URL/contexto/hash, altas idempotentes en cola y hashes reales. |
+| Historial, borrado y estadísticas | `LibraryPrefs`, `EditJob`, `tick_library`, adaptador `files.rs`; permanente por defecto, retención opcional oculta sin borrar, restauración reinicia visibilidad. Estadísticas opt-in, bytes verificados, media de ciclo completo y hasta 32 dominios ordenados por frecuencia (resto agrupado), privados excluidos, marcador atómico contra doble conteo y borrado sin reconstrucción. Prueba real de archivo modificado rechazado y eliminación de fixture con ruta enumerada/confirmación; no papelera ni deshacer de borrado físico. |
+| Portapapeles | Core `clipboard.rs`, runtime y adaptador Windows, `Clipboard.tsx`. Apagado no consulta ni secuencia ni contenido; límite 64 KiB/32 enlaces, propuesta efímera y opt-in persistente, sin alta silenciosa. Unitarios y Tauri usan fuente de fixture; **API nativa no ejercitada**. |
+
+### Evidencia y alcance de verificación
+
+**Ejecución final de `scripts/Check.ps1 -Integration` y `npx --yes pnpm@12.4.2 test:ui`: APROBADA, salida 0**, después de las correcciones de foco/preferencias y energía/borrado. Incluye cinco recorridos nuevos de Tauri, la aplicación de 05 y puentes Chromium/Firefox 156. Antes de ella, el recorrido de colas aprobó tres repeticiones consecutivas tras corregir la ruta duplicada. No hubo cambios posteriores de código del producto ni se debilitaron regresiones de segmentación, integridad o enlaces de un solo uso. Los fallos intermedios y su resolución se conservan debajo.
+
+Las comprobaciones generales incluyen formato, Clippy estricto, pruebas Rust, generación de tipos, TypeScript, parser/modelo, builds y pruebas HTTP/runtime. Las de interacción real automatizada abren Tauri/WebView2, usan descargas del servidor local y verifican archivos; Chromium y Firefox usan Native Messaging auténtico con perfiles aislados. CI ui/portable/windows no ejecuta la matriz gráfica ni navegadores y se registra por separado en la PR.
+
+Las repeticiones detectaron dos problemas del arnés: la etiqueta de un textarea incluía su contenido tras el drop y rellenar una carpeta con su valor predeterminado no generaba una edición. Se usan el rol accesible y una edición explícita, respectivamente; las pruebas dirigidas de importación/reglas se repitieron y aprobaron. No se cambiaron las expectativas de destino ni se aceptó la carpeta de la regla como sustituto de la elegida.
+
+Los timeouts del diálogo se investigaron con diagnóstico local de campos, sin publicar rutas privadas. Se reprodujo FileIo en colas y se capturó la carpeta concatenada consigo misma: preferencias tardías cambiaban el campo durante el foco/selección antes del primer evento de edición. Nueva descarga e Importar protegen ahora el campo desde el foco. La regresión controlada de formulario usa preferencias diferidas en la galería de pruebas (no acredita IPC); los recorridos Tauri/HTTP conservan su backend real. El arnés espera además que termine su runtime propio antes de continuar.
+
+La revisión de código encontró que el hash de eliminación retenía el mutex del runtime. Se separó el I/O lento del bloqueo y se registra como tarea pendiente para salida/energía. La regresión falló con el ejecutable anterior (60 segundos todavía pendientes) y aprobó después de recompilar: incluso un archivo cambiado que se rechaza cancela la cuenta atrás simulada; no se modifica el adaptador para aceptar el contenido alterado.
+
+Correcciones de esta fase: rechazar cola llena antes de persistir un Probing huérfano; consumir una programación antes del inicio; no rearmar el mismo instante; preservar editor tras fallo; no contar retrospectivamente estadísticas al activarlas o borrarlas; deshacer retención sin ocultar inmediatamente; reordenar mediante ID para no exceder el límite IPC en colas grandes. Los primeros fallos de automatización fueron selectores de roles/etiquetas y espera de respuesta del checkbox controlado; se corrigieron las pruebas y la presentación de guardado, sin sustituir backend por simulaciones.
+
+**Confirmado por el usuario:** recorrido general de fase 05 y, el 2026-09-24, importación manual del CSV aislado de fase 06 seguida de la descarga de dos archivos. **Verificado automáticamente en esa prueba manual:** ambos archivos miden 67 108 864 bytes y sus SHA-256 coinciden entre sí y con el valor esperado del fixture HTTP. Esto acredita esa importación y la integridad de esos dos archivos; no atribuye al usuario la revisión de las otras funciones de 06. **PENDIENTE DE CONFIRMACIÓN DEL USUARIO:** resto del [recorrido corto](FASE06_PRUEBA_MANUAL.md). Cierre automatizado previo usa mensaje nativo SC_CLOSE; arrastre usa evento DOM en ventana real, no clic/arrastre físico humano.
+
+**IMPLEMENTADO_NO_VERIFICADO:** ejecución física de apagado/suspensión/hibernación (deliberadamente no se ejecuta), lectura del portapapeles real y resto del recorrido manual nuevo. **DIFERIDO:** Windows 10, accesibilidad exhaustiva, DPI físico, compatibilidad ampliada, presencia general de archivos/mode privado completo (12), AutoPick (07), multimedia/FTP, instaladores/actualizaciones. No son comprobaciones aprobadas por CI ni parte de una release.
+
+Los registros de Native Messaging ya pertenecían a esta copia antes de las pruebas y se conservaron; no se retiraron instalaciones ajenas. Energía y portapapeles se prueban con adaptadores aislados. No se cambiaron reloj/zona, protecciones ni perfiles personales. El sistema visual y tamaño de texto aprobados se conservan.
+
+Revisión del cierre: 238 archivos y 196 enlaces locales comprobados, diff sin errores de espacios y sin patrones de secretos ni rutas personales absolutas en Markdown. Inventario de dependencias regenerado sin cambios de versiones. Las capturas/memoria históricas de 05 se conservan; no se sustituyen por regeneraciones de las regresiones. Esto no es una certificación absoluta de seguridad.
+
+CI observada de incrementos anteriores: [06-A](https://github.com/SrEdgarR/IDG/actions/runs/35486103075) y [06-B](https://github.com/SrEdgarR/IDG/actions/runs/35486584588) aprobadas; no acreditan el cierre posterior. El SHA final, push y las ejecuciones correspondientes a su HEAD se registran en la descripción de la PR y entrega.
+
+SIGUIENTE_PASO vigente: continuar el [recorrido manual](FASE06_PRUEBA_MANUAL.md) con colas, reglas, horario, búsqueda/lotes y cancelación de energía simulada; después revisar la PR de fase 06 y su CI del HEAD, resolver observaciones y obtener autorización de integración. La importación de los dos archivos ya está confirmada y comprobada; las limitaciones físicas/manuales anteriores permanecen explícitas. No fusionar PR 06 ni avanzar a 07 en esta tarea.
+
+### Procedencia de la entrega 06
+
+Código y pruebas finales guardados en `5e93a52ed9a1db81d750ee94ed85b5cc3a66957c`, push a `feat/06-colas-y-organizacion` confirmado mediante `git ls-remote` y API. [PR #6](https://github.com/SrEdgarR/IDG/pull/6) abierta hacia main, sin fusionar. La edición que registra esta procedencia modifica únicamente este documento; no implica otra ejecución completa del producto.
+
+Primera consulta de CI de ese SHA: [push 35490200500](https://github.com/SrEdgarR/IDG/actions/runs/35490200500) y [PR 35490215687](https://github.com/SrEdgarR/IDG/actions/runs/35490215687), con ui/portable/windows **EN CURSO**, todavía sin conclusión. Se conserva esta observación atribuida al código exacto; no acredita el HEAD documental posterior ni sustituye las pruebas locales con `-Integration`. El estado vigente de CI del HEAD se consulta y registra en la descripción de la PR y entrega, sin prometer seguimiento en segundo plano.
+
+## Incidencia de guardado del horario 06 — 2026-09-24
+
+**CTL-038, VERIFICADO para este recorrido.** La regresión nueva [`test-schedule-editor.mjs`](../scripts/test-schedule-editor.mjs) falló dos veces con el ejecutable anterior al escribir una fecha en una cola sin horario y pulsar directamente Guardar: el horario persistido siguió siendo `null`. El formulario anterior usaba `defaultValue`, actualizaba el borrador en `onBlur` y tenía una `key` dependiente del horario. Esa combinación hacía que el guardado dependiera de eventos/renders ajenos al botón; no se capturó el payload IPC anterior, por lo que no se atribuye el fallo con certeza a un subevento concreto. La etiqueta «Pendiente» del borrador no se consideró confirmación.
+
+[`Organization.tsx`](../apps/desktop/src/Organization.tsx) conserva ahora el texto del horario en un campo controlado, valida y lee su valor al pulsar Guardar, y distingue «Cambio de horario sin guardar» del estado devuelto por el runtime. Una respuesta tardía no sustituye una edición posterior. El error conserva el texto; el borrado requiere Guardar; elegir otra cola carga su horario propio. No se modificó el scheduler del runtime, la regla `bins` ni el comportamiento de las colas.
+
+**Verificado automáticamente, sobre el código final:** `pnpm check`, `pnpm desktop:build` y `scripts/Check.ps1 -Integration` finalizaron con salida 0. La integración nueva recorre el editor en Tauri/WebView2 real: un clic sin Tab, modificación con zona `-04:00`, petición y respuesta IPC con el instante exacto, cierre/reapertura, entrada inválida que no llega al runtime, cambio de cola, horario Aplicado que no se rearma al enfocar ni al guardar dos veces, error de validación del backend que conserva el campo y el valor aplicado, reinicio de la aplicación, y borrado solo tras Guardar. La batería conserva las regresiones HTTP, integridad, recuperación, colas, reglas, importación y puentes Chromium/Firefox. Se usaron datos y runtime aislados; esta automatización no es revisión humana.
+
+**Interacción real automatizada con computer-use:** se reutilizó el entorno aislado de la [guía](FASE06_PRUEBA_MANUAL.md) y el servidor HTTP local. Se creó un solo trabajo nuevo, `horario-fix-6f2c9a.bin`, en Pruebas A; la cola y Pruebas b estaban detenidas. El trabajo permaneció En cola sin iniciar antes del horario. Desde la interfaz se fijó un límite del trabajo de 1024 KiB/s, se introdujo `2026-09-24T12:30:00-04:00` y se pulsó Guardar una vez, sin Tab; al reabrir se conservó el mismo instante (`2026-09-24T16:30:00.000Z`). Sin pulsar Iniciar cola, el runtime pasó a descargar: la primera lectura diagnóstica disponible, a las **12:30:51.485 UTC−04:00**, ya registraba `downloading` y 51 855 360 bytes. La interfaz mostró Descargando, 92 % y 59,4/64 MiB antes de la captura guardada a las **12:31:16 UTC−04:00**. El instante exacto de transición y la primera petición del servidor no quedaron registrados; solo se establece el intervalo entre las **12:30:00** programadas y la primera observación del runtime. La primera observación visual es posterior y no se presenta como inicio.
+
+La descarga terminó antes de la lectura de las **12:31:32.750 UTC−04:00**. Se verificó con lectura local que el archivo existe en la carpeta `reglas` del entorno aislado, mide **67 108 864 bytes** y su SHA-256 `98dc891b284e4d84ac25b0c0a24fdbe39a7f0dbd643ad5e8aa06e02fc6258254` coincide con la referencia del fixture HTTP. IDG mostró Completado y categoría Documentos aplicada por la regla existente. El recuento por nombre fue uno, sin duplicados. La programación figuró Aplicada tras volver a mostrar la ventana; el mismo runtime siguió conectado. Al terminar se dejó Pruebas A y Pruebas b detenidas, sin horarios pendientes creados por la prueba; no se ejecutó ninguna acción de energía ni se borraron trabajos o archivos.
+
+Capturas auténticas y saneadas: [horario guardado](test-evidence/fase06-schedule-saved.jpg), [Descargando](test-evidence/fase06-schedule-downloading.jpg), [Completado](test-evidence/fase06-schedule-completed.jpg) y [Aplicado con cola detenida](test-evidence/fase06-schedule-applied.jpg). La lectura diagnóstica del runtime y el hash en disco complementan, pero no sustituyen, las acciones de la interfaz. No hay confirmación humana nueva para este recorrido. El servidor de prueba existente no conserva la hora de su primera petición.
+
+**SIGUIENTE_PASO vigente:** revisar el CI del HEAD publicado de [PR #6](https://github.com/SrEdgarR/IDG/pull/6) y las pruebas manuales restantes de fase 06 ([guía](FASE06_PRUEBA_MANUAL.md)), en particular búsqueda/lotes y cancelación de energía **simulada**; solicitar revisión y autorización antes de integrar. No repetir la regla `bins` ni las colas ya aprobadas para esta incidencia. Windows 10, accesibilidad exhaustiva, DPI físico y compatibilidad ampliada siguen pendientes de la matriz posterior. No fusionar PR #6 ni avanzar a fase 07.
