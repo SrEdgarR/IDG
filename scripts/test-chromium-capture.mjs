@@ -2,6 +2,7 @@ import { spawn, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { cp, mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import net from "node:net";
+import http from "node:http";
 import path from "node:path";
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
@@ -34,9 +35,18 @@ const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 // local unpacked manifest. The shipped extension keeps downloads optional.
 manifest.permissions.push("downloads");
 manifest.optional_permissions = [];
+// An extension tab opened directly by Playwright does not receive activeTab's
+// user-gesture grant. Limit the test-only page grant to this loopback fixture.
+manifest.host_permissions = ["http://127.0.0.1/*"];
 await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
 const identity = JSON.parse(await readFile("apps/extension/development-identity.json", "utf8"));
 const fixture = await startSegments({ size: 8 * 1024 * 1024, rate: 512 * 1024 });
+const linkPage = http.createServer((_request, response) => {
+  response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+  response.end(`<a href="${fixture.url}/direct.bin">Archivo directo</a>`);
+});
+await new Promise((done) => linkPage.listen(0, "127.0.0.1", done));
+const linkPageUrl = `http://127.0.0.1:${linkPage.address().port}/`;
 const socket = net.createServer();
 await new Promise((done) => socket.listen(0, "127.0.0.1", done));
 const debugPort = socket.address().port;
@@ -174,12 +184,39 @@ try {
   assert.equal(probe("list").jobs.length, 1);
   await popup.locator("#ignore-ext").fill("");
   await popup.locator("#save-rules").click();
-  console.log("PASS Chromium: aceptación durable/archivo/hash único, cancelación conserva navegador, modos persistentes, Preguntarme requiere elección y extensión ignorada no captura.");
+  const sourceTab = await browser.newPage();
+  await sourceTab.goto(linkPageUrl);
+  await sourceTab.bringToFront();
+  await popup.getByRole("button", { name: "Previsualizar enlaces" }).click();
+  const directChoice = popup.locator("#links button").filter({ hasText: "direct.bin" });
+  await directChoice.waitFor({ timeout: 5000 }).catch(async (error) => {
+    const active = await popup.evaluate(() => chrome.tabs.query({ active: true, currentWindow: true }));
+    throw new Error(`${error.message}\nactive=${JSON.stringify(active.map((tab) => ({ url: tab.url, id: tab.id })))} links=${await popup.locator("#links").innerText()} notice=${await popup.locator("#notice").innerText()}`);
+  });
+  await directChoice.click();
+  await dialog.waitFor();
+  assert.equal(await dialog.getByLabel("URL del archivo", { exact: true }).inputValue(), fixture.url + "/direct.bin");
+  await dialog.getByLabel("El enlace permite solicitudes repetidas").check();
+  await dialog.getByRole("button", { name: "Aceptar en IDG" }).click();
+  await dialog.waitFor({ state: "hidden" });
+  let directJob;
+  for (let n = 0; n < 600; n++) {
+    directJob = probe("list").jobs.find((entry) => entry.name === "direct.bin");
+    if (directJob?.state === "completed") break;
+    await sleep(100);
+  }
+  assert.equal(directJob?.state, "completed", "El enlace elegido debe completarse en IDG");
+  assert.equal(createHash("sha256").update(await readFile(path.join(files, "direct.bin"))).digest("hex"), expectedHash(fixture.size));
+  assert.equal(probe("list").jobs.length, 2);
+  assert.deepEqual((await readdir(files)).sort(), ["capture.bin", "direct.bin"]);
+  assert.equal((await popup.evaluate(() => chrome.downloads.search({}))).filter((item) => item.url === fixture.url + "/direct.bin").length, 0, "El enlace directo aceptado no debe crear descarga paralela en Chromium");
+  console.log("PASS Chromium: traspaso observado y enlace directo elegidos en la interfaz, hashes únicos, cancelación conserva navegador, modos y extensión ignorada.");
   void download;
 } finally {
   await browser?.close();
   try { probe("shutdown"); } catch { /* runtime absent */ }
   await webview?.close();
   if (desktop?.exitCode === null) desktop.kill();
+  await new Promise((done) => linkPage.close(done));
   await fixture.close();
 }
