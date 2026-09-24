@@ -6,12 +6,14 @@ Las pruebas de interacción indicadas usan Tauri/WebView2 real de forma automati
 
 Regresión adicional de CTL-022/041: enfocar la carpeta protege el borrador de preferencias tardías antes del primer carácter. `test-ui.mjs` usa una preferencia diferida de fixture; es una prueba de formulario aislada, no IPC. Los recorridos Tauri separados crean archivos reales y verifican el destino.
 
+CTL-038: [`Organization.tsx`](../apps/desktop/src/Organization.tsx) guarda el texto actual del campo con un solo clic, sin Tab, y separa la edición sin guardar del horario confirmado por el runtime. [`test-schedule-editor.mjs`](../scripts/test-schedule-editor.mjs) falla con el ejecutable anterior y aprueba en Tauri/WebView2 después de la corrección; inspecciona petición/respuesta IPC, valor persistido, zona, error, cola, Aplicado sin rearme, reinicio y borrado deliberado. Interacción real automatizada con computer-use observó un inicio programado, progreso y archivo/hash final en la carpeta aislada; [evidencia y límites](IMPLEMENTATION_STATUS.md#incidencia-de-guardado-del-horario-06--2026-09-24). No es confirmación humana ni acredita la primera petición exacta del servidor.
+
 | Controles | Implementación | Evidencia y límite |
 |---|---|---|
 | CTL-002–004, CTL-006 | `LibraryCommand::Search`, `Library.tsx`, App; backend completo, páginas de 50, filtros visibles y selección estable | IMPLEMENTADO; ver matriz 06 vigente, pruebas y límites de verificación |
 | CTL-007, CTL-015–017 | `LibraryCommand::Bulk/PreviewDelete/DeleteFile`, `Library.tsx`, menú Organizar selección; categoría/prioridad/cola e historial reversible | IMPLEMENTADO; ver matriz 06 vigente, pruebas y límites de verificación |
 | CTL-026, CTL-036–037 | OrganizationCommand, transacciones DPAPI, selector de cola; crear/renombrar, mover/subir, iniciar/detener/pausar, eliminar con reasignación | IMPLEMENTADO; ver matriz 06 vigente, pruebas y límites de verificación |
-| CTL-038 | Horario único con zona, estado durable y política de retraso; activación explícita de energía, cuenta atrás y cancelación | IMPLEMENTADO; ver matriz 06 vigente, pruebas y límites de verificación |
+| CTL-038 | Horario único con zona, estado durable y política de retraso; guardado directo del campo; activación explícita de energía, cuenta atrás y cancelación | VERIFICADO para guardado y ejecución programada en Tauri/WebView2 y computer-use automatizados; energía solo simulada, primera petición HTTP no registrada; ver incidencia 06 |
 | CTL-039–040 | `Rules.tsx`, SaveRule/DeleteRule/SaveCategories/PreviewRules/PreviewJobRules/ApplyJobRules | IMPLEMENTADO; ver matriz 06 vigente, pruebas y límites de verificación |
 | CTL-041 | `Import.tsx`, parser acotado, CreateDownload existente; URLs/TXT/CSV/arrastre, preview, corregir/excluir, detener | IMPLEMENTADO; ver matriz 06 vigente, pruebas y límites de verificación |
 | CTL-049 | `LibraryPrefs`, SetLibrarySettings/ClearStatistics; retención permanente u opcional, restaurar, estadísticas opt-in/visibilidad/borrado | IMPLEMENTADO; ver matriz 06 vigente, pruebas y límites de verificación |

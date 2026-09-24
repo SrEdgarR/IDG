@@ -28,6 +28,7 @@ if ($Integration) {
     # Register explicitly beforehand. No registry mutations are hidden in this check.
     Invoke-Checked { node scripts/test-desktop.mjs }
     Invoke-Checked { node scripts/test-organization.mjs }
+    Invoke-Checked { node scripts/test-schedule-editor.mjs }
     Invoke-Checked { node scripts/test-rules.mjs }
     Invoke-Checked { node scripts/test-library.mjs }
     Invoke-Checked { node scripts/test-import.mjs }

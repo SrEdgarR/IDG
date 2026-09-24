@@ -63,10 +63,47 @@ const blankQueue = (): DownloadQueue => ({
   on_finish: "none",
   power_armed: false,
 });
+const scheduleTextOf = (schedule: DownloadQueue["schedule"]) =>
+  schedule ? new Date(schedule.at * 1000).toISOString() : "";
+const scheduleErrorText =
+  "Indica una fecha ISO con zona explícita y segundos completos, por ejemplo 2026-09-24T12:00:00+02:00 o Z (UTC).";
+function parseScheduleText(value: string): number | null {
+  const text = value.trim();
+  if (!text) return null;
+  const parts =
+    /^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)(?:\.0{1,3})?(Z|[+-]\d\d:\d\d)$/.exec(
+      text,
+    );
+  const time = Date.parse(text);
+  if (!parts || !Number.isFinite(time) || time < 0 || time / 1000 > 4294967295)
+    throw Error(scheduleErrorText);
+  const zone = parts[7];
+  const offset =
+    zone === "Z"
+      ? 0
+      : (zone[0] === "+" ? 1 : -1) *
+        (Number(zone.slice(1, 3)) * 60 + Number(zone.slice(4, 6)));
+  if (zone !== "Z" && (Number(zone.slice(1, 3)) > 23 || Number(zone.slice(4, 6)) > 59))
+    throw Error(scheduleErrorText);
+  const local = new Date(time + offset * 60_000);
+  if (
+    local.getUTCFullYear() !== Number(parts[1]) ||
+    local.getUTCMonth() + 1 !== Number(parts[2]) ||
+    local.getUTCDate() !== Number(parts[3]) ||
+    local.getUTCHours() !== Number(parts[4]) ||
+    local.getUTCMinutes() !== Number(parts[5]) ||
+    local.getUTCSeconds() !== Number(parts[6])
+  )
+    throw Error(scheduleErrorText);
+  return time / 1000;
+}
 /** Uses the existing gallery's modal, queue-item, form-grid and folded advanced structure. */
 export function QueueEditor({ onClose }: { onClose: () => void }) {
-  const { state, error } = useOrganization();
+  const { state, error, accept } = useOrganization();
   const [draft, setDraft] = useState<DownloadQueue>(blankQueue);
+  const [scheduleText, setScheduleText] = useState("");
+  const scheduleInput = useRef<HTMLInputElement>(null);
+  const editRevision = useRef(0);
   const [jobs, setJobs] = useState<DownloadSnapshot[]>([]),
     [failure, setFailure] = useState(""),
     [busy, setBusy] = useState(false),
@@ -76,7 +113,7 @@ export function QueueEditor({ onClose }: { onClose: () => void }) {
   const [scheduleError, setScheduleError] = useState("");
   const [page, setPage] = useState(0);
   const patch = (change: Partial<DownloadQueue>) =>
-    setDraft({ ...draft, ...change });
+    setDraft((current) => ({ ...current, ...change }));
   async function loadJobs() {
     let offset: number | null = 0;
     const all: DownloadSnapshot[] = [];
@@ -91,17 +128,20 @@ export function QueueEditor({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     void loadJobs().catch((e) => setFailure(String(e)));
   }, []);
-  async function act(operation: OrganizationCommand) {
+  async function act(operation: OrganizationCommand, revision?: number) {
     if (sending.current) return false;
     sending.current = true;
     setBusy(true);
     setFailure("");
     try {
       const updated = await organize(operation);
+      accept(updated);
       if (operation.action !== "move_jobs" && operation.action !== "reorder")
         setDraft(
           (current) =>
-            updated.queues.find((q) => q.id === current.id) ?? current,
+            revision !== undefined && revision !== editRevision.current
+              ? current
+              : (updated.queues.find((q) => q.id === current.id) ?? current),
         );
       await loadJobs();
       return true;
@@ -112,6 +152,30 @@ export function QueueEditor({ onClose }: { onClose: () => void }) {
       sending.current = false;
       setBusy(false);
     }
+  }
+  const confirmedSchedule = state?.queues.find((q) => q.id === draft.id)?.schedule;
+  let scheduleChanged = false;
+  try {
+    scheduleChanged = parseScheduleText(scheduleText) !== (confirmedSchedule?.at ?? null);
+  } catch {
+    scheduleChanged = true;
+  }
+  function saveQueue() {
+    let at: number | null;
+    try {
+      at = parseScheduleText(scheduleInput.current?.value ?? scheduleText);
+    } catch (e) {
+      setScheduleError(e instanceof Error ? e.message : scheduleErrorText);
+      return;
+    }
+    setScheduleError("");
+    const schedule =
+      at === null
+        ? null
+        : draft.schedule?.at === at
+          ? draft.schedule
+          : { at, state: "pending" as const };
+    void act({ action: "save_queue", queue: { ...draft, schedule } }, editRevision.current);
   }
   const queueJobs = jobs
     .filter((j) => j.queue_id === draft.id)
@@ -141,6 +205,7 @@ export function QueueEditor({ onClose }: { onClose: () => void }) {
       <label className="field">
         Cola
         <select
+          disabled={busy}
           value={
             state?.queues.some((q) => q.id === draft.id) ? draft.id : "new"
           }
@@ -148,10 +213,11 @@ export function QueueEditor({ onClose }: { onClose: () => void }) {
             setRemove(false);
             setPage(0);
             setScheduleError("");
-            setDraft(
-              state?.queues.find((q) => q.id === e.target.value) ??
-                blankQueue(),
-            );
+            const selected =
+              state?.queues.find((q) => q.id === e.target.value) ?? blankQueue();
+            setDraft(selected);
+            setScheduleText(scheduleTextOf(selected.schedule));
+            editRevision.current++;
           }}
         >
           <option value="new">Nueva cola</option>
@@ -200,36 +266,13 @@ export function QueueEditor({ onClose }: { onClose: () => void }) {
         <label className="field">
           Inicio único (fecha, hora y zona)
           <input
+            ref={scheduleInput}
             placeholder="AAAA-MM-DDTHH:MM:SS+00:00"
-            defaultValue={
-              draft.schedule
-                ? new Date(draft.schedule.at * 1000).toISOString()
-                : ""
-            }
-            key={draft.id + String(draft.schedule?.at)}
-            onBlur={(e) => {
-              const text = e.target.value.trim();
+            value={scheduleText}
+            onChange={(e) => {
+              setScheduleText(e.target.value);
+              editRevision.current++;
               setScheduleError("");
-              if (!text) {
-                patch({ schedule: null });
-                return;
-              }
-              const time = Date.parse(text);
-              if (
-                !/(Z|[+-]\d\d:\d\d)$/.test(text) ||
-                !Number.isFinite(time) ||
-                time < 0 ||
-                time / 1000 > 4294967295
-              ) {
-                setScheduleError(
-                  "Indica una fecha ISO con zona explícita, por ejemplo +02:00 o Z (UTC).",
-                );
-                return;
-              }
-              patch({
-                schedule: { at: Math.floor(time / 1000), state: "pending" },
-                running: false,
-              });
             }}
           />
         </label>
@@ -238,13 +281,14 @@ export function QueueEditor({ onClose }: { onClose: () => void }) {
           ejecuta una vez; recupera hasta 15 minutos de retraso y después vence
           sin iniciar.
         </p>
-        {draft.schedule && (
+        {scheduleChanged && <p>Cambio de horario sin guardar.</p>}
+        {confirmedSchedule && (
           <p>
-            Instante: {new Date(draft.schedule.at * 1000).toLocaleString()}{" "}
+            Programación guardada: {new Date(confirmedSchedule.at * 1000).toLocaleString()}{" "}
             (hora del equipo). Estado:{" "}
             {
               { pending: "Pendiente", applied: "Aplicado", missed: "Vencido" }[
-                draft.schedule.state
+                confirmedSchedule.state
               ]
             }
             .
@@ -377,6 +421,9 @@ export function QueueEditor({ onClose }: { onClose: () => void }) {
                 if (ok) {
                   setRemove(false);
                   setDraft(blankQueue());
+                  setScheduleText("");
+                  setScheduleError("");
+                  editRevision.current++;
                 }
               })
             }
@@ -391,8 +438,8 @@ export function QueueEditor({ onClose }: { onClose: () => void }) {
           Cerrar
         </button>
         <button
-          disabled={busy || Boolean(scheduleError) || !draft.name.trim()}
-          onClick={() => void act({ action: "save_queue", queue: draft })}
+          disabled={busy || !draft.name.trim()}
+          onClick={saveQueue}
         >
           Guardar cola
         </button>
