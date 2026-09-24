@@ -4,6 +4,7 @@ import { App } from "./App";
 import { RuntimeConnection } from "./RuntimeConnection";
 import "../../../packages/ui/tokens.css";
 import "./style.css";
+import "./workspace.css";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useState } from "react";
@@ -27,7 +28,10 @@ function MiniApp() {
   const { rows, error, online } = useDownloads(true);
   const row = rows.find((r) => r.state === "Downloading") ?? rows.at(-1);
   return (
-    <main aria-label="Mini ventana de progreso">
+    <main
+      className="aux-window mini-window"
+      aria-label="Mini ventana de progreso"
+    >
       <h2>IDG · Progreso</h2>
       {!online && <p role="status">Desconectado · último estado recibido</p>}
       {row ? (
@@ -49,7 +53,7 @@ function MiniApp() {
 function DropApp() {
   const [error, setError] = useState("");
   return (
-    <main>
+    <main className="aux-window drop-window">
       <section
         className="empty"
         aria-label="Zona para soltar enlaces"

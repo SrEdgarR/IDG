@@ -19,6 +19,7 @@ let sequence = 0;
 
 function disconnected(message: string) {
   status.textContent = "Desconectado";
+  status.dataset.state = "offline";
   detail.textContent = message;
   button.disabled = false;
   clearTimeout(deadline);
@@ -36,6 +37,7 @@ function snapshot(value: Snapshot) {
   runtimeId = value.runtime_id;
   sequence = value.sequence;
   status.textContent = "Conectado";
+  status.dataset.state = "online";
   detail.textContent = `Motor ${value.process_id} · ${value.clients} clientes. Sin descargas implementadas.`;
   button.disabled = false;
 }
@@ -46,6 +48,7 @@ function connect() {
   runtimeId = undefined;
   sequence = 0;
   status.textContent = "Conectando…";
+  status.dataset.state = "connecting";
   detail.textContent = "Esperando una respuesta real del motor.";
   button.disabled = true;
   const current = api.runtime.connectNative("io.github.sredgarr.idg.dev");

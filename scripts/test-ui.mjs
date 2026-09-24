@@ -261,12 +261,12 @@ try {
   await page.emulateMedia({ colorScheme: "dark" });
   assert.equal(
     await page.evaluate(() => getComputedStyle(document.body).backgroundColor),
-    "rgb(21, 22, 24)",
+    "rgb(25, 27, 37)",
   );
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   assert.equal(
     await page.evaluate(() => getComputedStyle(document.body).backgroundColor),
-    "rgb(246, 247, 248)",
+    "rgb(245, 245, 249)",
   );
   assert.equal(
     await page
@@ -292,11 +292,17 @@ try {
     for (const [size, width, height] of [
       ["normal", 1180, 900],
       ["small", 720, 640],
+      ["phone", 320, 640],
     ])
       for (const count of [0, 1, 3, 20]) {
         await page.setViewportSize({ width, height });
         await page.goto(base + "/gallery.html");
+        if (width <= 760)
+          await page
+            .getByRole("button", { name: "Mostrar navegación" })
+            .click();
         await page.getByLabel("Tema", { exact: true }).selectOption(theme);
+        if (width <= 760) await page.locator(".mobile-nav-close").click();
         await page
           .getByLabel("Cantidad de muestras")
           .selectOption(String(count));
@@ -312,10 +318,33 @@ try {
             .evaluate((n) => n.scrollWidth <= n.clientWidth + 1),
           `Main overflow ${theme}/${size}/${count}`,
         );
+        if (size === "phone") {
+          const trigger = page.locator(".toolbar > button:first-child");
+          await trigger.click();
+          assert.equal(await trigger.getAttribute("aria-expanded"), "true");
+          assert.equal(
+            await page
+              .getByRole("button", { name: "Documentos", exact: true })
+              .isVisible(),
+            true,
+          );
+          await page.keyboard.press("Escape");
+          assert.equal(await trigger.getAttribute("aria-expanded"), "false");
+        }
         await page.screenshot({
           path: `artifacts/ui-02/gallery-${theme}-${size}-${count}.png`,
         });
         screenshots++;
+        if (size === "phone" && count === 3) {
+          const trigger = page.locator(".toolbar > button:first-child");
+          await trigger.click();
+          await page.getByRole("button", { name: "Documentos", exact: true }).click();
+          assert.equal(await trigger.getAttribute("aria-expanded"), "false");
+          assert.equal(
+            await trigger.evaluate((node) => node === document.activeElement),
+            true,
+          );
+        }
       }
   await page.setViewportSize({ width: 1180, height: 900 });
   await page.getByLabel("Tema", { exact: true }).selectOption("light");
@@ -355,6 +384,66 @@ try {
     );
     await c.close();
   }
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.goto(base + "/gallery.html");
+  for (const name of ["Nueva descarga", "Configuración", "Colas", "Reglas"]) {
+    if (name === "Configuración")
+      await page.getByRole("button", { name: "Mostrar navegación" }).click();
+    await page.getByRole("button", { name, exact: true }).click();
+    const modal = page.getByRole("dialog");
+    await modal.waitFor();
+    assert.ok(
+      await modal.evaluate((node) => node.scrollWidth <= node.clientWidth + 1),
+      `Dialog overflow at 320px: ${name}`,
+    );
+    assert.ok(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+      `Document overflow with dialog at 320px: ${name}`,
+    );
+    await page.screenshot({
+      path: `artifacts/ui-02/phone-${name.replaceAll(" ", "-")}.png`,
+    });
+    screenshots++;
+    await page.keyboard.press("Escape");
+  }
+  const popupHtml = await readFile(
+    path.join(root, "apps/extension/src/popup.html"),
+    "utf8",
+  );
+  const popupTokens = await readFile(
+    path.join(root, "packages/ui/tokens.css"),
+    "utf8",
+  );
+  const popupStyles = await readFile(
+    path.join(root, "apps/extension/src/popup.css"),
+    "utf8",
+  );
+  const visualPopup = popupHtml
+    .replace(
+      '<link rel="stylesheet" href="tokens.css" />',
+      `<style>${popupTokens}</style>`,
+    )
+    .replace(
+      '<link rel="stylesheet" href="popup.css" />',
+      `<style>${popupStyles}</style>`,
+    )
+    .replace('<script src="popup.js"></script>', "");
+  for (const width of [280, 360]) {
+    const popup = await context.newPage();
+    await popup.setViewportSize({ width, height: 700 });
+    await popup.setContent(visualPopup);
+    assert.ok(
+      await popup.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+      `Extension popup overflow at ${width}px`,
+    );
+    await popup.screenshot({ path: `artifacts/ui-02/popup-${width}.png` });
+    screenshots++;
+    await popup.close();
+  }
   // Production bundle must not ship the independent gallery entry or sample records.
   for (const [kind, title, field] of [
     ["new", "Nueva descarga", "Carpeta"],
@@ -366,6 +455,10 @@ try {
       window.__idgFocusFixture = openFocusFixture(kind);
     }, kind);
     const dialog = page.getByRole("dialog", { name: title, exact: true });
+    assert.ok(
+      await dialog.evaluate((node) => node.scrollWidth <= node.clientWidth + 1),
+      `Dialog overflow at 320px: ${title}`,
+    );
     const directory = dialog.getByRole("textbox", { name: field, exact: true });
     await directory.focus();
     assert.equal(await directory.inputValue(), "");

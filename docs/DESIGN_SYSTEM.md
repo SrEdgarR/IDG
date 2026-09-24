@@ -7,25 +7,28 @@ Herramienta de escritorio moderna, serena y funcional. Inspiración Vercel por c
 
 Prioridad visual: archivo → progreso/estado → acciones → detalles. Todo control tiene una tarea. Los campos técnicos viven en expansión/Avanzado.
 
-## Tokens propuestos
-Los siguientes valores son propuestas de diseño; comprobar contraste y ajustar antes de cerrar la etapa visual.
+## Tokens vigentes
+La revisión visual solicitada el 2026-09-24 adapta la paleta y el tratamiento de controles de `workspace-ui.css` a las superficies de IDG. Los selectores de ese archivo describen otra aplicación y no se cargan en producción. Los valores vigentes viven en `packages/ui/tokens.css`; escritorio añade `apps/desktop/src/workspace.css` y el popup usa los mismos tokens.
 
 | Token | Claro | Oscuro |
 |---|---|---|
-| Fondo | `#F6F7F8` | `#151618` |
-| Superficie | `#FBFBFC` | `#1B1D20` |
-| Superficie elevada | `#F0F1F3` | `#23262B` |
-| Borde | `#D8DCE1` | `#343941` |
-| Texto principal | `#20242B` | `#E8EBEF` |
-| Texto secundario | `#606A77` | `#A5ADB9` |
-| Foco/acento funcional | `#2563EB` | `#7BA7FF` |
+| Fondo | `#F5F5F9` | `#191B25` |
+| Superficie | `#FFFFFF` | `#232632` |
+| Superficie sutil | `#F0F1F6` | `#2B2E3D` |
+| Borde | `#E1E3EB` | `#383C4F` |
+| Borde de control | `#C9CDD9` | `#535A73` |
+| Texto principal | `#202331` | `#EEF0F8` |
+| Texto secundario | `#626779` | `#B7BDD0` |
+| Foco/acento funcional | `#5546E8` | `#A79CFF` |
 
 El modo del sistema cambia en tiempo real sin perder selección o estado de filas. Nunca depender solo del color para errores, éxito o pausa. Fondo claro no puro `#FFFFFF`; fondo oscuro no puro `#000000`. Reducir contraste de grandes superficies, no de texto importante.
 
-Tipografía: `Segoe UI Variable`, `Segoe UI`, system-ui; fuente alternativa solo con licencia correcta. Tamaño base aproximado 13–14 px, títulos de sección 18–20 px, cifras tabulares para velocidades y tamaños. Iconos coherentes de trazo, 16–18 px. Radios moderados: 6–8 px para controles, 10 px para diálogos; no píldoras para todo. Espaciado basado en múltiplos de 4 px. Bordes de 1 px y sombras leves en capas flotantes.
+Tipografía: `Segoe UI Variable`, `Segoe UI`, system-ui; fuente alternativa solo con licencia correcta. La escala compartida vigente tiene base de 15 px. Cifras tabulares para velocidades y tamaños; iconos coherentes de trazo. Radios de 9 px en controles, 12–14 px en grupos y 16–20 px en diálogos. Espaciado basado en múltiplos de 4 px. Bordes de 1 px; sombras leves en superficies y más marcadas solo en menús y diálogos.
 
 ## Layout
 Ventana inicial propuesta 1180×760; debe ser usable en 1024×640 y pantallas con DPI alto. Sidebar aproximada 208–224 px con opción de colapsar, no anchos rígidos que impidan el escalado. Barra superior de unos 56 px. Lista ocupa el espacio principal, sin grandes márgenes vacíos.
+
+Al llegar a 760 px o menos, la navegación se abre como panel lateral con botón de cierre, Escape y retorno de foco. La barra de búsqueda, filtros y acción principal se reorganiza sin ocultar controles. Formularios de dos columnas pasan a una; diálogos se ajustan al ancho y desplazan su contenido verticalmente. Las acciones de fila permanecen visibles y los datos secundarios se reubican según el ancho disponible. El popup admite 280–360 px sin desbordamiento horizontal.
 
 Compacto: una fila de altura aproximada 58–68 px. Mostrar checkbox al seleccionar o pasar foco, icono de tipo, nombre, barra/porcentaje, bytes, sparkline de unos 84×24 px, velocidad, ETA y acciones. A anchos menores ocultar columnas de menor prioridad en el panel expandido, no cortar acciones.
 
@@ -60,3 +63,5 @@ Si el usuario aporta imágenes posteriormente, inventariar y ubicar cada control
 El propietario aceptó personalmente los temas claro/oscuro, expansión de filas con información y gráfica, Nueva descarga y Configuración. Esta confirmación no acredita accesibilidad exhaustiva, DPI, compatibilidad ni funciones futuras. Iconos y animaciones ornamentales se reservan para pulido posterior.
 
 Se conserva paleta, estructura e interacción. La escala compartida `--font-N` representa el tamaño anterior N más 1 px (base 15 px), aplicada a sidebar, filas, etiquetas, botones, campos, diálogos, Ajustes y popup. Los títulos mantienen su jerarquía; interlineado base 1.45. No se usa zoom ni transform para escalar la aplicación.
+
+Ese párrafo documenta el cierre histórico de fase 02. La solicitud visual del 2026-09-24 sustituye sus colores y radios por los tokens vigentes de esta página; conserva la escala tipográfica, la jerarquía de información y las acciones existentes. La galería verifica localmente claro/oscuro, anchos 320/720/1180 px, formularios estrechos y popup 280/360 px; la revisión física en WebView2, navegador y DPI real sigue pendiente.
