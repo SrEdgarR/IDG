@@ -297,18 +297,19 @@ export function App({
           (mobileMenuOpen ? " mobile-menu-open" : "")
         }
       >
-        {mobileMenuOpen && (
-          <button
-            className="mobile-nav-backdrop"
-            aria-label="Cerrar navegación"
-            onClick={() => {
-              setMobileMenuOpen(false);
-              menuButton.current?.focus();
-            }}
-          />
-        )}
+        <button
+          className="mobile-nav-backdrop"
+          aria-label="Cerrar navegación"
+          aria-hidden={!mobileMenuOpen}
+          tabIndex={mobileMenuOpen ? 0 : -1}
+          onClick={() => {
+            setMobileMenuOpen(false);
+            menuButton.current?.focus();
+          }}
+        />
         <aside
           className="sidebar"
+          inert={narrowWindow && !mobileMenuOpen}
           onKeyDown={(event) => {
             if (!mobileMenuOpen || event.key !== "Tab") return;
             const controls = Array.from(
@@ -361,6 +362,7 @@ export function App({
             {states.map((s, i) => (
               <button
                 key={s}
+                data-view-state={s}
                 aria-current={filters.view === s ? "page" : undefined}
                 onClick={() => update({ view: s })}
               >
@@ -470,7 +472,12 @@ export function App({
               />
             </label>
             <details
-              className="filters"
+              className={
+                "filters" +
+                (filters.status || filters.site || filters.after || filters.size
+                  ? " has-filters"
+                  : "")
+              }
               ref={filtersRef}
               onKeyDown={(e) => {
                 if (e.key === "Escape") {

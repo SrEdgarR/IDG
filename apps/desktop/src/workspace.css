@@ -699,8 +699,8 @@ input[type="file"]::file-selector-button {
     visibility: hidden;
     transform: translateX(-105%);
     transition:
-      transform 160ms ease,
-      visibility 160ms;
+      transform var(--ui-motion-surface) var(--ui-motion-ease),
+      visibility var(--ui-motion-surface);
     box-shadow: var(--ui-overlay-shadow);
   }
 
@@ -736,6 +736,18 @@ input[type="file"]::file-selector-button {
     border-radius: 0;
     background: rgb(20 23 39 / 42%);
     box-shadow: none;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      opacity var(--ui-motion-surface) var(--ui-motion-ease),
+      visibility var(--ui-motion-surface);
+  }
+
+  .app-shell.mobile-menu-open .mobile-nav-backdrop {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
   }
 
   .toolbar {
@@ -869,4 +881,194 @@ input[type="file"]::file-selector-button {
   .app-shell .sidebar {
     transition: none;
   }
+}
+
+/* State accents stay legible without motion; text continues to name every state. */
+.sidebar nav button svg,
+.sidebar-bottom button svg,
+.toolbar button svg,
+.row-action svg,
+.row-menu > summary svg {
+  transition: transform var(--ui-motion-fast) var(--ui-motion-ease);
+}
+
+.sidebar nav button:hover:not(:disabled) svg,
+.sidebar-bottom button:hover:not(:disabled) svg {
+  transform: translateX(2px);
+}
+
+.sidebar nav button[data-view-state="Completadas"] svg {
+  color: var(--success);
+}
+
+.sidebar nav button[data-view-state="Fallidas"] svg {
+  color: var(--danger);
+}
+
+.toolbar > button:first-child:hover:not(:disabled) svg,
+.row-action:hover:not(:disabled) svg,
+.row-menu > summary:hover svg {
+  transform: translateY(-1px);
+}
+
+.filters.has-filters > summary,
+.filters[open] > summary,
+.row-menu[open] > summary {
+  border-color: color-mix(in srgb, var(--ui-accent) 30%, var(--ui-line));
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent-ink);
+}
+
+.row-menu[open] > summary svg {
+  transform: rotate(90deg);
+}
+
+.row-title[aria-expanded="true"] .filename {
+  color: var(--ui-accent-ink);
+}
+
+.empty[role="alert"] > svg {
+  color: var(--danger);
+}
+
+.download-row {
+  transition: background-color var(--ui-motion-fast) var(--ui-motion-ease);
+}
+
+.file-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--ui-subtle);
+  transition:
+    color var(--ui-motion-fast) var(--ui-motion-ease),
+    background-color var(--ui-motion-fast) var(--ui-motion-ease),
+    transform var(--ui-motion-fast) var(--ui-motion-ease);
+}
+
+.download-row:hover .file-icon {
+  transform: translateY(-1px);
+}
+
+.download-row:is(
+    [data-state="Downloading"],
+    [data-state="Probing"],
+    [data-state="Processing"]
+  )
+  .file-icon {
+  color: var(--ui-accent-ink);
+  background: var(--ui-accent-soft);
+}
+
+.download-row[data-state="Completed"] .file-icon {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 12%, var(--ui-surface));
+}
+
+.download-row[data-state="Failed"] .file-icon {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, var(--ui-surface));
+}
+
+.row-action:not(:disabled) {
+  border-color: color-mix(in srgb, var(--ui-accent) 24%, var(--ui-line));
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent-ink);
+}
+
+.download-row[data-state="Completed"] .row-action:not(:disabled) {
+  border-color: color-mix(in srgb, var(--success) 26%, var(--ui-line));
+  background: color-mix(in srgb, var(--success) 10%, var(--ui-surface));
+  color: var(--success);
+}
+
+.download-row[data-state="Completed"] progress::-webkit-progress-value {
+  background: var(--success);
+}
+
+.download-row[data-state="Completed"] progress::-moz-progress-bar {
+  background: var(--success);
+}
+
+.download-row[data-state="Failed"] progress::-webkit-progress-value {
+  background: var(--danger);
+}
+
+.download-row[data-state="Failed"] progress::-moz-progress-bar {
+  background: var(--danger);
+}
+
+:where(.filters > summary, .row-menu > summary) {
+  transition:
+    background-color var(--ui-motion-fast) var(--ui-motion-ease),
+    border-color var(--ui-motion-fast) var(--ui-motion-ease),
+    color var(--ui-motion-fast) var(--ui-motion-ease),
+    transform var(--ui-motion-fast) var(--ui-motion-ease);
+}
+
+:where(
+    .toolbar > button,
+    .filters > summary,
+    .row-action,
+    .row-menu > summary,
+    .dialog-actions button,
+    .modal header > button,
+    .settings-layout nav button,
+    .pagination button,
+    .selection-toolbar button,
+    .queue-toolbar button,
+    .runtime button,
+    .gallery-banner button
+  ):active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+@keyframes idg-surface-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes idg-popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes idg-status-arrive {
+  from {
+    opacity: 0.45;
+    transform: scale(0.65);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.modal[open],
+.selection-toolbar,
+.workspace > main > section[aria-label="Notificaciones"] > div,
+.connection-banner {
+  animation: idg-surface-in var(--ui-motion-surface) var(--ui-motion-ease) both;
+}
+
+.filters[open] .filter-popover,
+.row-menu[open] .action-menu {
+  animation: idg-popover-in var(--ui-motion-fast) var(--ui-motion-ease) both;
+}
+
+.connection.online::before {
+  animation: idg-status-arrive var(--ui-motion-surface) var(--ui-motion-ease)
+    both;
 }

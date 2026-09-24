@@ -16,6 +16,23 @@ header {
   gap: 12px;
   min-width: 0;
 }
+.popup-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.popup-brand-mark {
+  display: grid;
+  flex: 0 0 30px;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid color-mix(in srgb, var(--ui-accent) 18%, var(--ui-line));
+  border-radius: 9px;
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent-ink);
+}
 header strong {
   font-size: var(--font-22);
   letter-spacing: -0.06em;
@@ -88,6 +105,10 @@ footer {
   border-radius: 7px;
   background: var(--ui-subtle);
   color: var(--ui-ink);
+  transition:
+    background-color var(--ui-motion-fast) var(--ui-motion-ease),
+    border-color var(--ui-motion-fast) var(--ui-motion-ease),
+    color var(--ui-motion-fast) var(--ui-motion-ease);
 }
 
 #status::before {
@@ -96,6 +117,24 @@ footer {
   height: 7px;
   border-radius: 50%;
   background: var(--ui-muted);
+}
+
+#status[data-state="connecting"] {
+  border-color: color-mix(in srgb, var(--ui-accent) 24%, var(--ui-line));
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent-ink);
+}
+
+#status[data-state="connecting"]::before {
+  background: var(--ui-accent);
+  animation: idg-connecting-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes idg-connecting-pulse {
+  50% {
+    opacity: 0.55;
+    transform: scale(1.2);
+  }
 }
 
 #status[data-state="online"] {
@@ -116,6 +155,11 @@ footer {
 
 #reconnect {
   width: 100%;
+}
+
+#reconnect:active:not(:disabled),
+footer button:active:not(:disabled) {
+  transform: scale(0.96);
 }
 
 footer button {

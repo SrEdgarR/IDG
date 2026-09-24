@@ -71,6 +71,36 @@ try {
   );
   await page.getByLabel("Cantidad de muestras").selectOption("20");
   assert.equal(await page.locator(".row-title[aria-expanded=true]").count(), 0);
+  const stateColors = await page.evaluate(() => {
+    const iconColor = (state) =>
+      getComputedStyle(
+        document.querySelector(
+          `.download-row[data-state="${state}"] .file-icon`,
+        ),
+      ).color;
+    return [
+      iconColor("Downloading"),
+      iconColor("Completed"),
+      iconColor("Failed"),
+    ];
+  });
+  assert.equal(
+    new Set(stateColors).size,
+    3,
+    "State icons need distinct accents",
+  );
+  assert.equal(
+    await page
+      .locator('.sidebar nav button[data-view-state="Completadas"] svg')
+      .evaluate((node) => getComputedStyle(node).color),
+    stateColors[1],
+  );
+  assert.equal(
+    await page
+      .locator('.sidebar nav button[data-view-state="Fallidas"] svg')
+      .evaluate((node) => getComputedStyle(node).color),
+    stateColors[2],
+  );
   const first = page.locator(".download-row").first();
   await first.getByRole("checkbox").check();
   assert.equal(
@@ -132,6 +162,12 @@ try {
   await page.getByRole("button", { name: "Limpiar filtros" }).click();
   await page.locator(".filters>summary").click();
   await page.getByLabel("Tamaño", { exact: true }).selectOption("unknown");
+  assert.equal(
+    await page
+      .locator(".filters")
+      .evaluate((n) => n.classList.contains("has-filters")),
+    true,
+  );
   assert.equal(await page.locator(".download-row").count(), 1);
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Conflicto", exact: true }).click();
@@ -186,6 +222,12 @@ try {
     .waitFor();
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Limpiar filtros" }).click();
+  assert.equal(
+    await page
+      .locator(".filters")
+      .evaluate((n) => n.classList.contains("has-filters")),
+    false,
+  );
   await first.locator(".row-menu>summary").click();
   assert.equal(
     await first.locator(".row-title").getAttribute("aria-expanded"),
@@ -200,6 +242,10 @@ try {
     name: "Nueva descarga",
     exact: true,
   });
+  assert.equal(
+    await dialog.evaluate((node) => getComputedStyle(node).animationDuration),
+    "0.18s",
+  );
   await dialog
     .getByLabel("Nombre del archivo", { exact: true })
     .fill("CON.txt");
@@ -275,6 +321,12 @@ try {
       .evaluate((n) => getComputedStyle(n).transitionDuration),
     "0s",
   );
+  assert.equal(
+    await page
+      .getByRole("dialog")
+      .evaluate((n) => getComputedStyle(n).animationDuration),
+    "0s",
+  );
   await page.keyboard.press("Escape");
   await mkdir("artifacts/ui-02", { recursive: true });
   await page
@@ -301,8 +353,27 @@ try {
           await page
             .getByRole("button", { name: "Mostrar navegación" })
             .click();
+        if (width <= 760)
+          assert.equal(
+            await page.locator(".mobile-nav-backdrop").isVisible(),
+            true,
+          );
         await page.getByLabel("Tema", { exact: true }).selectOption(theme);
         if (width <= 760) await page.locator(".mobile-nav-close").click();
+        if (width <= 760)
+          await page
+            .locator(".mobile-nav-backdrop")
+            .waitFor({ state: "hidden" });
+        if (width <= 760) {
+          assert.equal(
+            await page.locator(".sidebar").getAttribute("inert"),
+            "",
+          );
+          assert.equal(
+            await page.locator(".mobile-nav-backdrop").getAttribute("tabindex"),
+            "-1",
+          );
+        }
         await page
           .getByLabel("Cantidad de muestras")
           .selectOption(String(count));
@@ -333,12 +404,15 @@ try {
         }
         await page.screenshot({
           path: `artifacts/ui-02/gallery-${theme}-${size}-${count}.png`,
+          animations: "disabled",
         });
         screenshots++;
         if (size === "phone" && count === 3) {
           const trigger = page.locator(".toolbar > button:first-child");
           await trigger.click();
-          await page.getByRole("button", { name: "Documentos", exact: true }).click();
+          await page
+            .getByRole("button", { name: "Documentos", exact: true })
+            .click();
           assert.equal(await trigger.getAttribute("aria-expanded"), "false");
           assert.equal(
             await trigger.evaluate((node) => node === document.activeElement),
@@ -363,6 +437,7 @@ try {
     await page.getByRole("dialog").waitFor();
     await page.screenshot({
       path: `artifacts/ui-02/surface-${name.replaceAll(" ", "-")}.png`,
+      animations: "disabled",
     });
     screenshots++;
     await page.keyboard.press("Escape");
@@ -375,7 +450,10 @@ try {
     const p = await c.newPage();
     await p.goto(base + "/gallery.html");
     await p.getByLabel("Cantidad de muestras").selectOption("20");
-    await p.screenshot({ path: `artifacts/ui-02/gallery-dpr-${scale}.png` });
+    await p.screenshot({
+      path: `artifacts/ui-02/gallery-dpr-${scale}.png`,
+      animations: "disabled",
+    });
     screenshots++;
     assert.ok(
       await p.evaluate(
@@ -404,6 +482,7 @@ try {
     );
     await page.screenshot({
       path: `artifacts/ui-02/phone-${name.replaceAll(" ", "-")}.png`,
+      animations: "disabled",
     });
     screenshots++;
     await page.keyboard.press("Escape");
@@ -434,13 +513,36 @@ try {
     const popup = await context.newPage();
     await popup.setViewportSize({ width, height: 700 });
     await popup.setContent(visualPopup);
+    assert.equal(await popup.locator(".popup-brand-mark svg").count(), 1);
+    await popup.locator("#status").evaluate((node) => {
+      node.dataset.state = "connecting";
+      node.textContent = "Conectando";
+    });
+    assert.match(
+      await popup
+        .locator("#status")
+        .evaluate((node) => getComputedStyle(node, "::before").animationName),
+      /idg-connecting-pulse/,
+    );
     assert.ok(
       await popup.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
       `Extension popup overflow at ${width}px`,
     );
-    await popup.screenshot({ path: `artifacts/ui-02/popup-${width}.png` });
+    await popup.screenshot({
+      path: `artifacts/ui-02/popup-${width}.png`,
+      animations: "disabled",
+    });
+    await popup.emulateMedia({ reducedMotion: "reduce" });
+    assert.equal(
+      await popup
+        .locator("#status")
+        .evaluate(
+          (node) => getComputedStyle(node, "::before").animationDuration,
+        ),
+      "0s",
+    );
     screenshots++;
     await popup.close();
   }
@@ -450,8 +552,9 @@ try {
     ["import", "Importar enlaces", "Carpeta del lote"],
   ]) {
     await page.evaluate(async (kind) => {
-      const { openFocusFixture } =
-        await import("/src/gallery/PreferencesFixture.tsx");
+      const { openFocusFixture } = await import(
+        "/src/gallery/PreferencesFixture.tsx"
+      );
       window.__idgFocusFixture = openFocusFixture(kind);
     }, kind);
     const dialog = page.getByRole("dialog", { name: title, exact: true });

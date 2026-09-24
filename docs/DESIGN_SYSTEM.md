@@ -48,7 +48,9 @@ Sin descargas; sin resultados; metadatos cargando; descarga con tamaño desconoc
 ## Interacción y accesibilidad
 Enter confirma solo cuando la acción es válida; Escape cierra diálogos no destructivos sin iniciar descargas. Foco vuelve al elemento que abrió el diálogo. Ctrl+F búsqueda; atajos adicionales documentados, sin interferir con escritura. Botones de acción de fila no expanden la fila por propagación accidental.
 
-Animaciones 120–180 ms en opacity/transform preferentemente, sin transiciones continuas costosas. Respetar `prefers-reduced-motion`. Gráficas: no anunciar cada punto al lector de pantalla; ofrecer resumen accesible de estado/velocidad.
+Los iconos usan el acento violeta al señalar una acción principal, un filtro activo o una descarga en curso; verde para completadas y rojo para fallidas. El estado siempre se nombra con texto. La conexión en el popup conserva su texto y punto de estado.
+
+Las interacciones frecuentes usan transiciones de 140 ms y las superficies de entrada o navegación móvil, 180 ms, con `cubic-bezier(0.2, 0, 0, 1)`. Animar color, opacidad o desplazamientos pequeños; el botón presionado escala a 0,96. La espera de conexión en el popup puede pulsar suavemente. Al cambiar el tema se aplican los colores de inmediato. `prefers-reduced-motion` elimina animaciones y transiciones. Gráficas: no anunciar cada punto al lector de pantalla; ofrecer resumen accesible de estado/velocidad.
 
 ## Inventario de controles
 En fase 02 ampliar el inventario inicial `docs/UI_CONTROL_INVENTORY.md`: pantalla, control, acción esperada, comando/backend, estado habilitado, error, prueba y fase que lo conecta. Cada fase lo actualiza. En release no debe quedar un control visible que prometa algo no implementado. Para previews tempranas, galería de desarrollo explícita; no datos ficticios mezclados con descargas reales.

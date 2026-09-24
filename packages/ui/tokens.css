@@ -29,6 +29,9 @@
   --ui-card-shadow: 0 2px 5px rgb(24 27 43 / 3%);
   --ui-overlay-shadow:
     0 24px 70px rgb(24 27 43 / 18%), 0 4px 12px rgb(24 27 43 / 6%);
+  --ui-motion-fast: 140ms;
+  --ui-motion-surface: 180ms;
+  --ui-motion-ease: cubic-bezier(0.2, 0, 0, 1);
   --bg: var(--ui-canvas);
   --surface: var(--ui-surface);
   --raised: var(--ui-subtle);
@@ -121,9 +124,10 @@ button {
   font-weight: 600;
   box-shadow: var(--ui-control-shadow);
   transition:
-    background 140ms,
-    color 140ms,
-    border-color 140ms;
+    background-color var(--ui-motion-fast) var(--ui-motion-ease),
+    color var(--ui-motion-fast) var(--ui-motion-ease),
+    border-color var(--ui-motion-fast) var(--ui-motion-ease),
+    transform var(--ui-motion-fast) var(--ui-motion-ease);
 }
 button:hover:not(:disabled) {
   background: var(--ui-accent-soft);
@@ -144,6 +148,9 @@ textarea {
   min-width: 0;
   min-height: 40px;
   caret-color: var(--ui-accent);
+  transition:
+    border-color var(--ui-motion-fast) var(--ui-motion-ease),
+    box-shadow var(--ui-motion-fast) var(--ui-motion-ease);
 }
 button:focus-visible,
 input:focus-visible,
@@ -192,4 +199,10 @@ a {
     transition: none !important;
     scroll-behavior: auto !important;
   }
+}
+
+:root[data-theme-changing] *,
+:root[data-theme-changing] *::before,
+:root[data-theme-changing] *::after {
+  transition: none !important;
 }
