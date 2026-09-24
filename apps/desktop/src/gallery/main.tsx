@@ -14,6 +14,7 @@ import {
 } from "./Surfaces";
 import "../../../../packages/ui/tokens.css";
 import "../style.css";
+import "../workspace.css";
 function Gallery() {
   const [count, setCount] = useState(3);
   const [revision, setRevision] = useState(0);

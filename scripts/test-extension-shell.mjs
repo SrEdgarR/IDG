@@ -26,6 +26,8 @@ try {
     const diagnostic = await worker.evaluate(() => ({ downloads: typeof chrome.downloads, menu: typeof chrome.contextMenus, id: chrome.runtime.id })).catch((e) => String(e));
     throw new Error(`${error.message}\nstatus=${await page.locator("#status").textContent()} detail=${await page.locator("#detail").textContent()} errors=${JSON.stringify(failures)} worker=${JSON.stringify(diagnostic)}`);
   });
+  const connectionText = await page.locator("#status").innerText();
+  assert.equal(await page.locator("#status").getAttribute("data-state"), connectionText === "Conectado" ? "online" : "offline");
   const manifest = await page.evaluate(() => chrome.runtime.getManifest());
   assert.equal(manifest.background?.service_worker, "worker.js");
   assert.deepEqual(manifest.optional_permissions, ["downloads"]);

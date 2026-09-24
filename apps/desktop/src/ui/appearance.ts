@@ -30,12 +30,25 @@ export function useAppearance(persist = true) {
     }
   });
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
+    const root = document.documentElement;
+    root.dataset.themeChanging = "";
+    root.dataset.theme = theme;
+    let frameToRemove = 0;
+    const frame = requestAnimationFrame(() => {
+      frameToRemove = requestAnimationFrame(() => {
+        delete root.dataset.themeChanging;
+      });
+    });
     try {
       if (persist) localStorage.setItem("idg.ui.theme", theme);
     } catch {
       /* UI remains usable without storage. */
     }
+    return () => {
+      cancelAnimationFrame(frame);
+      cancelAnimationFrame(frameToRemove);
+      delete root.dataset.themeChanging;
+    };
   }, [theme, persist]);
   return { theme, setTheme };
 }

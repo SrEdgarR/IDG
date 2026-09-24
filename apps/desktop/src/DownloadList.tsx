@@ -234,6 +234,7 @@ export function DownloadList({
                 "download-row" + (selected.has(row.id) ? " selected" : "")
               }
               data-row-id={row.id}
+              data-state={row.state}
             >
               <div className="row-main">
                 <input

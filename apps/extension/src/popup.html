@@ -9,9 +9,28 @@
   </head>
   <body>
     <main>
-      <header><strong>IDG</strong><small>CHROMIUM · DESARROLLO</small></header>
+      <header>
+        <div class="popup-brand">
+          <span class="popup-brand-mark" aria-hidden="true">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M12 3v12 M7 10l5 5 5-5 M4 16v5h16v-5" />
+            </svg>
+          </span>
+          <strong>IDG</strong>
+        </div>
+        <small>EXTENSIÓN DE DESARROLLO</small>
+      </header>
       <section aria-label="Conexión con el motor">
-        <h1 id="status" role="status">Conectando…</h1>
+        <h1 id="status" role="status" data-state="connecting">Conectando…</h1>
         <p id="detail">Comprobando el motor local.</p>
         <button id="reconnect" type="button">Reconectar</button>
       </section>

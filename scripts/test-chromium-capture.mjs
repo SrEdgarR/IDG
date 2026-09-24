@@ -84,6 +84,7 @@ try {
   popup.on("pageerror", (error) => errors.push(error.message));
   await popup.goto(`chrome-extension://${identity.chromium_id}/popup.html`);
   await popup.locator("#status").filter({ hasText: /^Conectado$/ }).waitFor();
+  assert.equal(await popup.locator("#status").getAttribute("data-state"), "online");
   await setMode(popup, "always");
   assert.match(await popup.locator("#capture-permission").innerText(), /autorizada/);
   const dialog = app.getByRole("dialog", { name: "Nueva descarga" });

@@ -2,6 +2,8 @@
 
 ## Matriz vigente de fase 06
 
+Revisión visual solicitada el 2026-09-24: los controles existentes de escritorio, galería y popup usan los tokens adaptados de `workspace-ui.css`. `apps/desktop/src/workspace.css` cubre navegación, barra de herramientas, filas, menús, diálogos, formularios, avisos y ventanas auxiliares; `apps/extension/src/popup.css` cubre el popup. `scripts/test-ui.mjs` comprueba navegación de panel estrecho, controles y diálogos a 320 px, temas, ausencia de desbordamiento y popup a 280/360 px. Es evidencia visual/local; no cambia la disponibilidad funcional de ningún CTL ni acredita la interacción nativa de la extensión.
+
 Las pruebas de interacción indicadas usan Tauri/WebView2 real de forma automatizada, con runtime y servidor HTTP locales. No equivalen a una revisión humana. La confirmación del propietario corresponde a 05, no a los controles nuevos de 06. Estado y commit del conjunto probado en [IMPLEMENTATION_STATUS](IMPLEMENTATION_STATUS.md).
 
 Regresión adicional de CTL-022/041: enfocar la carpeta protege el borrador de preferencias tardías antes del primer carácter. `test-ui.mjs` usa una preferencia diferida de fixture; es una prueba de formulario aislada, no IPC. Los recorridos Tauri separados crean archivos reales y verifican el destino.

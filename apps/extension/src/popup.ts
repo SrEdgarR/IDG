@@ -54,6 +54,7 @@ async function load() {
     const response = await send({ type: "state" });
     settings = response.settings;
     status.textContent = response.connected ? "Conectado" : "Desconectado";
+    status.dataset.state = response.connected ? "online" : "offline";
     detail.textContent = response.connected ? `Motor ${response.processId} · ${response.engine?.active_count ?? 0} activos.` : "Host ausente, motor detenido o versión incompatible. Consulta la guía de desarrollo.";
     mode.disabled = !response.connected;
     if (response.engine) mode.value = response.engine.autopick_mode;
@@ -69,10 +70,14 @@ async function load() {
     renderJobs(response.engine);
     renderOffers(response.offers);
     notice.textContent = response.notice;
-  } catch (e) { status.textContent = "Desconectado"; error(e); }
+  } catch (e) { status.textContent = "Desconectado"; status.dataset.state = "offline"; error(e); }
 }
 function listValues(value: string) { return [...new Set(value.split(",").map((v) => v.trim().toLowerCase()).filter(Boolean))].slice(0, 32); }
-$("reconnect").addEventListener("click", () => { void send({ type: "reconnect" }).then(load).catch(error); });
+$("reconnect").addEventListener("click", () => {
+  status.textContent = "Conectando…";
+  status.dataset.state = "connecting";
+  void send({ type: "reconnect" }).then(load).catch((e) => { error(e); void load(); });
+});
 mode.addEventListener("change", () => { void send({ type: "mode", mode: mode.value }).then(load).catch((e) => { error(e); void load(); }); });
 $("capture-permission").addEventListener("click", async () => {
   try {

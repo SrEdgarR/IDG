@@ -77,6 +77,32 @@ export function App({
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState("");
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [narrowWindow, setNarrowWindow] = useState(
+    () => window.matchMedia("(max-width: 760px)").matches,
+  );
+  const menuButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 760px)");
+    const updateWidth = () => {
+      setNarrowWindow(media.matches);
+      if (!media.matches) setMobileMenuOpen(false);
+    };
+    media.addEventListener("change", updateWidth);
+    return () => media.removeEventListener("change", updateWidth);
+  }, []);
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !document.querySelector("dialog[open]")) {
+        setMobileMenuOpen(false);
+        menuButton.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", onEscape);
+    document.getElementById("sidebar-nav")?.querySelector("button")?.focus();
+    return () => document.removeEventListener("keydown", onEscape);
+  }, [mobileMenuOpen]);
   const [selected, setSelected] = useState(new Set<string>());
   const { mode, setMode: setLocalMode } = useViewMode(!backend);
   const setMode = (view: string) => {
@@ -289,8 +315,44 @@ export function App({
   return (
     <div className="app-frame">
       {galleryTools}
-      <div className={"app-shell" + (collapsed ? " collapsed" : "")}>
-        <aside className="sidebar">
+      <div
+        className={
+          "app-shell" +
+          (collapsed ? " collapsed" : "") +
+          (mobileMenuOpen ? " mobile-menu-open" : "")
+        }
+      >
+        <button
+          className="mobile-nav-backdrop"
+          aria-label="Cerrar navegación"
+          aria-hidden={!mobileMenuOpen}
+          tabIndex={mobileMenuOpen ? 0 : -1}
+          onClick={() => {
+            setMobileMenuOpen(false);
+            menuButton.current?.focus();
+          }}
+        />
+        <aside
+          className="sidebar"
+          inert={narrowWindow && !mobileMenuOpen}
+          onKeyDown={(event) => {
+            if (!mobileMenuOpen || event.key !== "Tab") return;
+            const controls = Array.from(
+              event.currentTarget.querySelectorAll<HTMLElement>(
+                "button:not([disabled]), select:not([disabled])",
+              ),
+            );
+            const first = controls[0],
+              last = controls.at(-1);
+            if (event.shiftKey && document.activeElement === first) {
+              event.preventDefault();
+              last?.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+              event.preventDefault();
+              first?.focus();
+            }
+          }}
+        >
           <div className="brand">
             <span className="brand-mark">
               <Icon name="download" />
@@ -298,7 +360,24 @@ export function App({
             <strong>IDG</strong>
             <span className="muted brand-caption">Download Genious</span>
           </div>
-          <nav aria-label="Descargas">
+          <button
+            className="mobile-nav-close"
+            aria-label="Cerrar navegación"
+            onClick={() => {
+              setMobileMenuOpen(false);
+              menuButton.current?.focus();
+            }}
+          >
+            <Icon name="close" />
+          </button>
+          <nav
+            id="sidebar-nav"
+            aria-label="Descargas"
+            onClick={() => {
+              if (narrowWindow) menuButton.current?.focus();
+              setMobileMenuOpen(false);
+            }}
+          >
             {backend && (
               <button onClick={() => update({ view: "Ocultas" })}>
                 Ocultas
@@ -308,6 +387,7 @@ export function App({
             {states.map((s, i) => (
               <button
                 key={s}
+                data-view-state={s}
                 aria-current={filters.view === s ? "page" : undefined}
                 onClick={() => update({ view: s })}
               >
@@ -345,12 +425,26 @@ export function App({
             ))}
           </nav>
           <div className="sidebar-bottom">
-            <button onClick={() => setDialog("settings")}>
+            <button
+              onClick={() => {
+                if (narrowWindow) menuButton.current?.focus();
+                setMobileMenuOpen(false);
+                setDialog("settings");
+              }}
+            >
               <Icon name="settings" />
               <span>Configuración</span>
             </button>
             {(backend ? organization?.library.statistics_visible : stats) && (
-              <button onClick={() => update({ view: "Estadísticas" })}>
+              <button
+                onClick={() => {
+                  if (narrowWindow) {
+                    menuButton.current?.focus();
+                    setMobileMenuOpen(false);
+                  }
+                  update({ view: "Estadísticas" });
+                }}
+              >
                 Estadísticas
               </button>
             )}
@@ -372,8 +466,22 @@ export function App({
         <div className="workspace">
           <header className="toolbar">
             <button
-              aria-label={collapsed ? "Mostrar sidebar" : "Contraer sidebar"}
-              onClick={() => setCollapsed(!collapsed)}
+              ref={menuButton}
+              aria-label={
+                narrowWindow
+                  ? mobileMenuOpen
+                    ? "Cerrar navegación"
+                    : "Mostrar navegación"
+                  : collapsed
+                    ? "Mostrar sidebar"
+                    : "Contraer sidebar"
+              }
+              aria-controls="sidebar-nav"
+              aria-expanded={narrowWindow ? mobileMenuOpen : !collapsed}
+              onClick={() => {
+                if (narrowWindow) setMobileMenuOpen(!mobileMenuOpen);
+                else setCollapsed(!collapsed);
+              }}
             >
               <Icon name="menu" />
             </button>
@@ -389,7 +497,12 @@ export function App({
               />
             </label>
             <details
-              className="filters"
+              className={
+                "filters" +
+                (filters.status || filters.site || filters.after || filters.size
+                  ? " has-filters"
+                  : "")
+              }
               ref={filtersRef}
               onKeyDown={(e) => {
                 if (e.key === "Escape") {
@@ -534,7 +647,7 @@ export function App({
               />
             )}
             {backend && filters.view === "En cola" && (
-              <div>
+              <div className="queue-toolbar" aria-label="Acciones de cola">
                 <button onClick={() => void queue(true)}>Iniciar cola</button>
                 <button onClick={() => void queue(false)}>Detener cola</button>
                 <button onClick={() => setQueueEditor(true)}>
