@@ -167,24 +167,47 @@ try {
   assert.equal(await popup.locator("#autopick").inputValue(), "browser", "El modo debe persistir al reabrir el popup");
   await setMode(popup, "always");
   await popup.getByText("Excepciones y tamaño").click();
-  await popup.locator("#ignore-ext").fill(".bin");
+  await popup.locator("#ignore-ext").fill(".exe");
   await popup.locator("#save-rules").click();
   for (let n = 0; n < 30; n++) {
     const saved = await popup.evaluate(() => chrome.storage.local.get("settings"));
-    if (saved.settings?.ignoredExtensions?.includes("bin")) break;
+    if (saved.settings?.ignoredExtensions?.includes("exe")) break;
     await sleep(100);
   }
   await popup.reload();
   await popup.getByText("Excepciones y tamaño").click();
-  assert.equal(await popup.locator("#ignore-ext").inputValue(), "bin", "La excepción debe persistir en el perfil");
-  const ignoredTab = await browser.newPage();
-  const [ignoredDownload] = await Promise.all([ignoredTab.waitForEvent("download"), ignoredTab.goto(fixture.url + "/ignored.bin").catch(() => {})]);
-  await sleep(1000);
-  assert.equal(await dialog.isVisible(), false, "La extensión .bin ignorada no debe proponer captura");
-  assert.equal(createHash("sha256").update(await readFile(await ignoredDownload.path())).digest("hex"), expectedHash(fixture.size));
-  assert.equal(probe("list").jobs.length, 1);
-  await popup.locator("#ignore-ext").fill("");
-  await popup.locator("#save-rules").click();
+  assert.equal(await popup.locator("#ignore-ext").inputValue(), "exe", "La excepción debe persistir en el perfil");
+  for (const name of ["ignored.exe", "encoded%2Eexe"]) {
+    const ignoredTab = await browser.newPage();
+    await Promise.all([
+      ignoredTab.waitForEvent("download"),
+      ignoredTab.goto(fixture.url + "/" + name).catch(() => {}),
+    ]);
+    await sleep(1000);
+    assert.equal(await dialog.isVisible(), false, `${name} no debe proponer captura`);
+    const stored = await popup.evaluate(() => chrome.storage.local.get(["pending", "offers"]));
+    assert.equal(JSON.stringify(stored).includes(name), false, `${name} no debe quedar como propuesta`);
+    assert.equal(probe("list").jobs.length, 1, `${name} no debe crear trabajo IDG`);
+  }
+  const allowedTab = await browser.newPage();
+  await Promise.all([
+    allowedTab.waitForEvent("download"),
+    allowedTab.goto(fixture.url + "/allowed.bin").catch(() => {}),
+  ]);
+  await dialog.waitFor();
+  assert.equal(await dialog.getByLabel("Nombre del archivo", { exact: true }).inputValue(), "allowed.bin");
+  await dialog.getByLabel("El enlace permite solicitudes repetidas").check();
+  await dialog.getByRole("button", { name: "Aceptar en IDG" }).click();
+  await dialog.waitFor({ state: "hidden" });
+  let allowedJob;
+  for (let n = 0; n < 600; n++) {
+    allowedJob = probe("list").jobs.find((entry) => entry.name === "allowed.bin");
+    if (allowedJob?.state === "completed") break;
+    await sleep(100);
+  }
+  assert.equal(allowedJob?.state, "completed", "La política exe no debe bloquear .bin");
+  assert.equal(createHash("sha256").update(await readFile(path.join(files, "allowed.bin"))).digest("hex"), expectedHash(fixture.size));
+  assert.equal(probe("list").jobs.length, 2);
   const sourceTab = await browser.newPage();
   await sourceTab.goto(linkPageUrl);
   await sourceTab.bringToFront();
@@ -208,10 +231,10 @@ try {
   }
   assert.equal(directJob?.state, "completed", "El enlace elegido debe completarse en IDG");
   assert.equal(createHash("sha256").update(await readFile(path.join(files, "direct.bin"))).digest("hex"), expectedHash(fixture.size));
-  assert.equal(probe("list").jobs.length, 2);
-  assert.deepEqual((await readdir(files)).sort(), ["capture.bin", "direct.bin"]);
+  assert.equal(probe("list").jobs.length, 3);
+  assert.deepEqual((await readdir(files)).sort(), ["allowed.bin", "capture.bin", "direct.bin"]);
   assert.equal((await popup.evaluate(() => chrome.downloads.search({}))).filter((item) => item.url === fixture.url + "/direct.bin").length, 0, "El enlace directo aceptado no debe crear descarga paralela en Chromium");
-  console.log("PASS Chromium: traspaso observado y enlace directo elegidos en la interfaz, hashes únicos, cancelación conserva navegador, modos y extensión ignorada.");
+  console.log("PASS Chromium: exe y %2Eexe excluidos; .bin permitido capturado y verificado; enlace directo, fallback y modos conservados.");
   void download;
 } finally {
   await browser?.close();
