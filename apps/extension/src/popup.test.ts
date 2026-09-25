@@ -48,3 +48,15 @@ it("keeps an active job button stable across progress refreshes so it can be cli
   button.click();
   await waitFor(() => expect(sendMessage).toHaveBeenCalledWith({ type: "pause", id: "job-1" }));
 });
+
+it("does not overwrite an unsaved exclusion while progress updates arrive", async () => {
+  await import("./popup");
+  await waitFor(() => expect(document.querySelector("#detail")?.textContent).toContain("Motor 124"));
+  const field = document.querySelector<HTMLInputElement>("#ignore-ext")!;
+  field.focus();
+  field.value = ".exe";
+  field.dispatchEvent(new Event("input", { bubbles: true }));
+  updated?.({ type: "updated" });
+  await waitFor(() => expect(document.querySelector("#detail")?.textContent).toContain("Motor 125"));
+  expect(field.value).toBe(".exe");
+});

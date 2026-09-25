@@ -6,10 +6,16 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const status = $("status"), detail = $("detail"), notice = $("notice");
 const mode = $<HTMLSelectElement>("autopick");
 const site = $<HTMLInputElement>("ignore-site");
+const ruleFields = [$<HTMLInputElement>("ignore-ext"), $<HTMLInputElement>("ignore-mime"), $<HTMLInputElement>("min-kib"), $<HTMLSelectElement>("unknown")];
 let currentSite = "";
 let settings: Settings | null = null;
+let rulesDirty = false;
 let renderedJobs: string | null = null;
 let renderedOffers: string | null = null;
+for (const field of ruleFields) {
+  field.addEventListener("input", () => { rulesDirty = true; });
+  field.addEventListener("change", () => { rulesDirty = true; });
+}
 
 async function send(message: object): Promise<Reply> {
   const response = await chrome.runtime.sendMessage(message) as Reply;
@@ -71,10 +77,12 @@ async function load() {
     $("suspend").textContent = response.settings.suspendedUntil > Date.now() ? "Reanudar AutoPick" : "Suspender una hora";
     site.disabled = !currentSite;
     site.checked = currentSite ? response.settings.ignoredSites.includes(currentSite) : false;
-    ($<HTMLInputElement>("ignore-ext")).value = response.settings.ignoredExtensions.join(", ");
-    ($<HTMLInputElement>("ignore-mime")).value = response.settings.ignoredMimes.join(", ");
-    ($<HTMLInputElement>("min-kib")).value = String(response.settings.minBytes / 1024);
-    ($<HTMLSelectElement>("unknown")).value = response.settings.unknownSize;
+    if (!rulesDirty && !ruleFields.includes(document.activeElement as HTMLInputElement)) {
+      ($<HTMLInputElement>("ignore-ext")).value = response.settings.ignoredExtensions.join(", ");
+      ($<HTMLInputElement>("ignore-mime")).value = response.settings.ignoredMimes.join(", ");
+      ($<HTMLInputElement>("min-kib")).value = String(response.settings.minBytes / 1024);
+      ($<HTMLSelectElement>("unknown")).value = response.settings.unknownSize;
+    }
     renderJobs(response.engine);
     renderOffers(response.offers);
     notice.textContent = response.notice;
@@ -112,7 +120,7 @@ $("save-rules").addEventListener("click", () => {
     ignoredExtensions: listValues(($<HTMLInputElement>("ignore-ext")).value).map((s) => s.replace(/^\./, "")),
     ignoredMimes: listValues(($<HTMLInputElement>("ignore-mime")).value),
     minBytes: Math.floor(kb * 1024), unknownSize: ($<HTMLSelectElement>("unknown")).value,
-  } }).then(load).catch(error);
+  } }).then(() => { rulesDirty = false; return load(); }).catch(error);
 });
 $("open").addEventListener("click", () => { void send({ type: "open" }).then(() => { notice.textContent = "Se solicitó abrir IDG."; }).catch(error); });
 $("find-links").addEventListener("click", async () => {
