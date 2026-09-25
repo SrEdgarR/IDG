@@ -8,6 +8,8 @@ const mode = $<HTMLSelectElement>("autopick");
 const site = $<HTMLInputElement>("ignore-site");
 let currentSite = "";
 let settings: Settings | null = null;
+let renderedJobs: string | null = null;
+let renderedOffers: string | null = null;
 
 async function send(message: object): Promise<Reply> {
   const response = await chrome.runtime.sendMessage(message) as Reply;
@@ -16,6 +18,9 @@ async function send(message: object): Promise<Reply> {
 }
 function error(e: unknown) { notice.textContent = e instanceof Error ? e.message : "Acción no disponible."; }
 function renderJobs(engine: ExtensionState | null) {
+  const signature = JSON.stringify(engine?.jobs.map(({ id, name, state }) => [id, name, state]) ?? []);
+  if (signature === renderedJobs) return;
+  renderedJobs = signature;
   const list = $("jobs");
   list.replaceChildren();
   if (!engine?.jobs.length) { const li = document.createElement("li"); li.textContent = "Sin trabajos activos."; list.append(li); return; }
@@ -39,6 +44,9 @@ function renderJobs(engine: ExtensionState | null) {
   }
 }
 function renderOffers(offers: Reply["offers"]) {
+  const signature = JSON.stringify(offers);
+  if (signature === renderedOffers) return;
+  renderedOffers = signature;
   const list = $("offers"); list.replaceChildren();
   if (!offers.length) { const li = document.createElement("li"); li.textContent = "No hay propuestas pendientes."; list.append(li); return; }
   for (const offer of offers) {

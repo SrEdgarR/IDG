@@ -118,6 +118,14 @@ try {
   await app.screenshot({ path: "artifacts/chromium-capture-dialog.png", mask: [dialog.getByLabel("Carpeta", { exact: true }), dialog.getByLabel("URL del archivo", { exact: true })] });
   await dialog.getByRole("button", { name: "Aceptar en IDG" }).click();
   await dialog.waitFor({ state: "hidden" });
+  const captureRow = popup.locator("#jobs li").filter({ hasText: "capture.bin" });
+  await captureRow.getByRole("button", { name: "Pausar" }).click();
+  for (let n = 0; n < 50; n++) {
+    if (probe("list").jobs.find((entry) => entry.name === "capture.bin")?.state === "paused") break;
+    await sleep(100);
+  }
+  assert.equal(probe("list").jobs.find((entry) => entry.name === "capture.bin")?.state, "paused", "El control del popup debe pausar el trabajo real");
+  await captureRow.getByRole("button", { name: "Reanudar" }).click();
   let job;
   for (let n = 0; n < 600; n++) {
     job = probe("list").jobs[0];
@@ -276,7 +284,7 @@ try {
   assert.equal(finalPending.pending?.some((entry) => entry.url === fixture.url + "/outage.bin"), false, "La propuesta caducada se resuelve sin duplicar el trabajo");
   assert.equal(probe("list").jobs.length, 3, "La pérdida del host antes de aceptar no crea trabajo adicional");
   assert.deepEqual((await readdir(files)).sort(), ["allowed.bin", "capture.bin", "direct.bin"]);
-  console.log("PASS Chromium: exclusiones, doble clic, traspaso y pérdida del motor antes de aceptar; hashes y trabajos únicos verificados.");
+  console.log("PASS Chromium: pausa/reanudación desde popup, exclusiones, doble clic, traspaso y pérdida del motor antes de aceptar; hashes y trabajos únicos verificados.");
   void download;
 } finally {
   await browser?.close();
