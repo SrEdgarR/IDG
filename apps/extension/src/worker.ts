@@ -17,6 +17,7 @@ let snapshotId = "";
 let processId = 0;
 let engine: ExtensionState | null = null;
 let watchClose: (() => void) | null = null;
+let watchGeneration = 0;
 let connecting = false;
 let notice = "";
 const running = new Set<string>();
@@ -65,22 +66,32 @@ async function refresh() {
 function connect() {
   if (connecting || watchClose) return;
   connecting = true;
+  const generation = ++watchGeneration;
   let closed = false;
   watchClose = watch((snap) => {
-    if (closed) return;
+    if (closed || generation !== watchGeneration) return;
     if (snap.stopping) { connected = false; void broadcast(); return; }
     processId = snap.process_id;
     if (snap.runtime_id !== snapshotId) {
       snapshotId = snap.runtime_id;
       void refresh();
     }
-  }, () => { void refresh(); }, () => {
-    closed = true; connecting = false; watchClose = null;
+  }, () => { if (!closed && generation === watchGeneration) void refresh(); }, () => {
+    closed = true;
+    if (generation !== watchGeneration) return;
+    connecting = false; watchClose = null;
     connected = false; engine = null; snapshotId = "";
     void chrome.action.setBadgeText({ text: "!" });
     void broadcast();
   });
   connecting = false;
+}
+function closeWatch() {
+  const close = watchClose;
+  if (!close) return;
+  watchClose = null;
+  watchGeneration++;
+  close();
 }
 
 function eligible(url: string): boolean {
@@ -201,13 +212,14 @@ async function maybeObserve(item: chrome.downloads.DownloadItem) {
     const url = item.finalUrl || item.url;
     const sites = [new URL(url).origin];
     try { if (item.referrer) sites.push(new URL(item.referrer).origin); } catch { /* no referrer */ }
-    const ext = new URL(url).pathname.split(".").pop()?.toLowerCase() ?? "";
+    const name = downloadName(item, url);
+    if (!name) return;
+    const dot = name.lastIndexOf(".");
+    const ext = dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
     if (sites.some((site) => prefs.ignoredSites.includes(site)) || prefs.ignoredExtensions.includes(ext) || prefs.ignoredMimes.includes(item.mime.toLowerCase())) return;
     if (item.totalBytes < 0 && prefs.unknownSize === "browser") return;
     if (item.totalBytes >= 0 && item.totalBytes < 1024 * 1024) return;
     if (item.totalBytes >= 0 && item.totalBytes < prefs.minBytes) return;
-    const name = downloadName(item, url);
-    if (!name) return;
     // No pause here: an unrepeatable original must keep its browser path.
     if (engine?.autopick_mode === "ask") {
       await saveOffers([...await offers(), { downloadId: item.id, url, name }]);
@@ -262,7 +274,7 @@ chrome.permissions.onRemoved.addListener(() => {
 chrome.runtime.onMessage.addListener((message: { type: string; [key: string]: unknown }, _sender, respond) => {
   if (message.type === "updated") return false;
   void (async () => {
-    if (message.type === "reconnect") { watchClose?.(); watchClose = null; connect(); await refresh(); }
+    if (message.type === "reconnect") { closeWatch(); connect(); await refresh(); }
     if (message.type === "mode" && typeof message.mode === "string") {
       const result = await request({ set_extension_mode: { mode: message.mode } });
       if (result.kind !== "extension_state") throw Error("No se guardó el modo.");

@@ -103,3 +103,108 @@ impl AppPreferences {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn draft() -> CreateDownload {
+        CreateDownload {
+            context: "manual".into(),
+            private: false,
+            apply_rules: false,
+            rule_overrides: Vec::new(),
+            queue_id: "main".into(),
+            input: NewDownload {
+                url: "https://example.org/file.bin".into(),
+                directory: "C:\\Downloads".into(),
+                name: "file.bin".into(),
+                expected_sha256: None,
+                conflict: crate::ConflictPolicy::Reject,
+            },
+            options: TransferOptions::default(),
+            category: "Otros".into(),
+            start: StartPolicy::Later,
+        }
+    }
+
+    #[test]
+    fn create_download_validates_context_categories_and_explicit_rule_overrides() {
+        assert_eq!(draft().validate(), Ok(()));
+
+        let mut candidate = draft();
+        candidate.context = "x".repeat(128);
+        assert_eq!(candidate.validate(), Ok(()));
+        candidate.context.push('x');
+        assert_eq!(candidate.validate(), Err(DownloadError::InvalidInput));
+
+        for category in [
+            String::new(),
+            "  ".into(),
+            "x".repeat(121),
+            "bad\nname".into(),
+        ] {
+            let mut candidate = draft();
+            candidate.category = category;
+            assert_eq!(candidate.validate(), Err(DownloadError::InvalidInput));
+        }
+
+        let mut allowed = draft();
+        allowed.rule_overrides = [
+            "directory",
+            "category",
+            "queue_id",
+            "bytes_per_second",
+            "priority",
+        ]
+        .map(str::to_owned)
+        .to_vec();
+        assert_eq!(allowed.validate(), Ok(()));
+
+        for overrides in [vec!["shell".into()], vec!["directory".into(); 6]] {
+            let mut candidate = draft();
+            candidate.rule_overrides = overrides;
+            assert_eq!(candidate.validate(), Err(DownloadError::InvalidInput));
+        }
+    }
+
+    #[test]
+    fn preferences_allow_only_known_modes_and_local_absolute_directories() {
+        assert_eq!(AppPreferences::default().validate(), Ok(()));
+
+        for candidate in [
+            AppPreferences {
+                theme: "auto".into(),
+                ..Default::default()
+            },
+            AppPreferences {
+                view: "dense".into(),
+                ..Default::default()
+            },
+            AppPreferences {
+                close_action: "terminate-all".into(),
+                ..Default::default()
+            },
+            AppPreferences {
+                autopick_mode: "silent".into(),
+                ..Default::default()
+            },
+            AppPreferences {
+                directory: "relative".into(),
+                ..Default::default()
+            },
+            AppPreferences {
+                directory: "\\\\server\\share".into(),
+                ..Default::default()
+            },
+            AppPreferences {
+                directory: "x".repeat(4097),
+                ..Default::default()
+            },
+        ] {
+            assert_eq!(candidate.validate(), Err(DownloadError::InvalidInput));
+        }
+        let unknown = serde_json::from_str::<AppPreferences>(r#"{"unexpected":true}"#);
+        assert!(unknown.is_err());
+    }
+}

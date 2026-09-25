@@ -14,11 +14,20 @@
     "check": "pnpm --filter @idg/desktop check && pnpm --filter @idg/extension check",
     "extension:build": "pnpm --filter @idg/extension build",
     "test": "node scripts/test-runtime.mjs",
+    "test:unit": "vitest run --config apps/desktop/vitest.config.ts",
+    "test:unit:watch": "vitest --config apps/desktop/vitest.config.ts",
+    "test:coverage": "vitest run --config apps/desktop/vitest.config.ts --coverage",
     "gallery": "pnpm --filter @idg/desktop gallery",
     "test:ui": "node --test scripts/test-ui-model.mjs && node scripts/test-ui.mjs"
   },
   "devDependencies": {
+    "@testing-library/dom": "10.4.1",
+    "@testing-library/react": "16.3.3",
+    "@testing-library/user-event": "14.6.7",
+    "@vitest/coverage-v8": "5.0.1",
+    "jsdom": "26.1.0",
     "playwright": "1.63.0",
-    "selenium-webdriver": "4.49.0"
+    "selenium-webdriver": "4.49.0",
+    "vitest": "5.0.1"
   }
 }

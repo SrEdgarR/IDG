@@ -99,7 +99,7 @@ export function validateDraft(name: string, url: string) {
   try {
     const u = new URL(url);
     if (
-      !["https:", "http:", "ftp:", "ftps:"].includes(u.protocol) ||
+      !["https:", "http:"].includes(u.protocol) ||
       !u.hostname ||
       u.username ||
       u.password
@@ -107,7 +107,7 @@ export function validateDraft(name: string, url: string) {
       throw Error();
   } catch {
     errors.url =
-      "Introduce una URL HTTP, HTTPS, FTP o FTPS válida, sin credenciales incrustadas.";
+      "Introduce una URL HTTP o HTTPS válida, sin credenciales incrustadas.";
   }
   return errors;
 }

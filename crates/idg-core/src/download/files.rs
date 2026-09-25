@@ -363,6 +363,17 @@ pub(super) fn recover_published(
 #[cfg(test)]
 mod phase05_tests {
     use super::*;
+
+    fn input(directory: &Path, name: &str) -> NewDownload {
+        NewDownload {
+            url: "https://example.org/test".into(),
+            directory: directory.to_string_lossy().into_owned(),
+            name: name.into(),
+            expected_sha256: None,
+            conflict: ConflictPolicy::Reject,
+        }
+    }
+
     #[test]
     fn matching_name_is_not_enough_to_resume_and_probe_never_truncates() {
         let dir = tempfile::tempdir().unwrap();
@@ -387,5 +398,175 @@ mod phase05_tests {
         assert!(!recoverable_matches(&job, &other));
         std::fs::write(&job.temporary, b"badtail").unwrap();
         assert!(!recoverable_matches(&job, &input));
+    }
+
+    #[test]
+    fn rejects_unsafe_urls_names_paths_and_hashes() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = input(dir.path(), "資料.bin");
+        assert_eq!(validate_input(&base), Ok(()));
+
+        let invalid_urls = [
+            "file:///C:/private.txt".to_owned(),
+            "ftp://example.org/file".into(),
+            "http://user:password@example.org/file".into(),
+            format!("https://example.org/{}", "a".repeat(8180)),
+        ];
+        for url in invalid_urls {
+            let candidate = NewDownload {
+                url,
+                ..base.clone()
+            };
+            assert_eq!(validate_input(&candidate), Err(DownloadError::InvalidInput));
+        }
+
+        for name in [
+            "",
+            "CON",
+            "con.txt",
+            "PRN.log",
+            "AUX.bin",
+            "NUL.dat",
+            "COM1.txt",
+            "LPT9.bin",
+            "../outside.bin",
+            "folder\\file.bin",
+            "stream:payload.bin",
+            "trailing.",
+            "trailing ",
+            "line\nbreak.bin",
+        ] {
+            let candidate = NewDownload {
+                name: name.into(),
+                ..base.clone()
+            };
+            assert_eq!(
+                validate_input(&candidate),
+                Err(DownloadError::InvalidInput),
+                "{name:?}"
+            );
+        }
+        let candidate = NewDownload {
+            name: "x".repeat(241),
+            ..base.clone()
+        };
+        assert_eq!(validate_input(&candidate), Err(DownloadError::InvalidInput));
+
+        for directory in ["relative/path", "\\\\server\\share"] {
+            let candidate = NewDownload {
+                directory: directory.into(),
+                ..base.clone()
+            };
+            assert_eq!(validate_input(&candidate), Err(DownloadError::InvalidInput));
+        }
+        for expected_sha256 in [Some("a".repeat(63)), Some(format!("{}g", "a".repeat(63)))] {
+            let candidate = NewDownload {
+                expected_sha256,
+                ..base.clone()
+            };
+            assert_eq!(validate_input(&candidate), Err(DownloadError::InvalidInput));
+        }
+        let uppercase_hash = NewDownload {
+            expected_sha256: Some("A".repeat(64)),
+            ..base
+        };
+        assert_eq!(validate_input(&uppercase_hash), Ok(()));
+    }
+
+    #[test]
+    fn conflict_policies_preserve_existing_destination_and_create_only_own_partial() {
+        let dir = tempfile::tempdir().unwrap();
+        let destination = dir.path().join("file.bin");
+        std::fs::write(&destination, b"keep existing bytes").unwrap();
+
+        assert!(matches!(
+            create_job("reject", input(dir.path(), "file.bin")),
+            Err(DownloadError::Conflict)
+        ));
+        assert_eq!(std::fs::read(&destination).unwrap(), b"keep existing bytes");
+        assert!(!dir.path().join("file.bin.idgpart").exists());
+
+        let mut rename_input = input(dir.path(), "file.bin");
+        rename_input.conflict = ConflictPolicy::Rename;
+        let renamed = create_job("rename", rename_input).unwrap();
+        assert_eq!(
+            Path::new(&renamed.final_path).file_name().unwrap(),
+            "file (1).bin"
+        );
+        assert_eq!(std::fs::metadata(&renamed.temporary).unwrap().len(), 0);
+        assert_eq!(std::fs::read(&destination).unwrap(), b"keep existing bytes");
+
+        let mut replace_input = input(dir.path(), "file.bin");
+        replace_input.conflict = ConflictPolicy::Replace;
+        let replacement = create_job("replace", replace_input).unwrap();
+        assert_eq!(
+            Path::new(&replacement.final_path).file_name().unwrap(),
+            "file.bin"
+        );
+        assert_eq!(std::fs::metadata(&replacement.temporary).unwrap().len(), 0);
+        assert_eq!(std::fs::read(&destination).unwrap(), b"keep existing bytes");
+
+        std::fs::create_dir(dir.path().join("folder")).unwrap();
+        let mut invalid_replace = input(dir.path(), "folder");
+        invalid_replace.conflict = ConflictPolicy::Replace;
+        assert!(matches!(
+            create_job("replace-directory", invalid_replace),
+            Err(DownloadError::Conflict)
+        ));
+    }
+
+    #[test]
+    fn partial_recovery_checks_durable_hash_before_truncating_uncommitted_tail() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut job = create_job("partial", input(dir.path(), "partial.bin")).unwrap();
+        std::fs::write(&job.temporary, b"durable-tail").unwrap();
+        job.durable = 7;
+        job.prefix_sha256 = format!("{:x}", Sha256::digest(b"durable"));
+
+        let (file, _) = open_partial(&job).unwrap();
+        drop(file);
+        assert_eq!(std::fs::read(&job.temporary).unwrap(), b"durable");
+
+        std::fs::write(&job.temporary, b"tampered-tail").unwrap();
+        job.prefix_sha256 = format!("{:x}", Sha256::digest(b"durable"));
+        assert_eq!(
+            open_partial(&job).unwrap_err(),
+            DownloadError::PartialChanged
+        );
+        assert_eq!(std::fs::read(&job.temporary).unwrap(), b"tampered-tail");
+
+        std::fs::write(&job.temporary, b"short").unwrap();
+        assert_eq!(
+            open_partial(&job).unwrap_err(),
+            DownloadError::PartialChanged
+        );
+        assert_eq!(std::fs::read(&job.temporary).unwrap(), b"short");
+    }
+
+    #[test]
+    fn recovery_maps_only_in_progress_states_to_safe_restart_states() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut job = create_job("state", input(dir.path(), "state.bin")).unwrap();
+        for state in [TransferState::Probing, TransferState::Downloading] {
+            job.state = state;
+            job.durable = 12;
+            job.received = 99;
+            recover(&mut job);
+            assert_eq!(job.state, TransferState::Paused);
+            assert_eq!(job.received, 12);
+        }
+        job.state = TransferState::Verifying;
+        recover(&mut job);
+        assert_eq!(job.state, TransferState::PublishPending);
+
+        for state in [
+            TransferState::Completed,
+            TransferState::Cancelled,
+            TransferState::Failed,
+        ] {
+            job.state = state.clone();
+            recover(&mut job);
+            assert_eq!(job.state, state);
+        }
     }
 }
