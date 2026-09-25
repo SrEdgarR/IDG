@@ -11,6 +11,7 @@ import { startSegments, expectedHash } from "../fixtures/http/segments.mjs";
 const root = process.cwd();
 const exe = (name) => path.join(root, `target/debug/${name}.exe`);
 const probe = (command = "ping") => JSON.parse(execFileSync(exe("idg-probe"), [command], { encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "ignore"] }));
+const stopRuntime = () => execFileSync(exe("idg-probe"), ["shutdown"], { windowsHide: true, stdio: "ignore" });
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 async function setMode(popup, mode) {
   await popup.locator("#autopick").selectOption(mode);
@@ -52,7 +53,7 @@ await new Promise((done) => socket.listen(0, "127.0.0.1", done));
 const debugPort = socket.address().port;
 await new Promise((done) => socket.close(done));
 const env = { ...process.env, IDG_DATA_DIR: path.join(base, "state"), WEBVIEW2_USER_DATA_FOLDER: path.join(base, "webview"), WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${debugPort}` };
-let desktop, webview, browser;
+let desktop, webview, browser, restartedRuntime;
 try {
   desktop = spawn(exe("idg-desktop"), [], { env, windowsHide: true, stdio: "ignore" });
   for (let n = 0; n < 100; n++) {
@@ -217,8 +218,11 @@ try {
     const active = await popup.evaluate(() => chrome.tabs.query({ active: true, currentWindow: true }));
     throw new Error(`${error.message}\nactive=${JSON.stringify(active.map((tab) => ({ url: tab.url, id: tab.id })))} links=${await popup.locator("#links").innerText()} notice=${await popup.locator("#notice").innerText()}`);
   });
-  await directChoice.click();
+  await directChoice.dblclick();
   await dialog.waitFor();
+  await sleep(300);
+  const directPending = await popup.evaluate(() => chrome.storage.local.get("pending"));
+  assert.equal(directPending.pending?.filter((entry) => entry.url === fixture.url + "/direct.bin").length, 1, "Dos clics sobre el mismo enlace no deben preparar dos capturas");
   assert.equal(await dialog.getByLabel("URL del archivo", { exact: true }).inputValue(), fixture.url + "/direct.bin");
   await dialog.getByLabel("El enlace permite solicitudes repetidas").check();
   await dialog.getByRole("button", { name: "Aceptar en IDG" }).click();
@@ -232,13 +236,52 @@ try {
   assert.equal(directJob?.state, "completed", "El enlace elegido debe completarse en IDG");
   assert.equal(createHash("sha256").update(await readFile(path.join(files, "direct.bin"))).digest("hex"), expectedHash(fixture.size));
   assert.equal(probe("list").jobs.length, 3);
+  await sleep(500);
+  assert.equal(await dialog.isVisible(), false, "No debe aparecer una segunda solicitud tras aceptar el enlace una vez");
   assert.deepEqual((await readdir(files)).sort(), ["allowed.bin", "capture.bin", "direct.bin"]);
   assert.equal((await popup.evaluate(() => chrome.downloads.search({}))).filter((item) => item.url === fixture.url + "/direct.bin").length, 0, "El enlace directo aceptado no debe crear descarga paralela en Chromium");
-  console.log("PASS Chromium: exe y %2Eexe excluidos; .bin permitido capturado y verificado; enlace directo, fallback y modos conservados.");
+
+  const beforeOutage = probe().runtime_id;
+  const outageTab = await browser.newPage();
+  const [outageDownload] = await Promise.all([
+    outageTab.waitForEvent("download"),
+    outageTab.goto(fixture.url + "/outage.bin").catch(() => {}),
+  ]);
+  await dialog.waitFor();
+  assert.equal(await dialog.getByLabel("Nombre del archivo", { exact: true }).inputValue(), "outage.bin");
+  stopRuntime();
+  assert.equal(createHash("sha256").update(await readFile(await outageDownload.path())).digest("hex"), expectedHash(fixture.size), "El original debe completar mientras el host no tiene motor");
+  let nextRuntime;
+  for (let n = 0; n < 30; n++) {
+    try { nextRuntime = probe(); } catch { /* motor detenido */ }
+    if (!nextRuntime || nextRuntime.runtime_id !== beforeOutage) break;
+    await sleep(100);
+  }
+  if (!nextRuntime || nextRuntime.runtime_id === beforeOutage) {
+    restartedRuntime = spawn(exe("idg-runtime"), [], { env, windowsHide: true, stdio: "ignore" });
+    for (let n = 0; n < 60; n++) {
+      try { nextRuntime = probe(); if (nextRuntime.runtime_id !== beforeOutage) break; } catch { /* arranque pendiente */ }
+      await sleep(100);
+    }
+  }
+  assert.ok(nextRuntime && nextRuntime.runtime_id !== beforeOutage, "El motor aislado debe reiniciarse con otra identidad");
+  await popup.getByRole("button", { name: "Reconectar" }).click();
+  await popup.locator("#status").filter({ hasText: /^Conectado$/ }).waitFor();
+  for (let n = 0; n < 60; n++) {
+    const stored = await popup.evaluate(() => chrome.storage.local.get("pending"));
+    if (!stored.pending?.some((entry) => entry.url === fixture.url + "/outage.bin")) break;
+    await sleep(100);
+  }
+  const finalPending = await popup.evaluate(() => chrome.storage.local.get("pending"));
+  assert.equal(finalPending.pending?.some((entry) => entry.url === fixture.url + "/outage.bin"), false, "La propuesta caducada se resuelve sin duplicar el trabajo");
+  assert.equal(probe("list").jobs.length, 3, "La pérdida del host antes de aceptar no crea trabajo adicional");
+  assert.deepEqual((await readdir(files)).sort(), ["allowed.bin", "capture.bin", "direct.bin"]);
+  console.log("PASS Chromium: exclusiones, doble clic, traspaso y pérdida del motor antes de aceptar; hashes y trabajos únicos verificados.");
   void download;
 } finally {
   await browser?.close();
-  try { probe("shutdown"); } catch { /* runtime absent */ }
+  try { stopRuntime(); } catch { /* runtime absent */ }
+  if (restartedRuntime?.exitCode === null) restartedRuntime.kill();
   await webview?.close();
   if (desktop?.exitCode === null) desktop.kill();
   await new Promise((done) => linkPage.close(done));

@@ -22,6 +22,7 @@ let connecting = false;
 let notice = "";
 const running = new Set<string>();
 const observed = new Set<number>();
+const preparing = new Map<string, Promise<boolean>>();
 let pendingWrite: Promise<void> = Promise.resolve();
 const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
 
@@ -124,7 +125,14 @@ async function fallback(item: Pending) {
 }
 async function checkTransfer(item: Pending): Promise<boolean> {
   const original = item.downloadId === undefined ? undefined : await browserItem(item.downloadId);
-  if (item.downloadId !== undefined && original?.state === "interrupted" && item.phase === "started") return true;
+  if (item.downloadId !== undefined && original?.state === "interrupted" && item.phase === "started") {
+    const status = await request({ get_capture_status: { capture_id: item.id } });
+    if (status.kind !== "capture_status" || !status.job || ["failed", "cancelled"].includes(status.job.state) ||
+      (BigInt(status.job.durable_bytes) === 0n && status.job.state !== "completed")) {
+      throw Error("El original se interrumpió antes de confirmar bytes durables en IDG.");
+    }
+    return true;
+  }
   if (item.downloadId !== undefined && original?.state !== "in_progress") return false;
   const started = await request({ start_capture: { capture_id: item.id } });
   if (started.kind !== "download") return false;
@@ -157,6 +165,18 @@ async function runCapture(item: Pending) {
       if (status.kind !== "capture_status") throw Error("Estado incompatible");
       if (status.decision === "rejected") { await fallback(item); finish = true; return; }
       if (status.decision === "accepted") {
+        if (status.job && ["failed", "cancelled"].includes(status.job.state)) {
+          const originalState = item.downloadId === undefined ? undefined : (await browserItem(item.downloadId))?.state;
+          notice = originalState === "interrupted"
+            ? "IDG falló y el original de Chromium también se interrumpió. Revisa ambos trabajos antes de repetir."
+            : item.source === "observed"
+              ? "IDG no pudo continuar; Chromium conserva la descarga original."
+              : "IDG no pudo continuar; se intenta abrir el enlace en Chromium.";
+          await fallback(item);
+          await broadcast();
+          finish = true;
+          return;
+        }
         if (item.phase !== "started") { await savePending({ ...item, phase: "accepted" }); item.phase = "accepted"; }
         const ok = await checkTransfer(item);
         if (!ok) {
@@ -171,13 +191,17 @@ async function runCapture(item: Pending) {
       }
       await sleep(500);
     }
-    await fallback(item);
-    finish = true;
-    notice = "IDG no recibió una aceptación a tiempo; continúa en el navegador.";
+    // A late acceptance may have been persisted while the last response was lost.
+    // Only a confirmed rejection may hand a direct link back to Chromium.
+    notice = "No se confirmó la solicitud a tiempo. Reconecta IDG para resolverla antes de repetir el enlace.";
     await broadcast();
   } catch {
-    if (item.phase !== "accepted" && item.phase !== "started") { await fallback(item); finish = true; }
-    notice = "Se perdió la conexión con IDG; el navegador conserva la descarga original. Reconecta para resolver el traspaso.";
+    const browserState = item.downloadId === undefined ? undefined : (await browserItem(item.downloadId))?.state;
+    notice = browserState === "interrupted"
+      ? "El original se interrumpió sin confirmar el traspaso. Reconecta y comprueba el trabajo en IDG."
+      : item.source === "observed"
+        ? "Se perdió la conexión con IDG; Chromium conserva la descarga original. Reconecta para resolver el traspaso."
+        : "No se confirmó el enlace en IDG. Reconecta para resolverlo antes de volver a descargar.";
     await broadcast();
   } finally {
     if (finish) await savePending(null, item.id);
@@ -185,8 +209,16 @@ async function runCapture(item: Pending) {
     running.delete(item.id);
   }
 }
-async function prepare(item: Pending) {
+function captureKey(item: Pending) {
+  return item.downloadId === undefined ? `direct:${item.url}\u0000${item.name}` : `observed:${item.downloadId}`;
+}
+async function prepareOnce(item: Pending): Promise<boolean> {
   if (!eligible(item.url) || !safeName(item.name)) return false;
+  if ((await pending()).some((existing) => captureKey(existing) === captureKey(item))) {
+    notice = "Esta solicitud ya está pendiente; reconecta para conocer su resultado.";
+    await broadcast();
+    return true;
+  }
   await savePending(item);
   try {
     const result = await request({ prepare_capture: { proposal: { id: item.id, url: item.url, name: item.name, source: item.source } } }, item.id);
@@ -195,9 +227,22 @@ async function prepare(item: Pending) {
     void runCapture(item);
     return true;
   } catch {
-    await savePending(null, item.id);
+    // The runtime may have committed this proposal even if its reply was lost.
+    // Keep its stable ID and query it again after the host reconnects.
+    void runCapture(item);
+    notice = "No se confirmó la preparación. Reconecta IDG antes de repetir este enlace.";
+    await broadcast();
     return false;
   }
+}
+async function prepare(item: Pending): Promise<boolean> {
+  const key = captureKey(item);
+  const ongoing = preparing.get(key);
+  if (ongoing) return ongoing;
+  const task = prepareOnce(item);
+  preparing.set(key, task);
+  try { return await task; }
+  finally { if (preparing.get(key) === task) preparing.delete(key); }
 }
 async function maybeObserve(item: chrome.downloads.DownloadItem) {
   if (observed.has(item.id) || item.byExtensionId === chrome.runtime.id || item.state !== "in_progress") return;
@@ -242,7 +287,7 @@ chrome.contextMenus.onClicked.addListener((info) => {
   try { name = safeName(decodeURIComponent(new URL(url).pathname.split("/").pop() || "descarga.bin")); } catch { return; }
   if (!name) return;
   void prepare({ id: crypto.randomUUID(), source: "direct", url, name }).then((ok) => {
-    if (!ok) void fallback({ id: "", source: "direct", url, name });
+    if (!ok) { notice = "No se confirmó el enlace en IDG. Abre el enlace en Chromium si quieres continuar allí."; void broadcast(); }
   });
 });
 function downloadCreated(item: chrome.downloads.DownloadItem) { void maybeObserve(item); }

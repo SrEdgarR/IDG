@@ -143,6 +143,26 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Chromium worker policies and recovery", () => {
+  it("attaches detection only after optional permission and detaches it on revocation", async () => {
+    hasDownloadsPermission = false;
+    vi.stubGlobal("chrome", chromeApi);
+    await import("./worker");
+    await waitFor(() => expect(watches).toHaveLength(1));
+    expect(chromeApi.downloads.onCreated.listeners).toHaveLength(0);
+    expect(chromeApi.contextMenus.create).not.toHaveBeenCalled();
+
+    hasDownloadsPermission = true;
+    chromeApi.permissions.onAdded.listeners[0]({ permissions: ["downloads"], origins: [] });
+    await waitFor(() => expect(chromeApi.downloads.onCreated.listeners).toHaveLength(1));
+    chromeApi.permissions.onAdded.listeners[0]({ permissions: ["downloads"], origins: [] });
+    await letTasksSettle();
+    expect(chromeApi.downloads.onCreated.listeners).toHaveLength(1);
+
+    hasDownloadsPermission = false;
+    chromeApi.permissions.onRemoved.listeners[0]({ permissions: ["downloads"], origins: [] });
+    await waitFor(() => expect(chromeApi.downloads.onCreated.listeners).toHaveLength(0));
+  });
+
   it("does not offer a download when its referrer origin is ignored", async () => {
     saved.settings = { ignoredSites: ["https://ignored.example"], ignoredExtensions: [], ignoredMimes: [], minBytes: 0, unknownSize: "offer", suspendedUntil: 0 };
     await connectWorker();
@@ -202,6 +222,24 @@ describe("Chromium worker policies and recovery", () => {
     expect(bridge.request).not.toHaveBeenCalledWith(expect.objectContaining({ prepare_capture: expect.anything() }), expect.anything());
   });
 
+  it("applies site, MIME, and size exclusions without blocking an eligible transfer", async () => {
+    saved.settings = { ignoredSites: ["https://private.example"], ignoredExtensions: [], ignoredMimes: ["application/x-test"], minBytes: 5 * 1024 * 1024, unknownSize: "browser", suspendedUntil: 0 };
+    await connectWorker();
+    const candidate = { url: "https://cdn.example/file.bin", finalUrl: "https://cdn.example/file.bin", referrer: "", mime: "application/octet-stream", totalBytes: 6 * 1024 * 1024, filename: "file.bin", state: "in_progress" };
+    for (const item of [
+      { ...candidate, id: 31, referrer: "https://private.example/page" },
+      { ...candidate, id: 32, mime: "APPLICATION/X-TEST" },
+      { ...candidate, id: 33, totalBytes: 4 * 1024 * 1024 },
+      { ...candidate, id: 34, totalBytes: -1 },
+    ]) chromeApi.downloads.onCreated.listeners[0](item);
+    await letTasksSettle();
+    expect(saved.offers).toBeUndefined();
+
+    chromeApi.downloads.onCreated.listeners[0]({ ...candidate, id: 35 });
+    await waitFor(() => expect(saved.offers).toEqual([{ downloadId: 35, url: candidate.url, name: candidate.filename }]));
+    expect(bridge.request).not.toHaveBeenCalledWith(expect.objectContaining({ prepare_capture: expect.anything() }), expect.anything());
+  });
+
   it("rejects a transfer URL containing a query before sending it to IDG", async () => {
     await loadWorker();
 
@@ -250,5 +288,99 @@ describe("Chromium worker policies and recovery", () => {
     expect(watches).toHaveLength(3);
     expect(watches[1].close).toHaveBeenCalledOnce();
     expect(current).toMatchObject({ ok: true, connected: true, processId: 202 });
+  });
+
+  it("does not prepare the same offered browser download twice on rapid clicks", async () => {
+    saved.offers = [{ downloadId: 25, url: "https://cdn.example/one.bin", name: "one.bin" }];
+    items.set(25, { id: 25, state: "in_progress" });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    bridge.request.mockImplementation(async (command: any) => {
+      if (typeof command === "object" && "prepare_capture" in command) {
+        await gate;
+        return { kind: "capture_status", decision: "pending", job: null };
+      }
+      if (typeof command === "object" && "get_capture_status" in command) throw Error("host disconnected");
+      return { kind: "pong" };
+    });
+    await loadWorker();
+
+    const first = send({ type: "acceptOffer", downloadId: 25 });
+    const second = send({ type: "acceptOffer", downloadId: 25 });
+    await waitFor(() => expect(bridge.request.mock.calls.filter(([command]) => typeof command === "object" && "prepare_capture" in command)).toHaveLength(1));
+    release();
+    const replies = await Promise.all([first, second]);
+    expect(replies.every((reply) => reply.ok)).toBe(true);
+    expect(bridge.request.mock.calls.filter(([command]) => typeof command === "object" && "prepare_capture" in command)).toHaveLength(1);
+    expect((saved.pending as any[])).toHaveLength(1);
+  });
+
+  it("retains an uncertain proposal and resumes it after a lost host response", async () => {
+    let available = false;
+    bridge.request.mockImplementation(async (command: any) => {
+      if (command === "get_extension_state") return extensionState();
+      if (typeof command === "object" && "prepare_capture" in command) throw Error("response lost");
+      if (typeof command === "object" && "get_capture_status" in command) {
+        if (!available) throw Error("host disconnected");
+        return { kind: "capture_status", decision: "accepted", job: { state: "completed", durable_bytes: "4" } };
+      }
+      if (typeof command === "object" && "start_capture" in command) return { kind: "download", job: {} };
+      return { kind: "pong" };
+    });
+    await loadWorker();
+
+    const initial = await send({ type: "direct", url: "https://cdn.example/retry.bin", name: "retry.bin" });
+    expect(initial.ok).toBe(false);
+    expect(saved.pending).toEqual([expect.objectContaining({ url: "https://cdn.example/retry.bin" })]);
+    const repeat = await send({ type: "direct", url: "https://cdn.example/retry.bin", name: "retry.bin" });
+    expect(repeat.ok).toBe(true);
+    expect(bridge.request.mock.calls.filter(([command]) => typeof command === "object" && "prepare_capture" in command)).toHaveLength(1);
+    expect(chromeApi.downloads.download).not.toHaveBeenCalled();
+
+    available = true;
+    watches[0].onSnapshot(snapshot("runtime-recovered", 202));
+    await waitFor(() => expect(saved.pending).toEqual([]));
+    expect(bridge.request).toHaveBeenCalledWith(expect.objectContaining({ start_capture: expect.anything() }));
+    expect(chromeApi.downloads.download).not.toHaveBeenCalled();
+  });
+
+  it("does not treat an interrupted Chromium original as transferred without durable IDG bytes", async () => {
+    saved.pending = [{ id: "capture-interrupted", source: "observed", url: "https://cdn.example/file.bin", name: "file.bin", downloadId: 40, phase: "started" }];
+    items.set(40, { id: 40, state: "interrupted" });
+    let durable = "0";
+    bridge.request.mockImplementation(async (command: any) => {
+      if (command === "get_extension_state") return extensionState();
+      if (typeof command === "object" && "get_capture_status" in command) return { kind: "capture_status", decision: "accepted", job: { state: "downloading", durable_bytes: durable } };
+      return { kind: "pong" };
+    });
+    await loadWorker();
+    await waitFor(() => expect(bridge.request).toHaveBeenCalledWith(expect.objectContaining({ get_capture_status: expect.anything() })));
+    await letTasksSettle();
+    expect(saved.pending).toHaveLength(1);
+    expect(chromeApi.downloads.cancel).not.toHaveBeenCalled();
+    expect(bridge.request).not.toHaveBeenCalledWith(expect.objectContaining({ abort_capture: expect.anything() }));
+
+    durable = "1";
+    watches[0].onSnapshot(snapshot("runtime-recovered", 202));
+    await waitFor(() => expect(saved.pending).toEqual([]));
+    expect(chromeApi.downloads.cancel).not.toHaveBeenCalled();
+  });
+
+  it("resolves a failed accepted capture while Chromium still owns its original", async () => {
+    saved.pending = [{ id: "capture-failed", source: "observed", url: "https://cdn.example/file.bin", name: "file.bin", downloadId: 41, phase: "accepted" }];
+    items.set(41, { id: 41, state: "in_progress" });
+    bridge.request.mockImplementation(async (command: any) => {
+      if (typeof command === "object" && "get_capture_status" in command) return { kind: "capture_status", decision: "accepted", job: { state: "failed", durable_bytes: "0" } };
+      if (typeof command === "object" && "start_capture" in command) throw Error("failed job cannot restart");
+      return { kind: "pong" };
+    });
+
+    await loadWorker();
+    await waitFor(() => expect(bridge.request).toHaveBeenCalledWith(expect.objectContaining({ get_capture_status: expect.anything() })));
+    await letTasksSettle();
+    expect(saved.pending).toEqual([]);
+    expect(items.get(41).state).toBe("in_progress");
+    expect(chromeApi.downloads.cancel).not.toHaveBeenCalled();
+    expect(bridge.request).not.toHaveBeenCalledWith(expect.objectContaining({ start_capture: expect.anything() }));
   });
 });
