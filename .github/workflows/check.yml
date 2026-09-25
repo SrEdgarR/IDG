@@ -16,11 +16,35 @@ jobs:
           node-version: 24.14.0
           package-manager-cache: false
       - run: npx --yes pnpm@12.4.2 install --frozen-lockfile
+      - run: npx --yes pnpm@12.4.2 check
+      - name: Unitarias TypeScript y cobertura
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p artifacts/test-results
+          npx --yes pnpm@12.4.2 test:coverage 2>&1 | tee artifacts/test-results/typescript-unit.log
       - run: npx --yes pnpm@12.4.2 build
       - run: npx --yes pnpm@12.4.2 exec playwright install --with-deps chromium
-      - run: npx --yes pnpm@12.4.2 test:ui
+      - name: Interfaz Playwright
+        shell: bash
+        run: |
+          set -o pipefail
+          npx --yes pnpm@12.4.2 test:ui 2>&1 | tee artifacts/test-results/ui-e2e.log
       - run: npx --yes pnpm@12.4.2 extension:build
-      - run: node scripts/test-extension-shell.mjs
+      - name: Extensión en Chromium
+        shell: bash
+        run: |
+          set -o pipefail
+          node scripts/test-extension-shell.mjs 2>&1 | tee artifacts/test-results/extension-shell.log
+      - name: Informes TypeScript y fallos de UI
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: idg-typescript-ui-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            coverage/typescript/
+            artifacts/test-results/
+          if-no-files-found: ignore
   portable:
     runs-on: ubuntu-latest
     steps:
@@ -29,8 +53,27 @@ jobs:
           persist-credentials: false
       - run: rustup show
       - run: cargo test --locked -p idg-core -p idg-protocol -p idg-storage
+      - name: Herramienta de cobertura Rust
+        run: |
+          rustup component add llvm-tools-preview
+          cargo install cargo-llvm-cov --version 0.9.1 --locked
+      - name: Cobertura Rust portable
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p artifacts/test-results coverage/rust
+          cargo llvm-cov --locked -p idg-core -p idg-protocol -p idg-storage --lcov --output-path coverage/rust/portable.lcov --fail-under-lines 70 --fail-under-functions 65 2>&1 | tee artifacts/test-results/rust-portable.log
       - run: cargo run --locked -p idg-protocol --bin export-types
       - run: git diff --exit-code -- packages/shared-types/protocol.ts
+      - name: Informe y fallos Rust portable
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: idg-rust-portable-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            coverage/rust/portable.lcov
+            artifacts/test-results/rust-portable.log
+          if-no-files-found: ignore
   windows:
     runs-on: windows-2025
     steps:
@@ -43,5 +86,20 @@ jobs:
           package-manager-cache: false
       - run: rustup show
       - run: npx --yes pnpm@12.4.2 install --frozen-lockfile
-      - run: ./scripts/Check.ps1
+      - name: Suite Windows
         shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts/test-results | Out-Null
+          Start-Transcript -Path artifacts/test-results/windows-check.txt
+          try {
+            ./scripts/Check.ps1
+          } finally {
+            Stop-Transcript
+          }
+      - name: Informe y fallos Windows
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: idg-windows-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/test-results/windows-check.txt
+          if-no-files-found: ignore

@@ -85,6 +85,8 @@ Retira únicamente los registros que todavía apuntan a esta copia; conserva man
 
 ## Comprobaciones reproducibles
 
+Los comandos de unitarias rápidas, modo watch y cobertura, su inventario por módulo y las limitaciones de cada nivel están en [TESTING](TESTING.md). Las nuevas pruebas no reemplazan los recorridos de proceso, Tauri o navegador descritos aquí.
+
 Cierra los runtimes de IDG que hayas iniciado antes de ejecutar las pruebas: estas rechazan una instancia previa y administran solo la suya.
 
 ```powershell

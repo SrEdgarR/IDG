@@ -17,6 +17,7 @@ Lee `docs/README.md`, `docs/PRODUCT_SPEC.md`, `docs/ARCHITECTURE.md`, `docs/INTE
 ## Calidad y seguridad
 - No hay botones decorativos, controles que solo muestran un toast de éxito, descargas simuladas en producción ni porcentajes inventados. Fixtures exclusivamente en pruebas o una galería de desarrollo separada.
 - Una función está terminada cuando interfaz, contrato, lógica, persistencia y pruebas pertinentes están conectados. Los estados temporalmente no disponibles deben explicar la razón.
+- Cada nueva lógica o corrección debe incorporar o actualizar pruebas capaces de detectar una regresión en sus decisiones, límites y errores. Elige el nivel adecuado (unitario, componente, integración o extremo a extremo); no añadas un test trivial por cada función ni sustituyas una integración real por mocks.
 - No prometas ausencia de errores, velocidad superior a otra aplicación ni compatibilidad universal sin evidencias. No ocultes pruebas omitidas, fallidas o no ejecutables en este entorno.
 - El core no depende de React/Tauri. Solo el runtime controla las descargas y escribe el estado persistente. Usa IPC tipado, validación de entradas, límites y permisos mínimos.
 - No registres cookies, Authorization, contraseñas, tokens, URLs firmadas completas ni datos privados en logs o capturas. No envíes estos datos a telemetría.

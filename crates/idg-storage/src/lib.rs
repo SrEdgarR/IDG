@@ -411,6 +411,92 @@ mod tests {
             .unwrap();
         assert_eq!(n, 4);
     }
+
+    #[test]
+    fn invalid_preferences_and_resource_limits_are_never_persisted() {
+        let mut store = Store::open(Path::new(":memory:")).unwrap();
+        let invalid_preferences = idg_protocol::AppPreferences {
+            theme: "remote-content".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            store.save_preferences(&invalid_preferences),
+            Err(DownloadError::InvalidInput)
+        );
+        assert_eq!(store.preferences().unwrap(), Default::default());
+        let preference_rows: u32 = store
+            .connection
+            .query_row("SELECT COUNT(*) FROM app_preferences", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(preference_rows, 0);
+
+        let invalid_limits = idg_protocol::ResourceLimits {
+            max_downloads: 0,
+            ..Default::default()
+        };
+        assert_eq!(
+            store.save_limits(&invalid_limits),
+            Err(DownloadError::InvalidInput)
+        );
+        assert_eq!(store.limits().unwrap(), Default::default());
+        let settings_rows: u32 = store
+            .connection
+            .query_row("SELECT COUNT(*) FROM settings", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(settings_rows, 0);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn authenticated_but_invalid_persisted_settings_fail_closed_without_rewrite() {
+        use idg_protocol::*;
+        let store = Store::open(Path::new(":memory:")).unwrap();
+
+        let invalid_preferences = AppPreferences {
+            theme: "remote-content".into(),
+            ..Default::default()
+        };
+        let preferences_blob =
+            protection::encrypt(&serde_json::to_vec(&invalid_preferences).unwrap()).unwrap();
+        store
+            .connection
+            .execute(
+                "INSERT INTO app_preferences VALUES(1,?1)",
+                params![&preferences_blob],
+            )
+            .unwrap();
+        assert_eq!(store.preferences(), Err(DownloadError::InvalidInput));
+        let saved_preferences: Vec<u8> = store
+            .connection
+            .query_row(
+                "SELECT protected_value FROM app_preferences WHERE id=1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(saved_preferences, preferences_blob);
+
+        let invalid_limits = ResourceLimits {
+            origin_requests: 33,
+            ..Default::default()
+        };
+        let limits_blob =
+            protection::encrypt(&serde_json::to_vec(&invalid_limits).unwrap()).unwrap();
+        store
+            .connection
+            .execute("INSERT INTO settings VALUES(1,?1)", params![&limits_blob])
+            .unwrap();
+        assert_eq!(store.limits(), Err(DownloadError::InvalidInput));
+        let saved_limits: Vec<u8> = store
+            .connection
+            .query_row(
+                "SELECT protected_limits FROM settings WHERE id=1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(saved_limits, limits_blob);
+    }
     #[cfg(windows)]
     #[test]
     fn preferences_survive_reopen_without_plaintext() {
@@ -515,6 +601,48 @@ mod tests {
             )
             .unwrap();
         assert_eq!(blob, b"broken");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn valid_protected_job_under_another_row_id_is_isolated_and_preserved() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(Path::new(":memory:")).unwrap();
+        let job = idg_core::download::create_job(
+            "actual-id",
+            idg_protocol::NewDownload {
+                url: "https://example.org/file".into(),
+                directory: dir.path().to_string_lossy().into_owned(),
+                name: "identity.bin".into(),
+                expected_sha256: None,
+                conflict: idg_protocol::ConflictPolicy::Reject,
+            },
+        )
+        .unwrap();
+        let blob = protection::encrypt(&serde_json::to_vec(&job).unwrap()).unwrap();
+        store
+            .connection
+            .execute(
+                "INSERT INTO downloads VALUES('row-id-mismatch',?1)",
+                params![&blob],
+            )
+            .unwrap();
+
+        let loaded = store.load().unwrap();
+        assert!(loaded.jobs.is_empty());
+        assert_eq!(
+            loaded.unavailable,
+            vec![("row-id-mismatch".into(), DownloadError::Storage)]
+        );
+        let unchanged: Vec<u8> = store
+            .connection
+            .query_row(
+                "SELECT protected_job FROM downloads WHERE id='row-id-mismatch'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(unchanged, blob);
     }
     #[cfg(windows)]
     #[test]

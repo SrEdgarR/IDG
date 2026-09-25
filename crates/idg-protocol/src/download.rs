@@ -47,6 +47,26 @@ impl std::fmt::Debug for NewDownload {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn debug_output_never_exposes_signed_url_or_credentials() {
+        let input = NewDownload {
+            url: "https://user:password@example.org/file?token=fixture-secret".into(),
+            directory: "C:\\Downloads".into(),
+            name: "file.bin".into(),
+            expected_sha256: None,
+            conflict: ConflictPolicy::Reject,
+        };
+        let output = format!("{input:?}");
+        assert_eq!(output, "NewDownload { redacted }");
+        assert!(!output.contains("fixture-secret"));
+        assert!(!output.contains("password"));
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum TransferState {

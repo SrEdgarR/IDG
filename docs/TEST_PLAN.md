@@ -2,6 +2,12 @@
 
 Este documento exige evidencia, no resultados anticipados. Todos los archivos de prueba pertenecen a fixtures o directorios temporales creados por las pruebas. No borrar descargas personales ni usar páginas de terceros como único banco de pruebas.
 
+## Etapa transversal de regresiones (fases pausadas)
+
+La etapa parte del código integrado en `b6b4668189d595f9a7fd490653036c0c455769f6` (rama 07 con rediseño visual), sin implementar fases nuevas. [TESTING](TESTING.md) registra comandos, inventario por nivel, cobertura medida por lenguaje y huecos acotados. Una prueba unitaria no sustituye las suites HTTP, SQLite, IPC, Tauri y navegadores; cada resultado conserva su alcance y commit. Los tests nuevos priorizan decisiones, límites, errores y transiciones de la implementación existente. No se exige un test por getter o delegación, ni cobertura global del 100 %.
+
+La cobertura debe incluir fuentes propias sin tests, pero excluir código generado, dependencias y artefactos de build con una razón documentada. Los umbrales se fijan desde la línea base y no se reducen para ocultar fallos. CI debe fallar si fallan pruebas y conservar informes; la matriz gráfica y Native Messaging real continúan en `-Integration` y no se atribuyen al workflow ordinario.
+
 ## Cobertura añadida en fase 06
 
 | Prueba | Requisitos comprobados |

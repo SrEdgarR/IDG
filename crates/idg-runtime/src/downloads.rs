@@ -990,6 +990,66 @@ impl Checkpoint for Sink {
 #[cfg(test)]
 mod capture_tests {
     use super::*;
+    use std::{
+        path::Path,
+        sync::atomic::{AtomicU64, Ordering},
+    };
+
+    struct TestDirectory(PathBuf);
+
+    impl TestDirectory {
+        fn new() -> Self {
+            static NEXT: AtomicU64 = AtomicU64::new(0);
+            let root = std::env::temp_dir();
+            for _ in 0..100 {
+                let nonce = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos();
+                let sequence = NEXT.fetch_add(1, Ordering::Relaxed);
+                let path = root.join(format!(
+                    "idg-runtime-rust-test-{}-{nonce}-{sequence}",
+                    std::process::id()
+                ));
+                match std::fs::create_dir(&path) {
+                    Ok(()) => return Self(path),
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                    Err(error) => panic!("cannot create test directory: {error}"),
+                }
+            }
+            panic!("could not allocate a unique test directory")
+        }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TestDirectory {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn create_draft(directory: &Path, private: bool, start: StartPolicy) -> CreateDownload {
+        CreateDownload {
+            context: "manual".into(),
+            private,
+            apply_rules: false,
+            rule_overrides: Vec::new(),
+            queue_id: "main".into(),
+            input: NewDownload {
+                url: "https://example.test/file.bin".into(),
+                directory: directory.to_string_lossy().into_owned(),
+                name: if private { "private.bin" } else { "public.bin" }.into(),
+                expected_sha256: None,
+                conflict: ConflictPolicy::Reject,
+            },
+            options: TransferOptions::default(),
+            category: "Otros".into(),
+            start,
+        }
+    }
 
     fn req(id: &str, command: Command) -> Request {
         Request {
@@ -1153,5 +1213,176 @@ mod capture_tests {
         );
         drop(runtime);
         std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn extension_cannot_enumerate_or_mutate_private_history() {
+        let directory = TestDirectory::new();
+        let runtime = Downloads::open_at(directory.path().to_path_buf()).unwrap();
+        for (id, draft) in [
+            (
+                "private-job",
+                create_draft(directory.path(), true, StartPolicy::Later),
+            ),
+            (
+                "public-job",
+                create_draft(directory.path(), false, StartPolicy::Queue),
+            ),
+        ] {
+            runtime
+                .handle(req(
+                    id,
+                    Command::CreateDownload {
+                        draft: draft.clone(),
+                    },
+                ))
+                .unwrap();
+        }
+
+        let extension = runtime
+            .handle_with_role(req("state", Command::GetExtensionState), true)
+            .unwrap();
+        assert!(
+            matches!(extension, Payload::ExtensionState { state } if state.active_count == 0 && state.jobs.len() == 1 && state.jobs[0].id == "public-job")
+        );
+        for command in [
+            Command::PauseDownload {
+                job_id: "private-job".into(),
+            },
+            Command::ResumeDownload {
+                job_id: "private-job".into(),
+            },
+        ] {
+            assert!(matches!(
+                runtime.handle_with_role(req("private-access", command), true),
+                Err(DownloadError::NotFound)
+            ));
+        }
+        assert!(matches!(
+            runtime.handle_with_role(req("history", Command::ListDownloads { offset: 0 }), true),
+            Err(DownloadError::NotFound)
+        ));
+    }
+
+    #[test]
+    fn resource_limits_reject_invalid_values_and_keep_valid_values_across_reopen() {
+        let directory = TestDirectory::new();
+        let runtime = Downloads::open_at(directory.path().to_path_buf()).unwrap();
+        let invalid = ResourceLimits {
+            max_downloads: 0,
+            ..Default::default()
+        };
+        assert!(matches!(
+            runtime.handle(req(
+                "invalid-limits",
+                Command::SetResourceLimits { limits: invalid }
+            )),
+            Err(DownloadError::InvalidInput)
+        ));
+        let limits = ResourceLimits {
+            max_downloads: 8,
+            global_requests: 32,
+            origin_requests: 32,
+            bytes_per_second: Some(1),
+        };
+        assert!(matches!(
+            runtime.handle(req(
+                "valid-limits",
+                Command::SetResourceLimits {
+                    limits: limits.clone()
+                }
+            )),
+            Ok(Payload::ResourceLimits { limits: saved }) if saved == limits
+        ));
+        drop(runtime);
+
+        let reopened = Downloads::open_at(directory.path().to_path_buf()).unwrap();
+        assert!(matches!(
+            reopened.handle(req("get-limits", Command::GetResourceLimits)),
+            Ok(Payload::ResourceLimits { limits: saved }) if saved == limits
+        ));
+    }
+
+    #[test]
+    fn terminal_downloads_reject_resume_without_changing_durable_state() {
+        let directory = TestDirectory::new();
+        let runtime = Downloads::open_at(directory.path().to_path_buf()).unwrap();
+        for (id, terminal_state) in [
+            ("completed-job", TransferState::Completed),
+            ("cancelled-job", TransferState::Cancelled),
+        ] {
+            let draft = create_draft(directory.path(), false, StartPolicy::Later);
+            let mut job = download::create_job(id, draft.input.clone()).unwrap();
+            job.creation = Some(draft);
+            job.state = terminal_state.clone();
+            job.durable = 17;
+            runtime.inner.lock().unwrap().store.save(&job).unwrap();
+            runtime.inner.lock().unwrap().jobs.insert(id.into(), job);
+
+            assert!(matches!(
+                runtime.handle(req(
+                    &format!("resume-{id}"),
+                    Command::ResumeDownload { job_id: id.into() }
+                )),
+                Err(DownloadError::InvalidState)
+            ));
+            let saved = runtime
+                .handle(req(
+                    &format!("get-{id}"),
+                    Command::GetDownload { job_id: id.into() },
+                ))
+                .unwrap();
+            assert!(
+                matches!(saved, Payload::Download { job } if job.state == terminal_state && job.durable_bytes == "17")
+            );
+        }
+    }
+
+    #[test]
+    fn invalid_categories_and_reused_request_ids_do_not_change_saved_organization() {
+        let directory = TestDirectory::new();
+        let runtime = Downloads::open_at(directory.path().to_path_buf()).unwrap();
+        let invalid = OrganizationCommand::SaveCategories {
+            categories: vec!["Custom only".into()],
+        };
+        assert!(matches!(
+            runtime.handle(req(
+                "bad-categories",
+                Command::Organization { operation: invalid }
+            )),
+            Err(DownloadError::InvalidInput)
+        ));
+
+        let mut categories = default_categories();
+        categories.push("Proyectos".into());
+        let operation = OrganizationCommand::SaveCategories {
+            categories: categories.clone(),
+        };
+        let request = req("category-receipt", Command::Organization { operation });
+        assert!(matches!(
+            runtime.handle(request.clone()),
+            Ok(Payload::Organization { state }) if state.categories == categories
+        ));
+        assert!(matches!(
+            runtime.handle(request.clone()),
+            Ok(Payload::Organization { state }) if state.categories == categories
+        ));
+
+        let collision = req(
+            "category-receipt",
+            Command::Organization {
+                operation: OrganizationCommand::SaveCategories {
+                    categories: default_categories(),
+                },
+            },
+        );
+        assert!(matches!(
+            runtime.handle(collision),
+            Err(DownloadError::Conflict)
+        ));
+        assert!(matches!(
+            runtime.handle(req("get-organization", Command::Organization { operation: OrganizationCommand::Get })),
+            Ok(Payload::Organization { state }) if state.categories == categories
+        ));
     }
 }

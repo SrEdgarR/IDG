@@ -344,4 +344,32 @@ mod tests {
             ));
         }
     }
+
+    #[test]
+    fn request_ids_are_bounded_safe_correlation_tokens() {
+        for id in [
+            String::new(),
+            "x".repeat(65),
+            "../private".into(),
+            "line\nbreak".into(),
+            "clave-ñ".into(),
+        ] {
+            let bytes = serde_json::to_vec(&serde_json::json!({
+                "version": VERSION,
+                "id": id,
+                "command": "ping"
+            }))
+            .unwrap();
+            assert!(matches!(
+                decode_request(&bytes),
+                Err(ErrorCode::InvalidMessage)
+            ));
+        }
+
+        let bytes = br#"{"version":999,"id":"request_9-A","command":"ping"}"#;
+        let decoded = decode_request(bytes).unwrap();
+        assert_eq!(decoded.version, 999);
+        assert_eq!(decoded.id, "request_9-A");
+        assert_eq!(decoded.command, Command::Ping);
+    }
 }
