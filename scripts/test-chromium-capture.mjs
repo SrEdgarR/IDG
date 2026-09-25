@@ -245,7 +245,11 @@ try {
   assert.equal(createHash("sha256").update(await readFile(path.join(files, "direct.bin"))).digest("hex"), expectedHash(fixture.size));
   assert.equal(probe("list").jobs.length, 3);
   await sleep(500);
-  assert.equal(await dialog.isVisible(), false, "No debe aparecer una segunda solicitud tras aceptar el enlace una vez");
+  if (await dialog.isVisible()) {
+    const visibleUrl = await dialog.getByLabel("URL del archivo", { exact: true }).inputValue();
+    const stored = await popup.evaluate(() => chrome.storage.local.get(["pending", "offers"]));
+    throw new Error(`No debe aparecer una segunda solicitud tras aceptar el enlace una vez: url=${visibleUrl} pending=${JSON.stringify(stored.pending?.map((entry) => ({ url: entry.url, phase: entry.phase, id: entry.id })))} offers=${JSON.stringify(stored.offers?.map((entry) => entry.url))}`);
+  }
   assert.deepEqual((await readdir(files)).sort(), ["allowed.bin", "capture.bin", "direct.bin"]);
   assert.equal((await popup.evaluate(() => chrome.downloads.search({}))).filter((item) => item.url === fixture.url + "/direct.bin").length, 0, "El enlace directo aceptado no debe crear descarga paralela en Chromium");
 
@@ -284,7 +288,62 @@ try {
   assert.equal(finalPending.pending?.some((entry) => entry.url === fixture.url + "/outage.bin"), false, "La propuesta caducada se resuelve sin duplicar el trabajo");
   assert.equal(probe("list").jobs.length, 3, "La pérdida del host antes de aceptar no crea trabajo adicional");
   assert.deepEqual((await readdir(files)).sort(), ["allowed.bin", "capture.bin", "direct.bin"]);
-  console.log("PASS Chromium: pausa/reanudación desde popup, exclusiones, doble clic, traspaso y pérdida del motor antes de aceptar; hashes y trabajos únicos verificados.");
+  if (await dialog.isVisible()) {
+    await dialog.getByRole("button", { name: "Cancelar", exact: true }).click();
+    await dialog.waitFor({ state: "hidden" });
+  }
+
+  const acceptedRuntime = probe().runtime_id;
+  const handoffTab = await browser.newPage();
+  const [handoffDownload] = await Promise.all([
+    handoffTab.waitForEvent("download"),
+    handoffTab.goto(fixture.url + "/handoff-outage.bin").catch(() => {}),
+  ]);
+  await dialog.waitFor();
+  assert.equal(await dialog.getByLabel("Nombre del archivo", { exact: true }).inputValue(), "handoff-outage.bin");
+  await dialog.getByLabel("El enlace permite solicitudes repetidas").check();
+  await dialog.getByRole("button", { name: "Aceptar en IDG" }).click();
+  await dialog.waitFor({ state: "hidden" });
+  const handoffJob = probe("list").jobs.find((entry) => entry.name === "handoff-outage.bin");
+  assert.ok(handoffJob, "La aceptación debe persistir exactamente un trabajo IDG");
+  assert.equal(handoffJob.durable_bytes, "0", "El fixture retiene los rangos hasta después del corte");
+  const handoffOriginal = (await popup.evaluate(() => chrome.downloads.search({}))).find((entry) => entry.url === fixture.url + "/handoff-outage.bin");
+  assert.equal(handoffOriginal?.state, "in_progress", "Chromium aún debe conservar el original antes del corte");
+  stopRuntime();
+  fixture.releaseHandoffOutage();
+  const handoffOriginalFile = await handoffDownload.path();
+  assert.equal(createHash("sha256").update(await readFile(handoffOriginalFile)).digest("hex"), expectedHash(fixture.size), "El original debe completar tras perder el motor ya aceptado");
+  let recoveredRuntime;
+  for (let n = 0; n < 30; n++) {
+    try { recoveredRuntime = probe(); } catch { /* motor detenido */ }
+    if (!recoveredRuntime || recoveredRuntime.runtime_id !== acceptedRuntime) break;
+    await sleep(100);
+  }
+  if (!recoveredRuntime || recoveredRuntime.runtime_id === acceptedRuntime) {
+    restartedRuntime = spawn(exe("idg-runtime"), [], { env, windowsHide: true, stdio: "ignore" });
+    for (let n = 0; n < 60; n++) {
+      try { recoveredRuntime = probe(); if (recoveredRuntime.runtime_id !== acceptedRuntime) break; } catch { /* arranque pendiente */ }
+      await sleep(100);
+    }
+  }
+  assert.ok(recoveredRuntime && recoveredRuntime.runtime_id !== acceptedRuntime, "El motor aceptado debe reiniciarse con otra identidad");
+  await popup.getByRole("button", { name: "Reconectar" }).click();
+  await popup.locator("#status").filter({ hasText: /^Conectado$/ }).waitFor();
+  for (let n = 0; n < 60; n++) {
+    const stored = await popup.evaluate(() => chrome.storage.local.get("pending"));
+    if (!stored.pending?.some((entry) => entry.url === fixture.url + "/handoff-outage.bin")) break;
+    await sleep(100);
+  }
+  const handoffPending = await popup.evaluate(() => chrome.storage.local.get("pending"));
+  assert.equal(handoffPending.pending?.some((entry) => entry.url === fixture.url + "/handoff-outage.bin"), false, "La aceptación interrumpida debe resolverse al reconectar");
+  const handoffJobs = probe("list").jobs.filter((entry) => entry.name === "handoff-outage.bin");
+  assert.equal(handoffJobs.length, 1, "La recuperación no debe crear otro trabajo IDG");
+  assert.equal(handoffJobs[0].id, handoffJob.id, "La recuperación debe conservar el trabajo aceptado original");
+  const handoffOriginals = (await popup.evaluate(() => chrome.downloads.search({}))).filter((entry) => entry.url === fixture.url + "/handoff-outage.bin");
+  assert.equal(handoffOriginals.length, 1, "La recuperación no debe abrir otro original en Chromium");
+  assert.equal(handoffOriginals[0].state, "complete", "No se debe cancelar un original completado");
+  assert.equal((await readdir(files)).filter((name) => name === "handoff-outage.bin").length, 0, "No se publica un archivo IDG parcial");
+  console.log("PASS Chromium: pausa/reanudación, exclusiones, doble clic, traspaso y pérdidas del motor antes/después de aceptar; hashes y trabajos únicos verificados.");
   void download;
 } finally {
   await browser?.close();

@@ -4,6 +4,8 @@ import { waitFor } from "@testing-library/dom";
 
 let updated: ((message: { type: string }) => void) | undefined;
 let sendMessage: ReturnType<typeof vi.fn>;
+let executeScript: ReturnType<typeof vi.fn>;
+let queryTabs: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.resetModules();
@@ -26,9 +28,12 @@ beforeEach(() => {
   };
   let responseCount = 0;
   sendMessage = vi.fn(async () => ({ ...reply, processId: 123 + responseCount++ }));
+  executeScript = vi.fn(async () => [{ result: [] }]);
+  queryTabs = vi.fn(async () => []);
   vi.stubGlobal("chrome", {
     runtime: { sendMessage, onMessage: { addListener: (listener: typeof updated) => { updated = listener; } } },
-    tabs: { query: vi.fn(async () => []) },
+    tabs: { query: queryTabs },
+    scripting: { executeScript },
     permissions: { request: vi.fn(async () => false) },
   });
 });
@@ -59,4 +64,29 @@ it("does not overwrite an unsaved exclusion while progress updates arrive", asyn
   updated?.({ type: "updated" });
   await waitFor(() => expect(document.querySelector("#detail")?.textContent).toContain("Motor 125"));
   expect(field.value).toBe(".exe");
+});
+
+it("submits each chosen direct link only once until links are previewed again", async () => {
+  queryTabs.mockResolvedValue([{ id: 42, url: "https://example.test" }]);
+  executeScript.mockResolvedValue([{ result: [{ url: "https://example.test/file.bin", name: "file.bin" }] }]);
+  await import("./popup");
+  document.querySelector<HTMLButtonElement>("#find-links")!.click();
+  await waitFor(() => expect(document.querySelector<HTMLButtonElement>("#links button")?.textContent).toContain("file.bin"));
+  const button = document.querySelector<HTMLButtonElement>("#links button")!;
+  button.click();
+  button.click();
+  await waitFor(() => expect(sendMessage).toHaveBeenCalledWith({ type: "direct", url: "https://example.test/file.bin", name: "file.bin" }));
+  button.click();
+  expect(sendMessage.mock.calls.filter(([message]) => message.type === "direct")).toHaveLength(1);
+});
+
+it("submits an offered browser download only once on repeated clicks", async () => {
+  await import("./popup");
+  await waitFor(() => expect(document.querySelector<HTMLButtonElement>("#offers button")?.textContent).toContain("offered.bin"));
+  const button = document.querySelector<HTMLButtonElement>("#offers button")!;
+  button.click();
+  button.click();
+  await waitFor(() => expect(sendMessage).toHaveBeenCalledWith({ type: "acceptOffer", downloadId: 7 }));
+  button.click();
+  expect(sendMessage.mock.calls.filter(([message]) => message.type === "acceptOffer")).toHaveLength(1);
 });

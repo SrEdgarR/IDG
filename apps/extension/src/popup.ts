@@ -59,7 +59,10 @@ function renderOffers(offers: Reply["offers"]) {
     const li = document.createElement("li");
     const button = document.createElement("button");
     button.textContent = `Proponer ${offer.name} a IDG`;
-    button.addEventListener("click", () => { void send({ type: "acceptOffer", downloadId: offer.downloadId }).then(load).catch(error); });
+    button.addEventListener("click", () => {
+      button.disabled = true;
+      void send({ type: "acceptOffer", downloadId: offer.downloadId }).then(load).catch(error);
+    });
     li.append(button); list.append(li);
   }
 }
@@ -138,7 +141,10 @@ $("find-links").addEventListener("click", async () => {
       const li = document.createElement("li");
       const button = document.createElement("button");
       button.textContent = `Preparar ${item.name}`;
-      button.addEventListener("click", () => { void send({ type: "direct", url: item.url, name: item.name }).then(() => { notice.textContent = "Revisa la solicitud en IDG."; }).catch(error); });
+      button.addEventListener("click", () => {
+        button.disabled = true;
+        void send({ type: "direct", url: item.url, name: item.name }).then(() => { notice.textContent = "Revisa la solicitud en IDG."; }).catch(error);
+      });
       li.append(button); list.append(li);
     }
     if (!links.length) { const li = document.createElement("li"); li.textContent = "No hay enlaces GET simples transferibles en esta página."; list.append(li); }
