@@ -476,7 +476,7 @@ La cancelación de energía simulada de fase 06 sigue **BLOQUEADA / PENDIENTE** 
 
 ## Fase 08 — Firefox y compatibilidad de navegadores (2026-09-26)
 
-**Estado: EN_CURSO.** Rama `feat/08-firefox-y-navegadores`, basada en el HEAD vigente de `feat/07-extension-chromium` (`1637e6b484bcc273d2b0f1535ec5620c1149c074`). Implementación Firefox: `a9e9c321ba29fdb2d70855b9137931cafe409095`; el arnés se endureció después y el HEAD vigente es `e19b9428820e97ee0dd88e0dc2c1fae6ce0fc37c`. PR #9 está abierta en borrador con base `feat/07-extension-chromium`; PR #7 permanece en borrador con su base `feat/06-colas-y-organizacion`. No cambiar esas bases ni fusionar PR #6, #7 o #9.
+**Estado: EN_CURSO.** Rama `feat/08-firefox-y-navegadores`, basada en el HEAD vigente de `feat/07-extension-chromium` (`1637e6b484bcc273d2b0f1535ec5620c1149c074`). Implementación Firefox: `a9e9c321ba29fdb2d70855b9137931cafe409095`; el último commit de lógica y arneses es `e19b9428820e97ee0dd88e0dc2c1fae6ce0fc37c`; esta rama incluye además el registro documental de CI. PR #9 está abierta en borrador con base `feat/07-extension-chromium`; PR #7 permanece en borrador con su base `feat/06-colas-y-organizacion`. No cambiar esas bases ni fusionar PR #6, #7 o #9.
 
 ### Capacidades y límites actuales
 
