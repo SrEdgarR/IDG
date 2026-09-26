@@ -112,3 +112,10 @@ Consultas reales del 2026-09-19, además de S03/S04/S06/S10:
 - [S25: API GitHub de repositorios](https://docs.github.com/en/rest/repos/repos#create-a-repository-for-the-authenticated-user): consulta autenticada y creación pública sin auto_init. Identidad contrastada antes de escribir.
 
 Las versiones exactas de dependencias del programa se resolverán en 01. Las páginas son fuentes técnicas; el estado de implementación no se deduce de ellas.
+
+## APIs multimedia WebExtensions — verificación del 2026-09-26
+
+- [Chrome `activeTab`](https://developer.chrome.com/docs/extensions/develop/concepts/activeTab): tras una acción explícita, concede acceso temporal al origen del marco principal y permite observar solicitudes de ese origen mediante `webRequest`; se limita el observador a ese acceso temporal.
+- [Chrome `webRequest`](https://developer.chrome.com/docs/extensions/reference/api/webRequest): exige el permiso API y acceso al host pertinente; la visibilidad de subrecursos depende tanto del URL solicitado como de su iniciador. `webRequestBlocking` no se solicita.
+- [Mozilla permisos](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/permissions): los eventos `webRequest` requieren host permissions. `activeTab` documenta acceso temporal a la pestaña e inyección, pero no reemplaza ese permiso para eventos; Firefox conserva detección por DOM y no pide hosts amplios.
+- [Mozilla `webRequest.onHeadersReceived`](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/webRequest/onHeadersReceived): los encabezados solo se reciben cuando se pide `responseHeaders`; esta interfaz no proporciona el cuerpo del recurso.

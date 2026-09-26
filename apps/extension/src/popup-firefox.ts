@@ -1,6 +1,7 @@
 import type { DownloadSnapshot, ExtensionState } from "../../../packages/shared-types/protocol";
 import { request, watch } from "./bridge";
 import { getBrowserApi } from "./browser-api";
+import { initializeMediaPopup } from "./media-popup";
 
 const api = getBrowserApi();
 const status = document.getElementById("status")!;
@@ -158,3 +159,4 @@ window.addEventListener("pagehide", () => {
   closeWatch = undefined;
 });
 connect();
+initializeMediaPopup();

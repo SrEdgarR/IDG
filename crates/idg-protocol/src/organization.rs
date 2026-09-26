@@ -23,6 +23,8 @@ pub struct JobOrganization {
     pub history_visible_since: Option<u32>,
     pub context: String,
     pub media_type: Option<String>,
+    #[serde(default)]
+    pub media: Option<crate::MediaMetadata>,
     pub stats_recorded: bool,
 }
 impl Default for JobOrganization {
@@ -37,6 +39,7 @@ impl Default for JobOrganization {
             history_visible_since: None,
             context: String::new(),
             media_type: None,
+            media: None,
             stats_recorded: false,
         }
     }

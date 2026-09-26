@@ -1,13 +1,14 @@
 import type { CaptureProposal, Payload } from "../../../packages/shared-types/protocol";
 import { request } from "./bridge";
 import { getBrowserApi, getMenusApi } from "./browser-api";
+import { handleMediaMessage } from "./media-background";
 
 const api = getBrowserApi();
 const menus = getMenusApi();
 const menuId = "idg-direct-link";
 const activeRequests = new Set<string>();
 
-export function directLinkFromUrl(value: unknown): Omit<CaptureProposal, "id" | "source"> | null {
+export function directLinkFromUrl(value: unknown): Omit<CaptureProposal, "id" | "source" | "media"> | null {
   if (typeof value !== "string" || value.length > 2048) return null;
   let url: URL;
   try {
@@ -74,7 +75,7 @@ export async function submitDirectUrl(rawUrl: unknown) {
   activeRequests.add(key);
   try {
     const id = crypto.randomUUID();
-    const proposal: CaptureProposal = { id, ...direct, source: "direct" };
+    const proposal: CaptureProposal = { id, ...direct, source: "direct", media: null };
     const prepared = await request({ prepare_capture: { proposal } }, id);
     await startAccepted(id, prepared);
   } finally {
@@ -98,7 +99,9 @@ menus.onClicked.addListener((info) => {
   if (info.menuItemId === menuId) void submitDirectUrl(info.linkUrl).catch(() => {});
 });
 
-const onMessage = (message: unknown) => {
+const onMessage = (message: unknown, sender: chrome.runtime.MessageSender) => {
+  const media = handleMediaMessage(message, sender);
+  if (media !== undefined) return media;
   if (
     typeof message !== "object" ||
     message === null ||

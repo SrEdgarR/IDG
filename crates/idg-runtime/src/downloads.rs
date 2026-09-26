@@ -276,9 +276,14 @@ impl Downloads {
                     || proposal.id.len() > 64
                     || proposal.name.is_empty()
                     || proposal.name.len() > 240
-                    || !["direct", "observed"].contains(&proposal.source.as_str())
+                    || !["direct", "observed", "media"].contains(&proposal.source.as_str())
+                    || (proposal.source == "media" && proposal.media.is_none())
+                    || (proposal.source != "media" && proposal.media.is_some())
                 {
                     return Err(DownloadError::InvalidInput);
+                }
+                if let Some(media) = &proposal.media {
+                    media.validate()?;
                 }
                 let url =
                     reqwest::Url::parse(&proposal.url).map_err(|_| DownloadError::InvalidInput)?;
@@ -303,7 +308,8 @@ impl Downloads {
                         c.context == format!("extension:{}", proposal.id)
                             && c.input.url == proposal.url
                             && c.input.name == proposal.name
-                    }) {
+                    }) && job.organization.media == proposal.media
+                    {
                         Ok(Payload::CaptureStatus {
                             decision: CaptureDecision::Accepted,
                             job: Some(self.snapshot(job)),
@@ -316,6 +322,7 @@ impl Downloads {
                     return if existing.url == proposal.url
                         && existing.name == proposal.name
                         && existing.source == proposal.source
+                        && existing.media == proposal.media
                     {
                         Ok(Payload::CaptureStatus {
                             decision: CaptureDecision::Pending,
@@ -622,6 +629,12 @@ impl Downloads {
                     return Err(DownloadError::Busy);
                 }
                 let mut job = download::create_job(&request.id, draft.input.clone())?;
+                if let Some(capture_id) = draft.context.strip_prefix("extension:") {
+                    job.organization.media = inner
+                        .captures
+                        .get(capture_id)
+                        .and_then(|(proposal, _)| proposal.media.clone());
+                }
                 job.organization.context = draft.context.clone();
                 job.organization.private = draft.private;
                 job.organization.queue_id = draft.queue_id.clone();
@@ -1076,6 +1089,7 @@ mod capture_tests {
             url: "http://example.test/file.bin".into(),
             name: "file.bin".into(),
             source: "observed".into(),
+            media: None,
         };
         let invalid = CaptureProposal {
             id: "capture-invalid".into(),
@@ -1213,6 +1227,106 @@ mod capture_tests {
         );
         drop(runtime);
         std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn accepted_direct_media_saves_sanitized_metadata_with_the_job() {
+        let directory = TestDirectory::new();
+        let runtime = Downloads::open_at(directory.path().to_path_buf()).unwrap();
+        let id = "media-capture-1";
+        let metadata = MediaMetadata {
+            kind: MediaKind::Video,
+            title: "Local fixture".into(),
+            mime_type: Some("video/mp4".into()),
+            width: Some(640),
+            height: Some(360),
+            frame_rate_milli: None,
+            video_codec: None,
+            audio_codec: None,
+            video_tracks: None,
+            audio_tracks: None,
+            duration_ms: Some("14500".into()),
+            size_bytes: Some("8192".into()),
+            size_kind: MediaSizeKind::Exact,
+            manifest_kind: MediaManifestKind::None,
+        };
+        let proposal = CaptureProposal {
+            id: id.into(),
+            url: "http://127.0.0.1:8788/clip.mp4".into(),
+            name: "clip.mp4".into(),
+            source: "media".into(),
+            media: Some(metadata.clone()),
+        };
+        for invalid in [
+            CaptureProposal {
+                media: None,
+                id: "media-missing-info".into(),
+                ..proposal.clone()
+            },
+            CaptureProposal {
+                source: "direct".into(),
+                id: "media-source-mismatch".into(),
+                ..proposal.clone()
+            },
+            CaptureProposal {
+                id: "manifest-not-downloadable".into(),
+                media: Some(MediaMetadata {
+                    manifest_kind: MediaManifestKind::Hls,
+                    ..metadata.clone()
+                }),
+                ..proposal.clone()
+            },
+        ] {
+            let invalid_id = invalid.id.clone();
+            assert_eq!(
+                runtime
+                    .handle(req(
+                        &invalid_id,
+                        Command::PrepareCapture { proposal: invalid }
+                    ))
+                    .unwrap_err(),
+                DownloadError::InvalidInput
+            );
+        }
+        runtime
+            .handle(req(
+                id,
+                Command::PrepareCapture {
+                    proposal: proposal.clone(),
+                },
+            ))
+            .unwrap();
+        assert!(
+            runtime
+                .inner
+                .lock()
+                .unwrap()
+                .store
+                .load()
+                .unwrap()
+                .jobs
+                .is_empty()
+        );
+
+        let mut draft = create_draft(directory.path(), false, StartPolicy::Later);
+        draft.context = format!("extension:{id}");
+        draft.input.url = proposal.url;
+        draft.input.name = proposal.name;
+        draft.options.replay_safe = true;
+        draft.category = "Videos".into();
+        runtime
+            .handle(req(id, Command::CreateDownload { draft }))
+            .unwrap();
+        let stored = runtime.inner.lock().unwrap().store.load().unwrap();
+        assert_eq!(stored.jobs.len(), 1);
+        assert_eq!(stored.jobs[0].organization.media, Some(metadata.clone()));
+
+        drop(runtime);
+        let recovered = Downloads::open_at(directory.path().to_path_buf()).unwrap();
+        assert_eq!(
+            recovered.inner.lock().unwrap().jobs[id].organization.media,
+            Some(metadata)
+        );
     }
 
     #[test]

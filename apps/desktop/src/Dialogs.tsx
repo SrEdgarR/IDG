@@ -7,15 +7,28 @@ import { useState, useRef, useEffect } from "react";
 import type {
   StartPolicy,
   ConflictPolicy,
+  MediaMetadata,
 } from "../../../packages/shared-types/protocol";
 import { Modal, Pending } from "./ui/Modal";
 import { validateDraft } from "./model";
+
+function describeMediaMetadata(media: MediaMetadata): string {
+  const details = [
+    media.frame_rate_milli ? `${(media.frame_rate_milli / 1000).toFixed(3).replace(/0+$/, "").replace(/\.$/, "")} FPS` : null,
+    media.video_codec,
+    media.audio_codec,
+    media.video_tracks ? `${media.video_tracks} pista(s) de video` : null,
+    media.audio_tracks ? `${media.audio_tracks} pista(s) de audio` : null,
+  ].filter((value): value is string => value !== null);
+  return details.length ? details.join(" · ") : "Desconocidos; no se deducen";
+}
 export function NewDownloadDialog({
   onClose,
   backend,
   initialUrl = "",
   initialName = "",
   captureId,
+  media,
   onAccepted,
 }: {
   onClose: () => void;
@@ -23,6 +36,7 @@ export function NewDownloadDialog({
   initialUrl?: string;
   initialName?: string;
   captureId?: string;
+  media?: MediaMetadata;
   onAccepted?: () => void;
 }) {
   const [directory, setDirectory] = useState("");
@@ -36,7 +50,7 @@ export function NewDownloadDialog({
     setRulePreview(null);
   };
   const directoryEdited = useRef(false);
-  const [category, setCategory] = useState("Otros");
+  const [category, setCategory] = useState(media?.kind === "video" ? "Videos" : "Otros");
   const [conflict, setConflict] = useState<ConflictPolicy>("reject");
   const [conflictOpen, setConflictOpen] = useState(false);
   const [recoverable, setRecoverable] = useState<string | null>(null);
@@ -140,11 +154,33 @@ export function NewDownloadDialog({
     >
       <p className="muted">
         {captureId
-          ? "Chromium conserva la descarga original hasta que IDG confirme un trabajo persistido y reciba datos. Si cancelas, continúa en el navegador."
+          ? "El navegador conserva la descarga original hasta que IDG confirme un trabajo persistido y reciba datos. Si cancelas, continúa en el navegador."
           : backend
           ? "Revisa el destino. No se consulta el enlace hasta aceptar la descarga."
           : "Prepara los datos del archivo. Todavía no se enviarán al motor."}
       </p>
+      {media && (
+        <section className="media-capture-summary" aria-label="Medio seleccionado">
+          <h3>{media.title || (media.kind === "video" ? "Video seleccionado" : "Audio seleccionado")}</h3>
+          <dl>
+            <div><dt>Tipo</dt><dd>{media.kind === "video" ? "Video" : "Audio"}</dd></div>
+            <div><dt>MIME</dt><dd>{media.mime_type ?? "Desconocido"}</dd></div>
+            {media.width && media.height && <div><dt>Resolución</dt><dd>{media.width} × {media.height}</dd></div>}
+            <div><dt>FPS / códec / pistas</dt><dd>{describeMediaMetadata(media)}</dd></div>
+            <div><dt>Duración</dt><dd>{media.duration_ms ? `${Math.floor(Number(media.duration_ms) / 60000)}:${String(Math.floor(Number(media.duration_ms) / 1000) % 60).padStart(2, "0")}` : "Desconocida"}</dd></div>
+            <div><dt>Tamaño</dt><dd>{media.size_bytes ? `${media.size_bytes} bytes · ${media.size_kind === "exact" ? "respuesta HTTP" : "estimado"}` : "Desconocido"}</dd></div>
+          </dl>
+          <label className="field">
+            Archivo multimedia
+            <select value="original" disabled aria-label="Archivo original seleccionado">
+              <option value="original">Conservar archivo original{media.width && media.height ? ` · ${media.width} × ${media.height}` : ""}</option>
+              <option value="video-only" disabled>Solo video · no disponible en fase 09</option>
+              <option value="audio-only" disabled>Solo audio · no disponible en fase 09</option>
+            </select>
+          </label>
+          <p className="muted">Esta fase transfiere únicamente el archivo directo original. No separa pistas, no convierte y no asigna una calidad que el reproductor no haya declarado.</p>
+        </section>
+      )}
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -432,7 +468,7 @@ export function NewDownloadDialog({
               El enlace permite solicitudes repetidas
             </label>
             <p className="muted">
-              {captureId ? "Obligatorio para transferir desde Chromium: confirma que es un GET público, repetible y sin sesión. Si no estás seguro, cancela y usa el navegador." : "Actívalo solo para un enlace reutilizable. Ante dudas o enlaces de un solo uso se usa una solicitud secuencial; Automático no anula esta protección."}
+              {captureId ? "Obligatorio para transferir desde el navegador: confirma que es un GET público, repetible y sin sesión. Si no estás seguro, cancela y usa el navegador." : "Actívalo solo para un enlace reutilizable. Ante dudas o enlaces de un solo uso se usa una solicitud secuencial; Automático no anula esta protección."}
             </p>
           </>
         ) : (

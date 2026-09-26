@@ -188,6 +188,7 @@ async fn serve(mut pipe: NamedPipeServer, state: Arc<State>) -> io::Result<()> {
                         url: String::new(),
                         name: String::new(),
                         source: String::new(),
+                        media: None,
                     },
                 },
                 Command::GetCaptureStatus {

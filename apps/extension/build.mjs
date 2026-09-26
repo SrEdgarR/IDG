@@ -24,6 +24,7 @@ for (const browser of ["chromium", "firefox"]) {
   });
   if (browser === "chromium") await build({ entryPoints: [fileURLToPath(new URL("./src/worker.ts", import.meta.url))], outfile: fileURLToPath(new URL("worker.js", output)), ...compileOptions });
   else await build({ entryPoints: [fileURLToPath(new URL("./src/firefox-background.ts", import.meta.url))], outfile: fileURLToPath(new URL("background.js", output)), ...compileOptions });
+  await build({ entryPoints: [fileURLToPath(new URL("./src/media-content.ts", import.meta.url))], outfile: fileURLToPath(new URL("media-content.js", output)), ...compileOptions });
   for (const name of ["popup.css"])
     await copyFile(
       new URL(`./src/${name}`, import.meta.url),
@@ -40,7 +41,9 @@ for (const browser of ["chromium", "firefox"]) {
     version: "0.1.0",
     incognito: "not_allowed",
     description: browser === "chromium" ? "Puente de desarrollo de IDG para descargas públicas y repetibles." : "Solicitudes manuales de enlaces directos; sin captura automática.",
-    permissions: browser === "chromium" ? ["nativeMessaging", "storage", "contextMenus", "activeTab", "scripting"] : ["nativeMessaging", "menus"],
+    permissions: browser === "chromium"
+      ? ["nativeMessaging", "storage", "contextMenus", "activeTab", "scripting", "webRequest"]
+      : ["nativeMessaging", "menus", "storage", "activeTab", "scripting"],
     action: { default_popup: "popup.html" },
   };
   if (browser === "chromium") {

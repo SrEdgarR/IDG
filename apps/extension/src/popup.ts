@@ -1,4 +1,5 @@
 import type { ExtensionState } from "../../../packages/shared-types/protocol";
+import { initializeMediaPopup } from "./media-popup";
 
 type Reply = {
   ok: boolean;
@@ -84,4 +85,5 @@ $("find-links").addEventListener("click", async () => {
   } catch (e) { error(e); }
 });
 chrome.runtime.onMessage.addListener((message: { type: string }) => { if (message.type === "updated") void load(); });
+initializeMediaPopup();
 void load();

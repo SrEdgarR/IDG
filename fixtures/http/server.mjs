@@ -6,12 +6,14 @@ import {pathToFileURL} from 'node:url';
 export const SIZE=8*1024*1024;
 export function block(offset,length){const b=Buffer.alloc(length);for(let i=0;i<length;i++)b[i]=(offset+i)%251;return b;}
 export function expectedHash(size=SIZE){const h=createHash('sha256');for(let o=0;o<size;o+=65536)h.update(block(o,Math.min(65536,size-o)));return h.digest('hex');}
+export function waveBytes(){const data=Buffer.alloc(80,128);const b=Buffer.alloc(44+data.length);b.write('RIFF',0);b.writeUInt32LE(36+data.length,4);b.write('WAVEfmt ',8);b.writeUInt32LE(16,16);b.writeUInt16LE(1,20);b.writeUInt16LE(1,22);b.writeUInt32LE(8000,24);b.writeUInt32LE(8000,28);b.writeUInt16LE(1,32);b.writeUInt16LE(8,34);b.write('data',36);b.writeUInt32LE(data.length,40);data.copy(b,44);return b;}
 export async function startFixture(port=0){
- const records=[];const used=new Map();
+ const records=[];const used=new Map();const media=waveBytes();
  const server=http.createServer(async(req,res)=>{
   const url=new URL(req.url,'http://localhost');const route=url.pathname;const times=(used.get(route)??0)+1;used.set(route,times);
   const record={route,method:req.method,range:req.headers.range??null,ifRange:req.headers['if-range']??null,bytes:0,authorization:!!req.headers.authorization,cookie:!!req.headers.cookie};records.push(record);
   if(req.method==='HEAD'){res.writeHead(405);res.end();return;}
+  if(route==='/fixture-audio.wav'){record.bytes=media.length;res.writeHead(200,{'Content-Type':'audio/wav','Content-Length':media.length,ETag:'"fixture-audio-v1"','Accept-Ranges':'bytes'});res.end(media);return;}
   if(route==='/expired'){res.writeHead(403);res.end();return;}
   if(route==='/retry'){res.writeHead(503,{'Retry-After':'1'});res.end();return;}
   if(route==='/html'){res.writeHead(200,{'Content-Type':'text/html'});res.end('<html>Login fixture</html>');return;}
@@ -29,6 +31,6 @@ export async function startFixture(port=0){
   try{for(let offset=start;offset<size;offset+=65536){if(res.destroyed)break;const data=block(offset,Math.min(65536,size-offset));record.bytes+=data.length;if(!res.write(data))await once(res,'drain');if(route==='/cut'&&!match&&offset>=2*1024*1024){res.destroy();return;}await new Promise(r=>setTimeout(r,route==='/slow'?12:2));}res.end();}catch{res.destroy();}
  });
  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,'127.0.0.1',resolve);});
- return{server,records,url:`http://127.0.0.1:${server.address().port}`,close:()=>new Promise(r=>{server.closeAllConnections();server.close(r);})};
+ return{server,records,url:`http://127.0.0.1:${server.address().port}`,mediaSha256:createHash('sha256').update(media).digest('hex'),close:()=>new Promise(r=>{server.closeAllConnections();server.close(r);})};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){const f=await startFixture(Number(process.argv[2]??8787));console.log(JSON.stringify({url:f.url+'/slow',size:SIZE,sha256:expectedHash()}));}

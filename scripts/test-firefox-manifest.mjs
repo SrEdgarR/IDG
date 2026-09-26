@@ -11,7 +11,7 @@ const nativeHostName = developmentNativeHostName(process.cwd());
 assert.equal(manifest.manifest_version, 3);
 assert.deepEqual(manifest.background, { scripts: ["background.js"] });
 assert.equal(manifest.incognito, "not_allowed");
-assert.deepEqual(manifest.permissions, ["nativeMessaging", "menus"]);
+assert.deepEqual(manifest.permissions, ["nativeMessaging", "menus", "storage", "activeTab", "scripting"]);
 assert.equal(manifest.action.default_popup, "popup.html");
 assert.deepEqual(manifest.browser_specific_settings.gecko, {
   id: identity.firefox_id,
@@ -19,14 +19,21 @@ assert.deepEqual(manifest.browser_specific_settings.gecko, {
   data_collection_permissions: { required: ["none"] },
 });
 assert.equal("host_permissions" in manifest, false);
+assert.equal(manifest.permissions.includes("webRequest"), false);
 assert.equal("optional_permissions" in manifest, false);
 assert.equal("service_worker" in manifest.background, false);
+assert.equal(await readFile(`${root}/media-content.js`, "utf8").then(() => true), true);
 const firefoxBackground = await readFile(`${root}/background.js`, "utf8");
 const chromiumWorker = await readFile("apps/extension/build/chromium/worker.js", "utf8");
 assert.ok(firefoxBackground.includes(nativeHostName), "Firefox debe conectar al host generado para este checkout.");
 assert.ok(chromiumWorker.includes(nativeHostName), "Chromium debe conectar al host generado para este checkout.");
 assert.equal(chromium.incognito, "not_allowed");
 assert.ok(chromium.permissions.includes("contextMenus"));
+assert.ok(chromium.permissions.includes("activeTab"));
+assert.ok(chromium.permissions.includes("webRequest"));
+assert.equal(chromium.permissions.includes("webRequestBlocking"), false);
+assert.equal("host_permissions" in chromium, false);
+assert.equal(await readFile("apps/extension/build/chromium/media-content.js", "utf8").then(() => true), true);
 assert.equal(chromium.permissions.includes("downloads"), false);
 assert.equal("optional_permissions" in chromium, false);
-console.log("PASS extension manifests: Firefox MV3 scripts and stable ID; minimal permissions and private windows excluded.");
+console.log("PASS extension manifests: Chromium uses temporary activeTab webRequest; Firefox requests no unsupported host observation; no broad/transfer permissions.");
