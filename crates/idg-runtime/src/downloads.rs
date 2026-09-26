@@ -24,6 +24,7 @@ struct Inner {
     clipboard: idg_core::clipboard::Monitor,
     file_operations: std::collections::BTreeSet<String>,
     unavailable: BTreeMap<String, DownloadError>,
+    captures: BTreeMap<String, (CaptureProposal, std::time::Instant)>,
 }
 #[derive(Clone)]
 pub struct Downloads {
@@ -31,6 +32,7 @@ pub struct Downloads {
     events: watch::Sender<Option<(u32, DownloadSnapshot)>>,
     sequence: Arc<std::sync::atomic::AtomicU32>,
     resources: Arc<download::resources::Resources>,
+    capture_events: watch::Sender<Option<String>>,
 }
 impl Downloads {
     pub fn open() -> Result<Self, DownloadError> {
@@ -44,6 +46,9 @@ impl Downloads {
         if !directory.is_absolute() {
             return Err(DownloadError::InvalidInput);
         }
+        Self::open_at(directory)
+    }
+    fn open_at(directory: PathBuf) -> Result<Self, DownloadError> {
         std::fs::create_dir_all(&directory).map_err(|_| DownloadError::Storage)?;
         let mut store = Store::open(&directory.join("jobs.sqlite3"))?;
         let preferences = store.preferences()?;
@@ -68,6 +73,7 @@ impl Downloads {
             jobs.insert(job.id.clone(), job);
         }
         let (events, _) = watch::channel(None);
+        let (capture_events, _) = watch::channel(None);
         let this = Self {
             inner: Arc::new(Mutex::new(Inner {
                 store,
@@ -82,9 +88,11 @@ impl Downloads {
                 clipboard: Default::default(),
                 file_operations: Default::default(),
                 unavailable: loaded.unavailable.into_iter().collect(),
+                captures: BTreeMap::new(),
             })),
             events,
             resources,
+            capture_events,
             sequence: Arc::new(std::sync::atomic::AtomicU32::new(0)),
         };
         {
@@ -109,9 +117,58 @@ impl Downloads {
     pub fn subscribe(&self) -> watch::Receiver<Option<(u32, DownloadSnapshot)>> {
         self.events.subscribe()
     }
+    pub fn subscribe_captures(&self) -> watch::Receiver<Option<String>> {
+        self.capture_events.subscribe()
+    }
+    fn extension_state(&self, inner: &Inner) -> ExtensionState {
+        let mut jobs = inner
+            .jobs
+            .values()
+            .filter(|job| {
+                !job.organization.private
+                    && matches!(
+                        job.state,
+                        TransferState::Probing
+                            | TransferState::Downloading
+                            | TransferState::Verifying
+                            | TransferState::PublishPending
+                            | TransferState::Paused
+                            | TransferState::Queued
+                    )
+            })
+            .collect::<Vec<_>>();
+        let active_count = jobs
+            .iter()
+            .filter(|job| {
+                matches!(
+                    job.state,
+                    TransferState::Probing
+                        | TransferState::Downloading
+                        | TransferState::Verifying
+                        | TransferState::PublishPending
+                )
+            })
+            .count() as u32;
+        jobs.sort_by_key(|job| std::cmp::Reverse(job.created_at));
+        ExtensionState {
+            autopick_mode: inner.preferences.autopick_mode.clone(),
+            active_count,
+            jobs: jobs
+                .into_iter()
+                .take(20)
+                .map(|job| self.snapshot(job))
+                .collect(),
+        }
+    }
     pub async fn execute(&self, request: Request) -> Payload {
+        self.execute_with_role(request, false).await
+    }
+    pub async fn execute_extension(&self, request: Request) -> Payload {
+        self.execute_with_role(request, true).await
+    }
+    async fn execute_with_role(&self, request: Request, extension: bool) -> Payload {
         let this = self.clone();
-        match tokio::task::spawn_blocking(move || this.handle(request)).await {
+        match tokio::task::spawn_blocking(move || this.handle_with_role(request, extension)).await {
             Ok(Ok(p)) => p,
             Ok(Err(code)) => Payload::DownloadFailure {
                 message: code.message().into(),
@@ -124,6 +181,28 @@ impl Downloads {
         }
     }
     fn handle(&self, request: Request) -> Result<Payload, DownloadError> {
+        self.handle_with_role(request, false)
+    }
+    fn handle_with_role(
+        &self,
+        request: Request,
+        extension: bool,
+    ) -> Result<Payload, DownloadError> {
+        if extension
+            && !matches!(
+                request.command,
+                Command::GetExtensionState
+                    | Command::SetExtensionMode { .. }
+                    | Command::PauseDownload { .. }
+                    | Command::ResumeDownload { .. }
+                    | Command::PrepareCapture { .. }
+                    | Command::GetCaptureStatus { .. }
+                    | Command::StartCapture { .. }
+                    | Command::AbortCapture { .. }
+            )
+        {
+            return Err(DownloadError::NotFound);
+        }
         if matches!(
             &request.command,
             Command::Library {
@@ -142,6 +221,16 @@ impl Downloads {
         let mut inner = self.inner.lock().map_err(|_| DownloadError::Storage)?;
         if inner.stopping {
             return Err(DownloadError::Busy);
+        }
+        if extension
+            && let Command::PauseDownload { job_id } | Command::ResumeDownload { job_id } =
+                &request.command
+            && inner
+                .jobs
+                .get(job_id)
+                .is_none_or(|job| job.organization.private)
+        {
+            return Err(DownloadError::NotFound);
         }
         let target = match &request.command {
             Command::AddDownload { .. }
@@ -167,6 +256,188 @@ impl Downloads {
             return self.organize(&mut inner, operation.clone(), &request);
         }
         match request.command {
+            Command::GetExtensionState => Ok(Payload::ExtensionState {
+                state: self.extension_state(&inner),
+            }),
+            Command::SetExtensionMode { mode } => {
+                if !["always", "ask", "browser"].contains(&mode.as_str()) {
+                    return Err(DownloadError::InvalidInput);
+                }
+                let mut preferences = inner.preferences.clone();
+                preferences.autopick_mode = mode;
+                inner.store.save_preferences(&preferences)?;
+                inner.preferences = preferences;
+                Ok(Payload::ExtensionState {
+                    state: self.extension_state(&inner),
+                })
+            }
+            Command::PrepareCapture { proposal } => {
+                if proposal.id != request.id
+                    || proposal.id.len() > 64
+                    || proposal.name.is_empty()
+                    || proposal.name.len() > 240
+                    || !["direct", "observed"].contains(&proposal.source.as_str())
+                {
+                    return Err(DownloadError::InvalidInput);
+                }
+                let url =
+                    reqwest::Url::parse(&proposal.url).map_err(|_| DownloadError::InvalidInput)?;
+                if !matches!(url.scheme(), "http" | "https")
+                    || url.query().is_some()
+                    || url.fragment().is_some()
+                    || !url.username().is_empty()
+                    || url.password().is_some()
+                    || proposal.url.len() > 2048
+                {
+                    return Err(DownloadError::InvalidInput);
+                }
+                download::validate_input(&NewDownload {
+                    url: proposal.url.clone(),
+                    name: proposal.name.clone(),
+                    directory: "C:\\IDG".into(),
+                    expected_sha256: None,
+                    conflict: ConflictPolicy::Reject,
+                })?;
+                if let Some(job) = inner.jobs.get(&proposal.id) {
+                    return if job.creation.as_ref().is_some_and(|c| {
+                        c.context == format!("extension:{}", proposal.id)
+                            && c.input.url == proposal.url
+                            && c.input.name == proposal.name
+                    }) {
+                        Ok(Payload::CaptureStatus {
+                            decision: CaptureDecision::Accepted,
+                            job: Some(self.snapshot(job)),
+                        })
+                    } else {
+                        Err(DownloadError::Conflict)
+                    };
+                }
+                if let Some((existing, _)) = inner.captures.get(&proposal.id) {
+                    return if existing.url == proposal.url
+                        && existing.name == proposal.name
+                        && existing.source == proposal.source
+                    {
+                        Ok(Payload::CaptureStatus {
+                            decision: CaptureDecision::Pending,
+                            job: None,
+                        })
+                    } else {
+                        Err(DownloadError::Conflict)
+                    };
+                }
+                inner
+                    .captures
+                    .retain(|_, (_, at)| at.elapsed().as_secs() < 120);
+                if inner.captures.len() >= 32 {
+                    return Err(DownloadError::Busy);
+                }
+                inner.captures.insert(
+                    proposal.id.clone(),
+                    (proposal.clone(), std::time::Instant::now()),
+                );
+                self.capture_events.send_replace(Some(proposal.id));
+                Ok(Payload::CaptureStatus {
+                    decision: CaptureDecision::Pending,
+                    job: None,
+                })
+            }
+            Command::GetCaptureStatus { capture_id } => {
+                let decision = if inner.jobs.get(&capture_id).is_some_and(|job| {
+                    job.creation
+                        .as_ref()
+                        .is_some_and(|c| c.context == format!("extension:{capture_id}"))
+                }) {
+                    CaptureDecision::Accepted
+                } else if inner
+                    .captures
+                    .get(&capture_id)
+                    .is_some_and(|(_, at)| at.elapsed().as_secs() < 120)
+                {
+                    CaptureDecision::Pending
+                } else {
+                    CaptureDecision::Rejected
+                };
+                let job = inner
+                    .jobs
+                    .get(&capture_id)
+                    .filter(|job| {
+                        job.creation
+                            .as_ref()
+                            .is_some_and(|c| c.context == format!("extension:{capture_id}"))
+                    })
+                    .map(|job| self.snapshot(job));
+                Ok(Payload::CaptureStatus { decision, job })
+            }
+            Command::GetCaptureRequests => Ok(Payload::CaptureRequests {
+                proposals: inner
+                    .captures
+                    .values()
+                    .filter(|(_, at)| at.elapsed().as_secs() < 120)
+                    .filter(|(proposal, _)| !inner.jobs.contains_key(&proposal.id))
+                    .map(|(proposal, _)| proposal.clone())
+                    .collect(),
+            }),
+            Command::RejectCapture { capture_id } => {
+                if inner.jobs.contains_key(&capture_id) {
+                    return Err(DownloadError::InvalidState);
+                }
+                inner.captures.remove(&capture_id);
+                Ok(Payload::CaptureStatus {
+                    decision: CaptureDecision::Rejected,
+                    job: None,
+                })
+            }
+            Command::StartCapture { capture_id } => {
+                let job = inner
+                    .jobs
+                    .get(&capture_id)
+                    .ok_or(DownloadError::NotFound)?
+                    .clone();
+                if !job
+                    .creation
+                    .as_ref()
+                    .is_some_and(|c| c.context == format!("extension:{capture_id}"))
+                {
+                    return Err(DownloadError::NotFound);
+                }
+                if matches!(job.state, TransferState::Failed | TransferState::Cancelled) {
+                    return Err(DownloadError::InvalidState);
+                }
+                if job.state == TransferState::Deferred {
+                    self.start(&mut inner, job.clone())?;
+                }
+                Ok(Payload::Download {
+                    job: self.snapshot(inner.jobs.get(&capture_id).ok_or(DownloadError::NotFound)?),
+                })
+            }
+            Command::AbortCapture { capture_id } => {
+                let mut job = inner
+                    .jobs
+                    .get(&capture_id)
+                    .ok_or(DownloadError::NotFound)?
+                    .clone();
+                if !job
+                    .creation
+                    .as_ref()
+                    .is_some_and(|c| c.context == format!("extension:{capture_id}"))
+                {
+                    return Err(DownloadError::NotFound);
+                }
+                if let Some(control) = inner.active.get(&capture_id) {
+                    control.send_replace(Control::Cancel);
+                } else if !matches!(
+                    job.state,
+                    TransferState::Cancelled | TransferState::Completed
+                ) {
+                    job.state = TransferState::Cancelled;
+                    inner.store.save(&job)?;
+                    inner.jobs.insert(capture_id, job.clone());
+                    self.emit(&job);
+                }
+                Ok(Payload::Download {
+                    job: self.snapshot(&job),
+                })
+            }
             Command::Library {
                 operation: LibraryCommand::ClipboardStatus,
             } => {
@@ -287,6 +558,21 @@ impl Downloads {
                         Err(DownloadError::Conflict)
                     };
                 }
+                if let Some(capture_id) = draft.context.strip_prefix("extension:") {
+                    let proposal = inner
+                        .captures
+                        .get(capture_id)
+                        .ok_or(DownloadError::NotFound)?;
+                    if request.id != capture_id
+                        || proposal.0.url != draft.input.url
+                        || proposal.0.name != draft.input.name
+                        || draft.start != StartPolicy::Later
+                        || !draft.options.replay_safe
+                        || proposal.1.elapsed().as_secs() >= 120
+                    {
+                        return Err(DownloadError::InvalidInput);
+                    }
+                }
                 let original = draft.clone();
                 if draft.apply_rules {
                     let preview = rules::preview(
@@ -360,6 +646,7 @@ impl Downloads {
                     return Err(error);
                 }
                 inner.jobs.insert(job.id.clone(), job.clone());
+                inner.captures.remove(&job.id);
                 self.emit(&job);
                 if draft.start == StartPolicy::Now {
                     self.start(&mut inner, job.clone())?;
@@ -461,6 +748,11 @@ impl Downloads {
                     .get(&job_id)
                     .ok_or(DownloadError::NotFound)?
                     .clone();
+                if job.state == TransferState::Deferred
+                    && job.organization.context.starts_with("extension:")
+                {
+                    return Err(DownloadError::InvalidState);
+                }
                 if inner.active.contains_key(&job_id) {
                     return Ok(Payload::Download {
                         job: self.snapshot(&job),
@@ -692,5 +984,405 @@ impl Checkpoint for Sink {
             inner.jobs.insert(job.id.clone(), job.clone());
             self.0.emit(job);
         }
+    }
+}
+
+#[cfg(test)]
+mod capture_tests {
+    use super::*;
+    use std::{
+        path::Path,
+        sync::atomic::{AtomicU64, Ordering},
+    };
+
+    struct TestDirectory(PathBuf);
+
+    impl TestDirectory {
+        fn new() -> Self {
+            static NEXT: AtomicU64 = AtomicU64::new(0);
+            let root = std::env::temp_dir();
+            for _ in 0..100 {
+                let nonce = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos();
+                let sequence = NEXT.fetch_add(1, Ordering::Relaxed);
+                let path = root.join(format!(
+                    "idg-runtime-rust-test-{}-{nonce}-{sequence}",
+                    std::process::id()
+                ));
+                match std::fs::create_dir(&path) {
+                    Ok(()) => return Self(path),
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                    Err(error) => panic!("cannot create test directory: {error}"),
+                }
+            }
+            panic!("could not allocate a unique test directory")
+        }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TestDirectory {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn create_draft(directory: &Path, private: bool, start: StartPolicy) -> CreateDownload {
+        CreateDownload {
+            context: "manual".into(),
+            private,
+            apply_rules: false,
+            rule_overrides: Vec::new(),
+            queue_id: "main".into(),
+            input: NewDownload {
+                url: "https://example.test/file.bin".into(),
+                directory: directory.to_string_lossy().into_owned(),
+                name: if private { "private.bin" } else { "public.bin" }.into(),
+                expected_sha256: None,
+                conflict: ConflictPolicy::Reject,
+            },
+            options: TransferOptions::default(),
+            category: "Otros".into(),
+            start,
+        }
+    }
+
+    fn req(id: &str, command: Command) -> Request {
+        Request {
+            version: VERSION,
+            id: id.into(),
+            command,
+        }
+    }
+    #[test]
+    fn capture_requires_durable_deferred_acceptance_and_replay_assertion() {
+        let directory = std::env::temp_dir().join(format!(
+            "idg-capture-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let runtime = Downloads::open_at(directory.clone()).unwrap();
+        let id = "capture-test-1";
+        let proposal = CaptureProposal {
+            id: id.into(),
+            url: "http://example.test/file.bin".into(),
+            name: "file.bin".into(),
+            source: "observed".into(),
+        };
+        let invalid = CaptureProposal {
+            id: "capture-invalid".into(),
+            url: "http://example.test/file.bin?token=secret".into(),
+            ..proposal.clone()
+        };
+        assert_eq!(
+            runtime
+                .handle_with_role(
+                    req(
+                        "capture-invalid",
+                        Command::PrepareCapture { proposal: invalid }
+                    ),
+                    true
+                )
+                .unwrap_err(),
+            DownloadError::InvalidInput
+        );
+        assert!(matches!(
+            runtime
+                .handle_with_role(
+                    req(
+                        id,
+                        Command::PrepareCapture {
+                            proposal: proposal.clone()
+                        }
+                    ),
+                    true
+                )
+                .unwrap(),
+            Payload::CaptureStatus {
+                decision: CaptureDecision::Pending,
+                ..
+            }
+        ));
+        assert!(
+            matches!(runtime.handle_with_role(req("list", Command::GetCaptureRequests), false).unwrap(), Payload::CaptureRequests { proposals } if proposals.len() == 1)
+        );
+        let mut draft = CreateDownload {
+            context: format!("extension:{id}"),
+            private: false,
+            apply_rules: false,
+            rule_overrides: vec![],
+            queue_id: "main".into(),
+            input: NewDownload {
+                url: proposal.url,
+                name: proposal.name,
+                directory: directory.to_string_lossy().into_owned(),
+                expected_sha256: None,
+                conflict: ConflictPolicy::Reject,
+            },
+            options: TransferOptions::default(),
+            category: "Otros".into(),
+            start: StartPolicy::Later,
+        };
+        assert_eq!(
+            runtime
+                .handle_with_role(
+                    req(
+                        id,
+                        Command::CreateDownload {
+                            draft: draft.clone()
+                        }
+                    ),
+                    true
+                )
+                .unwrap_err(),
+            DownloadError::NotFound
+        );
+        assert_eq!(
+            runtime
+                .handle(req(
+                    id,
+                    Command::CreateDownload {
+                        draft: draft.clone()
+                    }
+                ))
+                .unwrap_err(),
+            DownloadError::InvalidInput
+        );
+        draft.options.replay_safe = true;
+        assert!(
+            matches!(runtime.handle(req(id, Command::CreateDownload { draft: draft.clone() })).unwrap(), Payload::Download { job } if job.state == TransferState::Deferred)
+        );
+        assert!(matches!(
+            runtime
+                .handle_with_role(
+                    req(
+                        "status",
+                        Command::GetCaptureStatus {
+                            capture_id: id.into()
+                        }
+                    ),
+                    true
+                )
+                .unwrap(),
+            Payload::CaptureStatus {
+                decision: CaptureDecision::Accepted,
+                job: Some(_)
+            }
+        ));
+        assert!(matches!(
+            runtime
+                .handle(req(id, Command::CreateDownload { draft }))
+                .unwrap(),
+            Payload::Download { .. }
+        ));
+        assert_eq!(
+            runtime
+                .handle(req(
+                    "reject",
+                    Command::RejectCapture {
+                        capture_id: id.into()
+                    }
+                ))
+                .unwrap_err(),
+            DownloadError::InvalidState
+        );
+        assert!(
+            matches!(runtime.handle_with_role(req("abort", Command::AbortCapture { capture_id: id.into() }), true).unwrap(), Payload::Download { job } if job.state == TransferState::Cancelled)
+        );
+        assert_eq!(
+            runtime
+                .handle_with_role(
+                    req(
+                        "start",
+                        Command::StartCapture {
+                            capture_id: id.into()
+                        }
+                    ),
+                    true
+                )
+                .unwrap_err(),
+            DownloadError::InvalidState
+        );
+        drop(runtime);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn extension_cannot_enumerate_or_mutate_private_history() {
+        let directory = TestDirectory::new();
+        let runtime = Downloads::open_at(directory.path().to_path_buf()).unwrap();
+        for (id, draft) in [
+            (
+                "private-job",
+                create_draft(directory.path(), true, StartPolicy::Later),
+            ),
+            (
+                "public-job",
+                create_draft(directory.path(), false, StartPolicy::Queue),
+            ),
+        ] {
+            runtime
+                .handle(req(
+                    id,
+                    Command::CreateDownload {
+                        draft: draft.clone(),
+                    },
+                ))
+                .unwrap();
+        }
+
+        let extension = runtime
+            .handle_with_role(req("state", Command::GetExtensionState), true)
+            .unwrap();
+        assert!(
+            matches!(extension, Payload::ExtensionState { state } if state.active_count == 0 && state.jobs.len() == 1 && state.jobs[0].id == "public-job")
+        );
+        for command in [
+            Command::PauseDownload {
+                job_id: "private-job".into(),
+            },
+            Command::ResumeDownload {
+                job_id: "private-job".into(),
+            },
+        ] {
+            assert!(matches!(
+                runtime.handle_with_role(req("private-access", command), true),
+                Err(DownloadError::NotFound)
+            ));
+        }
+        assert!(matches!(
+            runtime.handle_with_role(req("history", Command::ListDownloads { offset: 0 }), true),
+            Err(DownloadError::NotFound)
+        ));
+    }
+
+    #[test]
+    fn resource_limits_reject_invalid_values_and_keep_valid_values_across_reopen() {
+        let directory = TestDirectory::new();
+        let runtime = Downloads::open_at(directory.path().to_path_buf()).unwrap();
+        let invalid = ResourceLimits {
+            max_downloads: 0,
+            ..Default::default()
+        };
+        assert!(matches!(
+            runtime.handle(req(
+                "invalid-limits",
+                Command::SetResourceLimits { limits: invalid }
+            )),
+            Err(DownloadError::InvalidInput)
+        ));
+        let limits = ResourceLimits {
+            max_downloads: 8,
+            global_requests: 32,
+            origin_requests: 32,
+            bytes_per_second: Some(1),
+        };
+        assert!(matches!(
+            runtime.handle(req(
+                "valid-limits",
+                Command::SetResourceLimits {
+                    limits: limits.clone()
+                }
+            )),
+            Ok(Payload::ResourceLimits { limits: saved }) if saved == limits
+        ));
+        drop(runtime);
+
+        let reopened = Downloads::open_at(directory.path().to_path_buf()).unwrap();
+        assert!(matches!(
+            reopened.handle(req("get-limits", Command::GetResourceLimits)),
+            Ok(Payload::ResourceLimits { limits: saved }) if saved == limits
+        ));
+    }
+
+    #[test]
+    fn terminal_downloads_reject_resume_without_changing_durable_state() {
+        let directory = TestDirectory::new();
+        let runtime = Downloads::open_at(directory.path().to_path_buf()).unwrap();
+        for (id, terminal_state) in [
+            ("completed-job", TransferState::Completed),
+            ("cancelled-job", TransferState::Cancelled),
+        ] {
+            let draft = create_draft(directory.path(), false, StartPolicy::Later);
+            let mut job = download::create_job(id, draft.input.clone()).unwrap();
+            job.creation = Some(draft);
+            job.state = terminal_state.clone();
+            job.durable = 17;
+            runtime.inner.lock().unwrap().store.save(&job).unwrap();
+            runtime.inner.lock().unwrap().jobs.insert(id.into(), job);
+
+            assert!(matches!(
+                runtime.handle(req(
+                    &format!("resume-{id}"),
+                    Command::ResumeDownload { job_id: id.into() }
+                )),
+                Err(DownloadError::InvalidState)
+            ));
+            let saved = runtime
+                .handle(req(
+                    &format!("get-{id}"),
+                    Command::GetDownload { job_id: id.into() },
+                ))
+                .unwrap();
+            assert!(
+                matches!(saved, Payload::Download { job } if job.state == terminal_state && job.durable_bytes == "17")
+            );
+        }
+    }
+
+    #[test]
+    fn invalid_categories_and_reused_request_ids_do_not_change_saved_organization() {
+        let directory = TestDirectory::new();
+        let runtime = Downloads::open_at(directory.path().to_path_buf()).unwrap();
+        let invalid = OrganizationCommand::SaveCategories {
+            categories: vec!["Custom only".into()],
+        };
+        assert!(matches!(
+            runtime.handle(req(
+                "bad-categories",
+                Command::Organization { operation: invalid }
+            )),
+            Err(DownloadError::InvalidInput)
+        ));
+
+        let mut categories = default_categories();
+        categories.push("Proyectos".into());
+        let operation = OrganizationCommand::SaveCategories {
+            categories: categories.clone(),
+        };
+        let request = req("category-receipt", Command::Organization { operation });
+        assert!(matches!(
+            runtime.handle(request.clone()),
+            Ok(Payload::Organization { state }) if state.categories == categories
+        ));
+        assert!(matches!(
+            runtime.handle(request.clone()),
+            Ok(Payload::Organization { state }) if state.categories == categories
+        ));
+
+        let collision = req(
+            "category-receipt",
+            Command::Organization {
+                operation: OrganizationCommand::SaveCategories {
+                    categories: default_categories(),
+                },
+            },
+        );
+        assert!(matches!(
+            runtime.handle(collision),
+            Err(DownloadError::Conflict)
+        ));
+        assert!(matches!(
+            runtime.handle(req("get-organization", Command::Organization { operation: OrganizationCommand::Get })),
+            Ok(Payload::Organization { state }) if state.categories == categories
+        ));
     }
 }

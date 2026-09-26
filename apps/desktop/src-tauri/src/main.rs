@@ -62,6 +62,10 @@ async fn connect_runtime(
                     let _ = app.emit_to("mini", "download-changed", &response.payload);
                     continue;
                 }
+                if let Payload::CaptureChanged { .. } = response.payload {
+                    let _ = app.emit_to("main", "capture-requested", &response.payload);
+                    continue;
+                }
                 if let Payload::Snapshot { snapshot } = response.payload {
                     // Events are complete snapshots, so coalescing/gaps require no delta replay.
                     if snapshot.runtime_id != runtime_id || snapshot.sequence < sequence {
@@ -107,6 +111,8 @@ async fn download_command(
                 | Command::Library { .. }
                 | Command::FindRecoverableDownload { .. }
                 | Command::CreateDownload { .. }
+                | Command::GetCaptureRequests
+                | Command::RejectCapture { .. }
                 | Command::GetAppPreferences
                 | Command::SetAppPreferences { .. }
                 | Command::GetDownload { .. }

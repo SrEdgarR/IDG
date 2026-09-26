@@ -131,17 +131,76 @@ async fn serve(mut pipe: NamedPipeServer, state: Arc<State>) -> io::Result<()> {
                 | Command::Subscribe
                 | Command::Shutdown
         );
+        let native_command = matches!(
+            &request.command,
+            Command::GetExtensionState
+                | Command::SetExtensionMode { .. }
+                | Command::PauseDownload { .. }
+                | Command::ResumeDownload { .. }
+                | Command::PrepareCapture { .. }
+                | Command::GetCaptureStatus { .. }
+                | Command::StartCapture { .. }
+                | Command::AbortCapture { .. }
+                | Command::OpenDesktop
+        );
         let mut response = if download_command && session.authorizes(&request) {
-            if can_download {
-                Response::new(&request.id, state.downloads.execute(request.clone()).await)
+            if can_download || native_command {
+                let payload = if matches!(request.command, Command::OpenDesktop) {
+                    let path = std::env::current_exe()?.with_file_name("idg-desktop.exe");
+                    if path.is_file() && std::process::Command::new(path).spawn().is_ok() {
+                        Payload::Pong
+                    } else {
+                        Payload::Error {
+                            code: ErrorCode::Unavailable,
+                        }
+                    }
+                } else if can_download {
+                    state.downloads.execute(request.clone()).await
+                } else {
+                    state.downloads.execute_extension(request.clone()).await
+                };
+                Response::new(&request.id, payload)
             } else {
                 Response::error(&request.id, ErrorCode::Unauthorized)
             }
+        } else if !can_download && request.command == Command::Shutdown {
+            Response::error(&request.id, ErrorCode::Unauthorized)
         } else {
             session.handle(&request, state.snapshot())
         };
         if can_download && let Payload::Hello { capabilities, .. } = &mut response.payload {
             capabilities.push(Command::GetDownloadCapabilities);
+        } else if let Payload::Hello { capabilities, .. } = &mut response.payload {
+            capabilities.extend([
+                Command::GetExtensionState,
+                Command::SetExtensionMode {
+                    mode: String::new(),
+                },
+                Command::PauseDownload {
+                    job_id: String::new(),
+                },
+                Command::ResumeDownload {
+                    job_id: String::new(),
+                },
+                Command::PrepareCapture {
+                    proposal: CaptureProposal {
+                        id: String::new(),
+                        url: String::new(),
+                        name: String::new(),
+                        source: String::new(),
+                    },
+                },
+                Command::GetCaptureStatus {
+                    capture_id: String::new(),
+                },
+                Command::StartCapture {
+                    capture_id: String::new(),
+                },
+                Command::AbortCapture {
+                    capture_id: String::new(),
+                },
+                Command::OpenDesktop,
+            ]);
         }
         let rejected = matches!(response.payload, Payload::Error { .. });
         subscribed = matches!(response.payload, Payload::Subscribed { .. });
@@ -165,6 +224,7 @@ async fn subscription(
     can_download: bool,
 ) -> io::Result<()> {
     let mut downloads = state.downloads.subscribe();
+    let mut captures = state.downloads.subscribe_captures();
     let (mut reader, mut writer) = tokio::io::split(pipe);
     // Pin one read across event updates so partial frames cannot be discarded.
     let read = read_frame(&mut reader);
@@ -174,10 +234,20 @@ async fn subscription(
             return Ok(());
         }
         tokio::select! {
-            result=downloads.changed(), if can_download => {
+            result=captures.changed(), if can_download => {
+                if result.is_err(){return Ok(());}
+                let next = captures.borrow_and_update().clone();
+                if let Some(capture_id)=next{
+                    send(&mut writer,&Response::new("",Payload::CaptureChanged{capture_id})).await?;
+                }
+            },
+            result=downloads.changed() => {
                 if result.is_err(){return Ok(());}
                 let job=downloads.borrow_and_update().clone();
-                if let Some((sequence,job))=job{send(&mut writer,&Response::new("",Payload::DownloadChanged{sequence,job})).await?;}
+                if let Some((sequence,job))=job{
+                    let payload=if can_download {Payload::DownloadChanged{sequence,job}} else {Payload::ExtensionChanged{sequence}};
+                    send(&mut writer,&Response::new("",payload)).await?;
+                }
             },
             _ = stopped.changed() => { send(&mut writer, &Response::new("", Payload::Snapshot { snapshot: state.snapshot() })).await?; return Ok(()); },
             _ = &mut read => return Ok(()),

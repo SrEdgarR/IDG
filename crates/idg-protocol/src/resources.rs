@@ -68,6 +68,110 @@ impl ResourceLimits {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn transfer_options_accept_limits_and_reject_zero_or_out_of_range_values() {
+        for requests in [1, 32] {
+            assert_eq!(
+                TransferOptions {
+                    mode: RequestMode::Manual { requests },
+                    ..Default::default()
+                }
+                .validate(),
+                Ok(())
+            );
+        }
+        for requests in [0, 33] {
+            assert_eq!(
+                TransferOptions {
+                    mode: RequestMode::Manual { requests },
+                    ..Default::default()
+                }
+                .validate(),
+                Err(DownloadError::InvalidInput)
+            );
+        }
+        for bytes_per_second in [None, Some(1), Some(u32::MAX)] {
+            assert_eq!(
+                TransferOptions {
+                    bytes_per_second,
+                    ..Default::default()
+                }
+                .validate(),
+                Ok(())
+            );
+        }
+        assert_eq!(
+            TransferOptions {
+                bytes_per_second: Some(0),
+                ..Default::default()
+            }
+            .validate(),
+            Err(DownloadError::InvalidInput)
+        );
+    }
+
+    #[test]
+    fn resource_budgets_enforce_independent_bounds_and_allow_unlimited_rate() {
+        for limits in [
+            ResourceLimits {
+                max_downloads: 1,
+                global_requests: 1,
+                origin_requests: 1,
+                bytes_per_second: None,
+            },
+            ResourceLimits {
+                max_downloads: 8,
+                global_requests: 32,
+                origin_requests: 32,
+                bytes_per_second: Some(1),
+            },
+            ResourceLimits {
+                bytes_per_second: Some(u32::MAX),
+                ..Default::default()
+            },
+        ] {
+            assert_eq!(limits.validate(), Ok(()));
+        }
+
+        for limits in [
+            ResourceLimits {
+                max_downloads: 0,
+                ..Default::default()
+            },
+            ResourceLimits {
+                max_downloads: 9,
+                ..Default::default()
+            },
+            ResourceLimits {
+                global_requests: 0,
+                ..Default::default()
+            },
+            ResourceLimits {
+                global_requests: 33,
+                ..Default::default()
+            },
+            ResourceLimits {
+                origin_requests: 0,
+                ..Default::default()
+            },
+            ResourceLimits {
+                origin_requests: 33,
+                ..Default::default()
+            },
+            ResourceLimits {
+                bytes_per_second: Some(0),
+                ..Default::default()
+            },
+        ] {
+            assert_eq!(limits.validate(), Err(DownloadError::InvalidInput));
+        }
+    }
+}
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct RangeSnapshot {
     pub start: String,

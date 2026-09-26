@@ -73,7 +73,7 @@ Chromium: abre `chrome://extensions` (Edge: `edge://extensions`), activa el modo
 
 Firefox: abre `about:debugging#/runtime/this-firefox`, elige **Cargar complemento temporal** y selecciona `apps/extension/build/firefox/manifest.json`. Abre IDG desde el menú de extensiones. Su ID es `idg-dev@sredgarr.github.io`; se retira al cerrar el perfil. No se deshabilita la firma de extensiones. Ambos IDs son de desarrollo, no de tienda.
 
-El popup muestra Conectado solo tras handshake/suscripción. Reconectar repite ese intercambio. Cierra y vuelve a abrir el popup: recibe un snapshot nuevo del mismo motor. No captura enlaces, páginas ni descargas; su único permiso es `nativeMessaging`.
+Firefox conserva el puente de fase 01: su popup muestra Conectado solo tras handshake/suscripción y solo usa `nativeMessaging`. Chromium añade el worker y popup de [fase 07](CHROMIUM_DEVELOPMENT.md): muestra trabajos reales, guarda modo AutoPick en el runtime y pide por separado el permiso opcional `downloads`. La carga local sigue siendo para desarrollo; el traspaso básico pasó con un fixture local, pero la matriz de fallos y compatibilidad está pendiente.
 
 Retirada reversible:
 
@@ -84,6 +84,8 @@ Retirada reversible:
 Retira únicamente los registros que todavía apuntan a esta copia; conserva manifiestos y archivos. Quita la extensión local desde el navegador. Puedes volver a registrarla. Los scripts admiten `-Browser Chromium` o `-Browser Firefox`. La prueba de registro/desregistro y host ausente pasó aquí. En fase 05 los registros preexistentes de esta copia se conservan. No retires registros de otra instalación.
 
 ## Comprobaciones reproducibles
+
+Los comandos de unitarias rápidas, modo watch y cobertura, su inventario por módulo y las limitaciones de cada nivel están en [TESTING](TESTING.md). Las nuevas pruebas no reemplazan los recorridos de proceso, Tauri o navegador descritos aquí.
 
 Cierra los runtimes de IDG que hayas iniciado antes de ejecutar las pruebas: estas rechazan una instancia previa y administran solo la suya.
 

@@ -83,6 +83,11 @@ try {
         String(original.process_id),
       ),
     );
+    await page.getByRole("button", { name: "Reconectar" }).click();
+    await page.locator("#status").filter({ hasText: /^Conectado$/ }).waitFor();
+    await sleep(300);
+    assert.equal(await page.locator("#status").getAttribute("data-state"), "online");
+    assert.equal(ping().runtime_id, original.runtime_id);
     await page.close();
     assert.equal(ping().runtime_id, original.runtime_id);
     const reopened = await context.newPage();

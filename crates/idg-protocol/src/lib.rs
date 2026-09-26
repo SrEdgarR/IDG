@@ -7,6 +7,8 @@ mod resources;
 pub use resources::*;
 mod app;
 pub use app::*;
+mod extension;
+pub use extension::*;
 mod organization;
 pub use organization::*;
 mod rules;
@@ -37,6 +39,27 @@ pub enum Command {
         draft: CreateDownload,
     },
     GetAppPreferences,
+    GetExtensionState,
+    SetExtensionMode {
+        mode: String,
+    },
+    PrepareCapture {
+        proposal: CaptureProposal,
+    },
+    GetCaptureStatus {
+        capture_id: String,
+    },
+    GetCaptureRequests,
+    RejectCapture {
+        capture_id: String,
+    },
+    StartCapture {
+        capture_id: String,
+    },
+    AbortCapture {
+        capture_id: String,
+    },
+    OpenDesktop,
     GetDownloadDirectory {
         job_id: String,
     },
@@ -163,6 +186,22 @@ pub enum Payload {
     },
     AppPreferences {
         preferences: AppPreferences,
+    },
+    ExtensionState {
+        state: ExtensionState,
+    },
+    ExtensionChanged {
+        sequence: u32,
+    },
+    CaptureRequests {
+        proposals: Vec<CaptureProposal>,
+    },
+    CaptureStatus {
+        decision: CaptureDecision,
+        job: Option<DownloadSnapshot>,
+    },
+    CaptureChanged {
+        capture_id: String,
     },
     ResourceLimits {
         limits: ResourceLimits,
@@ -304,5 +343,33 @@ mod tests {
                 Err(ErrorCode::InvalidMessage)
             ));
         }
+    }
+
+    #[test]
+    fn request_ids_are_bounded_safe_correlation_tokens() {
+        for id in [
+            String::new(),
+            "x".repeat(65),
+            "../private".into(),
+            "line\nbreak".into(),
+            "clave-ñ".into(),
+        ] {
+            let bytes = serde_json::to_vec(&serde_json::json!({
+                "version": VERSION,
+                "id": id,
+                "command": "ping"
+            }))
+            .unwrap();
+            assert!(matches!(
+                decode_request(&bytes),
+                Err(ErrorCode::InvalidMessage)
+            ));
+        }
+
+        let bytes = br#"{"version":999,"id":"request_9-A","command":"ping"}"#;
+        let decoded = decode_request(bytes).unwrap();
+        assert_eq!(decoded.version, 999);
+        assert_eq!(decoded.id, "request_9-A");
+        assert_eq!(decoded.command, Command::Ping);
     }
 }

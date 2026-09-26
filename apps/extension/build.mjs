@@ -8,17 +8,19 @@ for (const browser of ["chromium", "firefox"]) {
   const output = new URL(`./build/${browser}/`, import.meta.url);
   await mkdir(output, { recursive: true });
   await build({
-    entryPoints: [fileURLToPath(new URL("./src/popup.ts", import.meta.url))],
+    entryPoints: { popup: fileURLToPath(new URL(browser === "chromium" ? "./src/popup.ts" : "./src/popup-firefox.ts", import.meta.url)) },
     outdir: fileURLToPath(output),
     bundle: true,
     format: "iife",
     target: "es2022",
   });
-  for (const name of ["popup.html", "popup.css"])
+  if (browser === "chromium") await build({ entryPoints: [fileURLToPath(new URL("./src/worker.ts", import.meta.url))], outfile: fileURLToPath(new URL("worker.js", output)), bundle: true, format: "iife", target: "es2022" });
+  for (const name of ["popup.css"])
     await copyFile(
       new URL(`./src/${name}`, import.meta.url),
       new URL(name, output),
     );
+  await copyFile(new URL(browser === "chromium" ? "./src/popup.html" : "./src/popup-firefox.html", import.meta.url), new URL("popup.html", output));
   await copyFile(
     new URL("../../packages/ui/tokens.css", import.meta.url),
     new URL("tokens.css", output),
@@ -27,12 +29,15 @@ for (const browser of ["chromium", "firefox"]) {
     manifest_version: 3,
     name: "IDG — Puente de desarrollo",
     version: "0.1.0",
-    description:
-      "Prueba local del puente IDG. No descarga ni captura navegación.",
-    permissions: ["nativeMessaging"],
+    description: browser === "chromium" ? "Puente de desarrollo de IDG para descargas públicas y repetibles." : "Prueba local del puente IDG. No descarga ni captura navegación.",
+    permissions: browser === "chromium" ? ["nativeMessaging", "storage", "contextMenus", "activeTab", "scripting"] : ["nativeMessaging"],
     action: { default_popup: "popup.html" },
   };
-  if (browser === "chromium") manifest.key = identity.chromium_public_key;
+  if (browser === "chromium") {
+    manifest.key = identity.chromium_public_key;
+    manifest.optional_permissions = ["downloads"];
+    manifest.background = { service_worker: "worker.js" };
+  }
   else
     manifest.browser_specific_settings = {
       gecko: {

@@ -16,6 +16,7 @@ if ($types -cne (Get-Content packages/shared-types/protocol.ts -Raw)) { throw 'T
 Invoke-Checked { npx --yes pnpm@12.4.2 check }
 Invoke-Checked { node --test scripts/test-ui-model.mjs }
 Invoke-Checked { node --test scripts/test-import-parser.mjs }
+Invoke-Checked { npx --yes pnpm@12.4.2 test:unit }
 Invoke-Checked { npx --yes pnpm@12.4.2 extension:build }
 Invoke-Checked { cargo build --locked -p idg-runtime -p idg-native-host -p idg-platform-windows }
 Invoke-Checked { npx --yes pnpm@12.4.2 desktop:build }
@@ -24,6 +25,7 @@ Invoke-Checked { node scripts/test-http-runtime.mjs }
 Invoke-Checked { node scripts/test-segment-fixture.mjs }
 Invoke-Checked { node scripts/test-segments.mjs }
 if ($Integration) {
+    Invoke-Checked { node scripts/test-extension-shell.mjs }
     Invoke-Checked { node scripts/test-ui.mjs }
     # Register explicitly beforehand. No registry mutations are hidden in this check.
     Invoke-Checked { node scripts/test-desktop.mjs }
@@ -34,5 +36,6 @@ if ($Integration) {
     Invoke-Checked { node scripts/test-import.mjs }
     Invoke-Checked { node scripts/test-queue-limits.mjs }
     Invoke-Checked { node scripts/test-chromium.mjs }
+    Invoke-Checked { node scripts/test-chromium-capture.mjs }
     Invoke-Checked { node scripts/test-firefox.mjs }
 }

@@ -4,10 +4,11 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {startFixture,SIZE,expectedHash} from '../fixtures/http/server.mjs';
+import {startSessionRedirectFixture} from '../fixtures/http/session-redirect.mjs';
 const root=process.cwd();const exe=n=>path.join(root,`target/debug/${n}.exe`);
 const probe=(args,input)=>new Promise((resolve,reject)=>{const p=spawn(exe('idg-probe'),args,{windowsHide:true,stdio:['pipe','pipe','pipe']});let out='';p.stdout.on('data',b=>out+=b);p.on('error',reject);p.on('exit',code=>{try{if(code!==0)reject(new Error('probe rejected: '+out));else resolve(out.trim()?JSON.parse(out):null);}catch(e){reject(e);}});p.stdin.end(input?JSON.stringify(input):undefined);});
 let existing=false;try{await probe(['ping']);existing=true;}catch{}if(existing)throw Error('Detén el runtime anterior antes de esta prueba aislada.');
-await mkdir('.local',{recursive:true});const dir=await mkdtemp(path.join(root,'.local/http-engine-'));const files=path.join(dir,'files');await mkdir(files);const f=await startFixture();let runtime;
+await mkdir('.local',{recursive:true});const dir=await mkdtemp(path.join(root,'.local/http-engine-'));const files=path.join(dir,'files');await mkdir(files);const f=await startFixture();const session=await startSessionRedirectFixture();let runtime;
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 let watcher; let watched='';
 async function start(){runtime=spawn(exe('idg-runtime'),[],{windowsHide:true,env:{...process.env,IDG_DATA_DIR:path.join(dir,'state')},stdio:'ignore'});for(let i=0;i<100;i++){try{await probe(['ping']);return;}catch{await sleep(50);}}throw Error('runtime unavailable');}
@@ -44,6 +45,23 @@ try{
  await probe(['add','cancel'],spec('/slow','cancel.bin'));await wait('cancel',j=>Number(j.received_bytes)>0);await probe(['cancel','cancel']);await wait('cancel',j=>j.state==='cancelled');
  for(const route of ['/unknown','/head-denied','/one-use','/redirect']){const id=route.slice(1);await probe(['add',id],spec(route,id+'.bin'));assert.equal((await wait(id,j=>j.state==='completed')).verified_against_reference,true);}
  for(const [route,id,error] of [['/expired','expired','access_denied'],['/html','html','representation'],['/gzip','gzip','representation'],['/retry','retry','retry_later']]){await probe(['add',id],spec(route,id+'.bin'));assert.equal((await wait(id,j=>j.state==='failed')).error,error);}
+ const sessionSpec=(route,name)=>({url:session.url+route,directory:files,name,expected_sha256:session.publicSha256,conflict:'reject'});
+ await probe(['add','cross-origin'],sessionSpec('/redirect-public.bin','cross-origin.bin'));
+ const redirected=await wait('cross-origin',j=>['completed','failed'].includes(j.state));
+ assert.equal(redirected.state,'completed');
+ assert.equal(createHash('sha256').update(await readFile(path.join(files,'cross-origin.bin'))).digest('hex'),session.publicSha256);
+ const publicRequests=session.records.filter(r=>r.route==='/redirect-public.bin'||r.route==='/public.bin');
+ assert.deepEqual(publicRequests.map(r=>r.origin).sort(),['source','target']);
+ assert.ok(publicRequests.every(r=>r.method==='GET'&&!r.cookie&&!r.authorization));
+ await probe(['add','session-login'],sessionSpec('/session.bin','session-login.bin'));
+ const login=await wait('session-login',j=>j.state==='failed');
+ assert.equal(login.error,'representation','An unauthenticated login page must not count as a completed download');
+ await assert.rejects(readFile(path.join(files,'session-login.bin')),{code:'ENOENT'});
+ await probe(['add','post-only'],sessionSpec('/post-only.bin','post-only.bin'));
+ const postOnly=await wait('post-only',j=>j.state==='failed');
+ assert.equal(postOnly.error,'representation','A GET to a POST-only endpoint must not publish its HTML response');
+ await assert.rejects(readFile(path.join(files,'post-only.bin')),{code:'ENOENT'});
+ assert.ok(session.records.every(r=>r.method==='GET'&&!r.cookie&&!r.authorization));
  await probe(['add','graceful'],spec('/slow','graceful.bin'));
  await wait('graceful',j=>Number(j.received_bytes)>0);
  await stop();await start();
@@ -54,4 +72,4 @@ try{
  for(const name of ['jobs.sqlite3','jobs.sqlite3-wal']){let bytes;try{bytes=await readFile(path.join(dir,'state',name));}catch{continue;}assert.equal(bytes.includes(Buffer.from(secret)),false);assert.equal(bytes.includes(Buffer.from(f.url)),false);}
  assert.ok(f.records.every(r=>r.method==='GET'&&!r.authorization&&!r.cookie));assert.equal(f.records.filter(r=>r.route==='/one-use').length,1);
  console.log('PASS HTTP/runtime: IPC, progreso/checkpoints, pausa/reanudación, cancelación, kill/reinicio y SHA esperado; Range solicita solo bytes restantes, idempotencia, 200/206 inválidos/cambio, corte, desconocido, HEAD no requerido, URL de un uso, redirección, 403/503/HTML/encoding, URL ausente de SQLite/WAL.');
-}finally{if(watcher&&watcher.exitCode===null)watcher.kill();await stop().catch(()=>{});await f.close();}
+}finally{if(watcher&&watcher.exitCode===null)watcher.kill();await stop().catch(()=>{});await Promise.all([f.close(),session.close()]);}

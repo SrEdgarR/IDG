@@ -101,6 +101,27 @@ try {
   await page
     .getByRole("button", { name: "Nueva descarga", exact: true })
     .click();
+  for (const scheme of ["ftp", "ftps"]) {
+    await page
+      .getByLabel("URL del archivo", { exact: true })
+      .fill(`${scheme}://127.0.0.1/rejected.bin`);
+    await page
+      .getByLabel("Nombre del archivo", { exact: true })
+      .fill(`rejected-${scheme}.bin`);
+    await page.getByLabel("Carpeta", { exact: true }).fill(files);
+    await page
+      .getByRole("button", { name: "Descargar ahora", exact: true })
+      .click();
+    await page
+      .getByText("Introduce una URL HTTP o HTTPS válida", { exact: false })
+      .waitFor();
+    assert.equal(
+      await page.getByLabel("URL del archivo", { exact: true }).getAttribute("aria-invalid"),
+      "true",
+    );
+    assert.equal(probe(["list"]).jobs.length, 0);
+    assert.equal(fixture.records.length, 0);
+  }
   await page
     .getByLabel("URL del archivo", { exact: true })
     .fill(fixture.url + "/file");
@@ -142,6 +163,7 @@ try {
     1,
     "uncertain replay capability keeps one GET",
   );
+  console.log("PASS Tauri: FTP/FTPS rechazados; HTTP local completado con SHA-256 esperado.");
   await page
     .locator(".download-row")
     .filter({ hasText: "Completadas" })
