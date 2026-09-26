@@ -15,6 +15,7 @@ for (const browser of ["chromium", "firefox"]) {
     target: "es2022",
   });
   if (browser === "chromium") await build({ entryPoints: [fileURLToPath(new URL("./src/worker.ts", import.meta.url))], outfile: fileURLToPath(new URL("worker.js", output)), bundle: true, format: "iife", target: "es2022" });
+  else await build({ entryPoints: [fileURLToPath(new URL("./src/firefox-background.ts", import.meta.url))], outfile: fileURLToPath(new URL("background.js", output)), bundle: true, format: "iife", target: "es2022" });
   for (const name of ["popup.css"])
     await copyFile(
       new URL(`./src/${name}`, import.meta.url),
@@ -29,16 +30,17 @@ for (const browser of ["chromium", "firefox"]) {
     manifest_version: 3,
     name: "IDG — Puente de desarrollo",
     version: "0.1.0",
-    description: browser === "chromium" ? "Puente de desarrollo de IDG para descargas públicas y repetibles." : "Prueba local del puente IDG. No descarga ni captura navegación.",
-    permissions: browser === "chromium" ? ["nativeMessaging", "storage", "contextMenus", "activeTab", "scripting"] : ["nativeMessaging"],
+    incognito: "not_allowed",
+    description: browser === "chromium" ? "Puente de desarrollo de IDG para descargas públicas y repetibles." : "Solicitudes manuales de enlaces directos; sin captura automática.",
+    permissions: browser === "chromium" ? ["nativeMessaging", "storage", "contextMenus", "activeTab", "scripting"] : ["nativeMessaging", "menus"],
     action: { default_popup: "popup.html" },
   };
   if (browser === "chromium") {
     manifest.key = identity.chromium_public_key;
-    manifest.optional_permissions = ["downloads"];
     manifest.background = { service_worker: "worker.js" };
   }
-  else
+  else {
+    manifest.background = { scripts: ["background.js"] };
     manifest.browser_specific_settings = {
       gecko: {
         id: identity.firefox_id,
@@ -46,6 +48,7 @@ for (const browser of ["chromium", "firefox"]) {
         data_collection_permissions: { required: ["none"] },
       },
     };
+  }
   await writeFile(
     new URL("manifest.json", output),
     JSON.stringify(manifest, null, 2) + "\n",

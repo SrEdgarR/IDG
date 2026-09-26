@@ -149,7 +149,10 @@ describe("Chromium worker policies and recovery", () => {
     await import("./worker");
     await waitFor(() => expect(watches).toHaveLength(1));
     expect(chromeApi.downloads.onCreated.listeners).toHaveLength(0);
-    expect(chromeApi.contextMenus.create).not.toHaveBeenCalled();
+    await waitFor(() => expect(chromeApi.contextMenus.create).toHaveBeenCalledWith({
+      id: "idg-link", title: "Enviar enlace directo a IDG", contexts: ["link"],
+    }));
+    expect(chromeApi.contextMenus.create).toHaveBeenCalledTimes(1);
 
     hasDownloadsPermission = true;
     chromeApi.permissions.onAdded.listeners[0]({ permissions: ["downloads"], origins: [] });
