@@ -1,4 +1,5 @@
 import type { Command, Payload, Request, Response, Snapshot } from "../../../packages/shared-types/protocol";
+import { getBrowserApi } from "./browser-api";
 
 const host = "io.github.sredgarr.idg.dev";
 const timeoutMs = 5000;
@@ -10,8 +11,9 @@ function valid(value: unknown): value is Response {
 }
 
 export function request(command: Command, id: string = crypto.randomUUID()): Promise<Payload> {
+  const api = getBrowserApi();
   return new Promise((resolve, reject) => {
-    const port = chrome.runtime.connectNative(host);
+    const port = api.runtime.connectNative(host);
     let stage = 0;
     const timer = setTimeout(() => fail("El motor no respondió."), timeoutMs);
     const finish = (payload: Payload) => {
@@ -25,7 +27,7 @@ export function request(command: Command, id: string = crypto.randomUUID()): Pro
       port.disconnect();
       reject(new Error(message));
     };
-    port.onDisconnect.addListener(() => { void chrome.runtime.lastError; if (stage !== 2) fail("Host o motor desconectado."); });
+    port.onDisconnect.addListener(() => { void api.runtime.lastError; if (stage !== 2) fail("Host o motor desconectado."); });
     port.onMessage.addListener((value: unknown) => {
       if (!valid(value)) { fail("Respuesta incompatible."); return; }
       if (stage === 0 && value.id === id + "-hello" && value.payload.kind === "hello") {
@@ -41,10 +43,11 @@ export function request(command: Command, id: string = crypto.randomUUID()): Pro
 }
 
 export function watch(onSnapshot: (value: Snapshot) => void, onChange: () => void, onClose: () => void): () => void {
-  const port = chrome.runtime.connectNative(host);
+  const api = getBrowserApi();
+  const port = api.runtime.connectNative(host);
   let stage = 0;
   const timer = setTimeout(() => port.disconnect(), timeoutMs);
-  port.onDisconnect.addListener(() => { clearTimeout(timer); void chrome.runtime.lastError; onClose(); });
+  port.onDisconnect.addListener(() => { clearTimeout(timer); void api.runtime.lastError; onClose(); });
   port.onMessage.addListener((value: unknown) => {
     if (!valid(value)) { port.disconnect(); return; }
     if (stage === 0 && value.id === "watch-hello" && value.payload.kind === "hello") {

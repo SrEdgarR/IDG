@@ -49,15 +49,6 @@ if ($hostIds.Count -eq 0) { '[]' } else { ConvertTo-Json -InputObject $hostIds -
   const ids = JSON.parse(output || "[]");
   return Array.isArray(ids) ? ids : [ids];
 }
-async function setMode(popup, mode) {
-  await popup.locator("#autopick").selectOption(mode);
-  for (let n = 0; n < 40; n++) {
-    const state = await popup.evaluate(() => chrome.runtime.sendMessage({ type: "state" }));
-    if (state.engine?.autopick_mode === mode) return;
-    await sleep(100);
-  }
-  throw new Error(`El modo ${mode} no quedó confirmado por el runtime`);
-}
 try { probe(); throw Error("Hay otro runtime IDG activo; no se toca."); } catch (e) { if (e.message.includes("otro runtime")) throw e; }
 await mkdir(".local", { recursive: true });
 await mkdir("artifacts", { recursive: true });
@@ -68,8 +59,8 @@ const extension = path.join(base, "extension");
 await cp(path.join(root, "apps/extension/build/chromium"), extension, { recursive: true });
 const manifestPath = path.join(extension, "manifest.json");
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-// Isolated integration fixture: consent is pre-granted by the test profile's
-// local unpacked manifest. The shipped extension keeps downloads optional.
+// Test-only unpacked manifest grants downloads inside this isolated profile;
+// the normal build does not declare downloads or optional_permissions.
 manifest.permissions.push("downloads");
 manifest.optional_permissions = [];
 // An extension tab opened directly by Playwright does not receive activeTab's
@@ -141,8 +132,10 @@ try {
     throw new Error(`${error.message}\npopup=${await popup.locator("body").innerText()}\napp=${await app.locator("body").innerText()}\nruntime=${JSON.stringify(runtimeState)} desktopExit=${desktop.exitCode} hostPids=${JSON.stringify(ownedHostPids(browserProfile, nativeHostPath))}`);
   });
   assert.equal(await popup.locator("#status").getAttribute("data-state"), "online");
-  await setMode(popup, "always");
-  assert.match(await popup.locator("#capture-permission").innerText(), /autorizada/);
+  assert.match(await popup.locator("body").innerText(), /Captura automática deshabilitada/);
+  assert.match(await popup.locator("body").innerText(), /no se transfieren cookies, credenciales/i);
+  assert.equal(await popup.locator("#autopick").count(), 0, "El popup no presenta AutoPick como una opción activa");
+  assert.equal(await popup.locator("#capture-permission").count(), 0, "El popup no pide un permiso para una función deshabilitada");
   const dialog = app.getByRole("dialog", { name: "Nueva descarga" });
   const chooseDirectLink = async (name, doubleClick = false) => {
     const source = await browser.newPage();
@@ -175,36 +168,10 @@ try {
   assert.equal(JSON.stringify(observedState).includes("capture.bin"), false, "No se conserva una propuesta que no puede traspasarse de forma segura");
   await dialog.getByRole("button", { name: "Cancelar", exact: true }).click();
   await dialog.waitFor({ state: "hidden" });
-  await setMode(popup, "browser");
   await popup.reload();
   await popup.locator("#status").filter({ hasText: /^Conectado$/ }).waitFor();
-  assert.equal(await popup.locator("#autopick").inputValue(), "browser", "El modo debe persistir al reabrir el popup");
   assert.equal(probe("list").jobs.length, 0, "Las descargas observadas sin método reproducible no se convierten en trabajos IDG");
   assert.deepEqual(await readdir(files), []);
-  await setMode(popup, "always");
-  await popup.getByText("Excepciones y tamaño").click();
-  await popup.locator("#ignore-ext").fill(".exe");
-  await popup.locator("#save-rules").click();
-  for (let n = 0; n < 30; n++) {
-    const saved = await popup.evaluate(() => chrome.storage.local.get("settings"));
-    if (saved.settings?.ignoredExtensions?.includes("exe")) break;
-    await sleep(100);
-  }
-  await popup.reload();
-  await popup.getByText("Excepciones y tamaño").click();
-  assert.equal(await popup.locator("#ignore-ext").inputValue(), "exe", "La excepción debe persistir en el perfil");
-  for (const name of ["ignored.exe", "encoded%2Eexe"]) {
-    const ignoredTab = await browser.newPage();
-    await Promise.all([
-      ignoredTab.waitForEvent("download"),
-      ignoredTab.goto(fixture.url + "/" + name).catch(() => {}),
-    ]);
-    await sleep(1000);
-    assert.equal(await dialog.isVisible(), false, `${name} no debe proponer captura`);
-    const stored = await popup.evaluate(() => chrome.storage.local.get(["pending", "offers"]));
-    assert.equal(JSON.stringify(stored).includes(name), false, `${name} no debe quedar como propuesta`);
-    assert.equal(probe("list").jobs.length, 0, `${name} no debe crear trabajo IDG`);
-  }
   await chooseDirectLink("allowed.bin");
   await dialog.getByLabel("El enlace permite solicitudes repetidas").check();
   await dialog.getByRole("button", { name: "Aceptar en IDG" }).click();

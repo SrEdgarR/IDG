@@ -9,6 +9,17 @@ const root = process.cwd();
 const identity = JSON.parse(
   await readFile("apps/extension/development-identity.json", "utf8"),
 );
+const nativeManifestPath = execFileSync("powershell.exe", [
+  "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
+  "(Get-Item -LiteralPath 'HKCU:\\Software\\Mozilla\\NativeMessagingHosts\\io.github.sredgarr.idg.dev').GetValue('')",
+], { encoding: "utf8", windowsHide: true }).trim();
+const nativeManifest = JSON.parse(await readFile(nativeManifestPath, "utf8"));
+assert.ok(nativeManifest.allowed_extensions?.includes(identity.firefox_id), "El host registrado debe permitir el ID estable de Firefox IDG.");
+const runtimeDirectory = path.dirname(path.resolve("target/debug/idg-runtime.exe"));
+const hostRuntimeDirectory = path.dirname(path.resolve(nativeManifest.path));
+if (runtimeDirectory.toLowerCase() !== hostRuntimeDirectory.toLowerCase()) {
+  throw new Error("BLOQUEADA: el registro Native Messaging de Firefox pertenece a otro checkout. No se cambió el registro; ejecuta la prueba solo cuando host y runtime sean hermanos en esta copia.");
+}
 const uuid = randomUUID();
 const probe = path.join(root, "target/debug/idg-probe.exe");
 const exe = path.join(root, "target/debug/idg-runtime.exe");
