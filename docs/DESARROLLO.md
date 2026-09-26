@@ -1,5 +1,7 @@
 # Desarrollo de IDG
 
+**Estado actual: fase 08, EN_CURSO.** Esta guía describe compilación y carga local de extensiones de desarrollo; no hay instalador, extensión publicada ni enlace de tienda para usuarios finales. AutoPick se conserva como requisito del producto, pero la captura automática está deshabilitada. El flujo admitido en Chromium requiere elegir un enlace HTTP(S) GET público y repetible y confirmar su solicitud en IDG. Las sesiones autenticadas no son compatibles: no se transfieren cookies ni credenciales.
+
 La organización de fase 06 se prueba mediante el [recorrido aislado](FASE06_PRUEBA_MANUAL.md). Comprobaciones nuevas: `node --test scripts/test-import-parser.mjs`, `node scripts/test-organization.mjs`, `node scripts/test-rules.mjs`, `node scripts/test-library.mjs`, `node scripts/test-import.mjs` y `node scripts/test-queue-limits.mjs`. Las últimas cinco abren Tauri real y requieren binarios recién compilados y ningún runtime previo. `scripts/Check.ps1 -Integration` las incorpora; `Check.ps1` sin ese parámetro no acredita la matriz gráfica o navegadores.
 
 El monitor nativo está separado de su política testeable. El arnés configura `IDG_CLIPBOARD_FIXTURE` para leer un archivo propio de prueba, nunca el portapapeles personal. `IDG_POWER_ADAPTER=simulate` evita toda acción física. Ambas se fijan antes de iniciar procesos. Formato de las superficies nuevas aplicado con Prettier 3.9.8, comprobado en el registro oficial npm; no es una dependencia de ejecución ni cambia el stack.
@@ -22,7 +24,7 @@ La fase 05 conecta la ventana con descargas HTTP/HTTPS, preferencias y ciclo de 
 
 ## Entorno y versiones comprobados
 
-El 2026-09-19: Windows 11 Pro 10.0.26200 x64, AMD Ryzen 7 5700X, 31,9 GiB RAM, Rust/Cargo 1.98.1 MSVC, Build Tools 2022 17.14.41 con C++ y Windows SDK 10.0.19041.0/10.0.26100.0, WebView2 153.0.4234.32, Node 24.14.0, npm 11.9.0 y pnpm 12.4.2. Firefox 156.0 instalado por el propietario; Chrome for Testing 153.0.8010.12 en perfil separado. No se ha comprobado Windows 10 ni otros navegadores.
+El snapshot del entorno de desarrollo del 2026-09-19 registró Windows 11 Pro 10.0.26200 x64, Rust/Cargo 1.98.1 MSVC, Build Tools 2022 17.14.41 con C++ y Windows SDK 10.0.19041.0/10.0.26100.0, WebView2 153.0.4234.32, Node 24.14.0 y pnpm 12.4.2. Versiones observadas de navegador en esta tarea, 2026-09-26: Firefox 156.0, Chrome estable 154.0.8037.58 y Edge 153.0.4234.48. Ver esas versiones instaladas no acredita una integración probada. No se ha comprobado Windows 10 ni otros navegadores.
 
 Rust y Build Tools se instalaron con consentimiento; no se cambió PATH global ni se desactivaron protecciones. Rust está en `%USERPROFILE%\.cargo\bin`. El wrapper pnpm presente en PATH devolvía 11.19.0; los comandos usan explícitamente `npx --yes pnpm@12.4.2`.
 
@@ -67,13 +69,19 @@ Después de compilar host y extensión:
 .\scripts\Register-NativeHost.ps1
 ```
 
-Registra solo `io.github.sredgarr.idg.dev` bajo HKCU, para Chrome/Chromium/Edge y Firefox. Los manifiestos quedan en `.local/native-host`, con ruta absoluta y allowlist exacta. El script rechaza un registro del mismo nombre perteneciente a otra ubicación; no reemplaza otras instalaciones. Ejecuta este registro otra vez si mueves el repositorio, retirando primero el registro desde su ubicación original.
+El build y los scripts obtienen el host de desarrollo de `scripts/native-host-name.mjs`: su sufijo de 16 caracteres deriva de la ruta canónica de este checkout, sin publicar la ruta. El nombre generado también queda en el archivo local ignorado `.local/native-host/host-name.txt`, para que el escritorio consulte el mismo registro. Así copias y worktrees no comparten el host habitual `io.github.sredgarr.idg.dev`. El registro se limita a HKCU y a los navegadores indicados; los manifiestos quedan en `.local/native-host`, con ruta absoluta y allowlist exacta. El script rechaza un registro del mismo nombre perteneciente a otra ubicación y el desregistro solo retira claves que apuntan a sus manifiestos locales sin valores o subclaves adicionales.
 
 Chromium: abre `chrome://extensions` (Edge: `edge://extensions`), activa el modo de desarrollo y carga **descomprimida** `apps/extension/build/chromium`. Abre la extensión IDG desde el menú de extensiones. El ID de desarrollo estable es `keopaccdnmianljlfkpinbkfppcpfdlk`.
 
-Firefox: abre `about:debugging#/runtime/this-firefox`, elige **Cargar complemento temporal** y selecciona `apps/extension/build/firefox/manifest.json`. Abre IDG desde el menú de extensiones. Su ID es `idg-dev@sredgarr.github.io`; se retira al cerrar el perfil. No se deshabilita la firma de extensiones. Ambos IDs son de desarrollo, no de tienda.
+Firefox: compila el build separado, abre `about:debugging#/runtime/this-firefox`, elige **Cargar complemento temporal** y selecciona `apps/extension/build/firefox/manifest.json`. Abre IDG desde el menú de extensiones. Su ID estable de desarrollo es `idg-dev@sredgarr.github.io`; la carga temporal se retira al cerrar el perfil. No se deshabilita la firma de extensiones. El manifiesto usa `background.scripts` para Firefox MV3 y niega ventanas privadas; Chromium usa su service worker MV3, conforme a la [documentación oficial de Mozilla sobre background scripts](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/background). Ambos IDs son de desarrollo, no de tienda.
 
-Firefox conserva el puente de fase 01: su popup muestra Conectado solo tras handshake/suscripción y solo usa `nativeMessaging`. Chromium añade el worker y popup de [fase 07](CHROMIUM_DEVELOPMENT.md): muestra trabajos reales, guarda modo AutoPick en el runtime y pide por separado el permiso opcional `downloads`. La carga local sigue siendo para desarrollo; el traspaso básico pasó con un fixture local, pero la matriz de fallos y compatibilidad está pendiente.
+Los dos popups muestran el estado real de Native Messaging, permiten reconectar y muestran trabajos del motor; Pausar/Reanudar envía comandos reales. Chromium permite previsualizar enlaces de la página tras una acción explícita. Firefox permite escribir una URL HTTP(S) directa o elegir un enlace desde su menú contextual. En ambos casos la solicitud requiere confirmación en IDG y excluye parámetros, fragmentos y sesión autenticada. Los manifiestos normales no solicitan el permiso `downloads` ni habilitan la captura automática. AutoPick sigue siendo un requisito del producto y la captura de descargas ya iniciadas está deshabilitada; esa limitación de `DownloadItem` no prueba que cualquier vía futura sea imposible. Se deben conservar las descargas del navegador mientras no exista una vía segura.
+
+La transferencia directa de Chromium se comprobó con fixture local en fase 07 y está atribuida a ese commit; no se repitió aquí. En fase 08 se compiló Firefox y pasó la prueba de manifiesto. Los scripts ahora derivan un nombre de host de desarrollo por ruta de checkout. El ciclo HKCU Firefox de esta copia se registró y retiró: la entrada habitual del checkout principal conservó su valor exacto y la allowlist Firefox siguió conteniendo solo el ID estable. La prueba de transferencia se intentó una vez con Tauri/WebView2 del mismo worktree, pero el arnés agotó 15 s esperando el estado `Conectado` antes de abrir Firefox; no se creó un archivo y no hay hash que atribuir a Firefox. No se repitió el recorrido.
+
+Los permisos y gestos del manifiesto normal (concesión o rechazo, abrir desde el icono, `activeTab` y menú contextual) siguen pendientes. Las pruebas con manifiesto de integración preconcedido no los acreditan. Las sesiones autenticadas no están soportadas: no se copian cookies ni credenciales; cuando una solicitud no pueda reproducirse con seguridad, se conserva la alternativa del navegador.
+
+Los dos builds declaran `incognito: "not_allowed"` para evitar que esta extensión de desarrollo acceda a ventanas privadas; se verificó en el manifiesto, no en una sesión privada real. Firefox Containers todavía no tiene adaptación por identidad/contexto. No se habilitó acceso privado ni se mezclan datos de sesión entre contextos.
 
 Retirada reversible:
 
@@ -81,7 +89,15 @@ Retirada reversible:
 .\scripts\Unregister-NativeHost.ps1
 ```
 
-Retira únicamente los registros que todavía apuntan a esta copia; conserva manifiestos y archivos. Quita la extensión local desde el navegador. Puedes volver a registrarla. Los scripts admiten `-Browser Chromium` o `-Browser Firefox`. La prueba de registro/desregistro y host ausente pasó aquí. En fase 05 los registros preexistentes de esta copia se conservan. No retires registros de otra instalación.
+Retira únicamente los registros que todavía apuntan a esta copia; conserva manifiestos y archivos. Quita la extensión local desde el navegador. Puedes volver a registrarla. Los scripts admiten `-Browser Chromium` o `-Browser Firefox`. Para repetir solo la prueba de transferencia Firefox:
+
+```powershell
+.\scripts\Register-NativeHost.ps1 -Browser Firefox
+node scripts/test-firefox-capture.mjs
+.\scripts\Unregister-NativeHost.ps1 -Browser Firefox
+```
+
+El arnés requiere que IDG/Tauri alcance `Conectado`; si no lo hace, no acredita el handshake ni el archivo/hash. La prueba de registro/desregistro Firefox acotada pasó para este worktree. No retires registros de otra instalación.
 
 ## Comprobaciones reproducibles
 
@@ -95,7 +111,7 @@ Cierra los runtimes de IDG que hayas iniciado antes de ejecutar las pruebas: est
 
 Ejecuta formato Rust, Clippy sin warnings, las pruebas Rust del workspace, tres tests del modelo de presentación, regeneración/consistencia de tipos, comprobación TS, builds y pruebas de procesos/seguridad. Comandos individuales: `cargo fmt --all -- --check`, `cargo clippy --locked --workspace --all-targets -- -D warnings`, `cargo test --locked --workspace`, `cargo run --locked -p idg-protocol --bin export-types`, `npx --yes pnpm@12.4.2 check`, `node scripts/test-runtime.mjs`.
 
-Para integración real (Firefox instalado y host registrado):
+Para integración real (Firefox instalado y el registro Native Messaging debe apuntar al host de este checkout):
 
 ```powershell
 $env:PLAYWRIGHT_BROWSERS_PATH = "$PWD/tools/browsers"
@@ -105,15 +121,15 @@ npx --yes pnpm@12.4.2 exec playwright install chromium
 # Retira el registro al terminar solo si lo creaste exclusivamente para esta prueba.
 ```
 
-También puedes ejecutar `node scripts/test-desktop.mjs`, `node scripts/test-chromium.mjs` y `node scripts/test-firefox.mjs` individualmente. Firefox permite una ruta alternativa en `IDG_FIREFOX_BINARY`. Selenium Manager obtiene geckodriver oficial. Los perfiles son temporales/aislados; no se usan tus sesiones. Las capturas reales quedan en `artifacts/`; solo una selección revisada y saneada se versiona en `docs/images`.
+También puedes ejecutar `node scripts/test-desktop.mjs`, `node scripts/test-chromium.mjs`, `node scripts/test-firefox.mjs` y `node scripts/test-firefox-capture.mjs` individualmente. `node scripts/test-firefox-manifest.mjs` comprueba estáticamente el manifiesto Firefox. Firefox permite seleccionar otra ruta de binario mediante `IDG_FIREFOX_BINARY`; Selenium Manager obtiene geckodriver oficial. Los perfiles son temporales/aislados; no se usan tus sesiones. Los arneses de Firefox fallan rápido si el host registrado y el runtime no son hermanos del mismo checkout; no cambian el registro. Las capturas reales quedan en `artifacts/`; solo una selección revisada y saneada se versiona en `docs/images`.
 
-La prueba Tauri abre una ventana real con WebView2 y depuración local mediante una variable limitada al proceso de prueba; no añade un servidor TCP al IPC del producto. La prueba Firefox habilita el contexto de automatización del navegador mediante `--allow-system-access` solo en ese proceso aislado, para abrir la página propia del complemento. No cambia preferencias globales, firma o protecciones del perfil personal. Las pruebas de navegador son headless y ejercitan la página del popup con Native Messaging real; no certifican el gesto manual del menú de la barra.
+La prueba Tauri abre una ventana real con WebView2 y depuración local mediante una variable limitada al proceso de prueba; no añade un servidor TCP al IPC del producto. La prueba Firefox habilita el contexto de automatización del navegador mediante `--allow-system-access` solo en ese proceso aislado, para abrir una página propia del complemento. No cambia preferencias globales, firma o protecciones del perfil personal. El arnés `test-firefox-capture.mjs` está preparado para recorrer popup → Native Messaging → IDG/Tauri → HTTP local y comparar SHA-256; su ejecución en este worktree quedó bloqueada por el registro que apunta a otra copia, así que no se declara aprobada. No certifica el gesto manual del menú de la barra ni los permisos normales.
 
 CI: `.github/workflows/check.yml` conserva portable (core/protocolo/migraciones en Linux) y windows (compilación/pruebas de procesos). Añade ui (galería Playwright headless, modelo de presentación y aislamiento del bundle). CI no ejecuta Tauri/WebView2 ni Native Messaging en navegadores; esos requieren las pruebas locales con -Integration. Consulta el resultado remoto antes de declararla aprobada. No publica instaladores ni releases.
 
 ## Límites y diagnóstico
 
-El motor HTTP/HTTPS secuencial y segmentado se controla desde la aplicación real, además de la utilidad de desarrollo. Trabajos, preferencias y organización se protegen con DPAPI dentro de SQLite; no es cifrado integral de la DB. Hay bandeja y cierre coordinado; autoinicio y AutoPick siguen pendientes. La lista y organización de producción reciben datos del runtime. Los estados de conexión no se persisten. El pipe admite 16 clientes simultáneos, frames de 256 KiB y plazos de cinco segundos. La suscripción usa una conexión dedicada y snapshots completos, por lo que un salto de secuencia no exige reconstruir deltas. Un proceso malicioso con control del mismo usuario y capacidad de reemplazar binarios no queda aislado por este mecanismo.
+El motor HTTP/HTTPS secuencial y segmentado se controla desde la aplicación real, además de la utilidad de desarrollo. Trabajos, preferencias y organización se protegen con DPAPI dentro de SQLite; no es cifrado integral de la DB. Hay bandeja y cierre coordinado; autoinicio sigue pendiente. AutoPick sigue siendo un requisito, pero la captura automática está deshabilitada. La lista y organización de producción reciben datos del runtime. Los estados de conexión no se persisten. El pipe admite 16 clientes simultáneos, frames de 256 KiB y plazos de cinco segundos. La suscripción usa una conexión dedicada y snapshots completos, por lo que un salto de secuencia no exige reconstruir deltas. Un proceso malicioso con control del mismo usuario y capacidad de reemplazar binarios no queda aislado por este mecanismo.
 
 Ante Desconectado: comprueba el runtime con `idg-probe.exe ping`, que los binarios estén juntos, registro/ID correctos y que el complemento se haya reconstruido. No pegues credenciales ni rutas privadas en issues. Estado, evidencias y pendientes en [IMPLEMENTATION_STATUS](IMPLEMENTATION_STATUS.md).
 

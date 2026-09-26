@@ -11,20 +11,17 @@ beforeEach(() => {
   vi.resetModules();
   document.body.innerHTML = `
     <h1 id="status"></h1><p id="detail"></p><p id="notice"></p>
-    <select id="autopick"><option value="always">Siempre</option></select>
-    <input id="ignore-site" type="checkbox"><input id="ignore-ext"><input id="ignore-mime">
-    <input id="min-kib"><select id="unknown"><option value="browser">Navegador</option></select>
-    <ul id="jobs"></ul><ul id="offers"></ul><ul id="links"></ul>
-    <button id="reconnect"></button><button id="capture-permission"></button>
-    <button id="suspend"></button><button id="save-rules"></button>
-    <button id="open"></button><button id="find-links"></button>
+    <h2 id="capture-title">Captura automática deshabilitada</h2>
+    <p>AutoPick sigue siendo un requisito del producto, pero esta versión no transfiere descargas ya iniciadas en Chromium.</p>
+    <p>No se transfieren cookies, credenciales ni solicitudes de sesión autenticada.</p>
+    <ul id="jobs"></ul><ul id="links"></ul>
+    <button id="reconnect"></button><button id="open"></button><button id="find-links"></button>
   `;
   updated = undefined;
   const reply = {
     ok: true, connected: true, processId: 123,
     engine: { autopick_mode: "always", active_count: 1, jobs: [{ id: "job-1", name: "slow.bin", state: "downloading" }] },
-    settings: { ignoredSites: [], ignoredExtensions: [], ignoredMimes: [], minBytes: 0, unknownSize: "browser", suspendedUntil: 0 },
-    captureEnabled: false, offers: [{ downloadId: 7, name: "offered.bin" }], notice: "",
+    notice: "",
   };
   let responseCount = 0;
   sendMessage = vi.fn(async () => ({ ...reply, processId: 123 + responseCount++ }));
@@ -34,39 +31,34 @@ beforeEach(() => {
     runtime: { sendMessage, onMessage: { addListener: (listener: typeof updated) => { updated = listener; } } },
     tabs: { query: queryTabs },
     scripting: { executeScript },
-    permissions: { request: vi.fn(async () => false) },
   });
 });
 
 afterEach(() => { vi.unstubAllGlobals(); document.body.replaceChildren(); });
 
-it("keeps an active job button stable across progress refreshes so it can be clicked", async () => {
+it("keeps a real active-job control stable across progress refreshes", async () => {
   await import("./popup");
   await waitFor(() => expect(document.querySelector<HTMLButtonElement>("#jobs button")?.textContent).toBe("Pausar"));
-  await waitFor(() => expect(document.querySelector("#detail")?.textContent).toContain("Motor 124"));
+  await waitFor(() => expect(document.querySelector("#detail")?.textContent).toContain("Motor 123"));
   const button = document.querySelector<HTMLButtonElement>("#jobs button")!;
-  const offerButton = document.querySelector<HTMLButtonElement>("#offers button")!;
   updated?.({ type: "updated" });
-  await waitFor(() => expect(document.querySelector("#detail")?.textContent).toContain("Motor 125"));
+  await waitFor(() => expect(document.querySelector("#detail")?.textContent).toContain("Motor 124"));
   expect(document.querySelector("#jobs button")).toBe(button);
-  expect(document.querySelector("#offers button")).toBe(offerButton);
   button.click();
   await waitFor(() => expect(sendMessage).toHaveBeenCalledWith({ type: "pause", id: "job-1" }));
 });
 
-it("does not overwrite an unsaved exclusion while progress updates arrive", async () => {
+it("states that automatic capture is disabled and authenticated requests stay in the browser", async () => {
   await import("./popup");
-  await waitFor(() => expect(document.querySelector("#detail")?.textContent).toContain("Motor 124"));
-  const field = document.querySelector<HTMLInputElement>("#ignore-ext")!;
-  field.focus();
-  field.value = ".exe";
-  field.dispatchEvent(new Event("input", { bubbles: true }));
-  updated?.({ type: "updated" });
-  await waitFor(() => expect(document.querySelector("#detail")?.textContent).toContain("Motor 125"));
-  expect(field.value).toBe(".exe");
+  await waitFor(() => expect(document.querySelector("#status")?.textContent).toBe("Conectado"));
+  expect(document.body.textContent).toMatch(/AutoPick sigue siendo un requisito/i);
+  expect(document.body.textContent).toMatch(/no transfiere descargas ya iniciadas/i);
+  expect(document.body.textContent).toMatch(/no se transfieren cookies, credenciales/i);
+  expect(document.querySelector("#capture-permission")).toBeNull();
+  expect(document.querySelector("#autopick")).toBeNull();
 });
 
-it("submits each chosen direct link only once until links are previewed again", async () => {
+it("submits each chosen direct link only once", async () => {
   queryTabs.mockResolvedValue([{ id: 42, url: "https://example.test" }]);
   executeScript.mockResolvedValue([{ result: [{ url: "https://example.test/file.bin", name: "file.bin" }] }]);
   await import("./popup");
@@ -78,15 +70,4 @@ it("submits each chosen direct link only once until links are previewed again", 
   await waitFor(() => expect(sendMessage).toHaveBeenCalledWith({ type: "direct", url: "https://example.test/file.bin", name: "file.bin" }));
   button.click();
   expect(sendMessage.mock.calls.filter(([message]) => message.type === "direct")).toHaveLength(1);
-});
-
-it("submits an offered browser download only once on repeated clicks", async () => {
-  await import("./popup");
-  await waitFor(() => expect(document.querySelector<HTMLButtonElement>("#offers button")?.textContent).toContain("offered.bin"));
-  const button = document.querySelector<HTMLButtonElement>("#offers button")!;
-  button.click();
-  button.click();
-  await waitFor(() => expect(sendMessage).toHaveBeenCalledWith({ type: "acceptOffer", downloadId: 7 }));
-  button.click();
-  expect(sendMessage.mock.calls.filter(([message]) => message.type === "acceptOffer")).toHaveLength(1);
 });

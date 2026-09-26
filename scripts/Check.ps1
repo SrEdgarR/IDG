@@ -18,6 +18,7 @@ Invoke-Checked { node --test scripts/test-ui-model.mjs }
 Invoke-Checked { node --test scripts/test-import-parser.mjs }
 Invoke-Checked { npx --yes pnpm@12.4.2 test:unit }
 Invoke-Checked { npx --yes pnpm@12.4.2 extension:build }
+Invoke-Checked { node scripts/test-firefox-manifest.mjs }
 Invoke-Checked { cargo build --locked -p idg-runtime -p idg-native-host -p idg-platform-windows }
 Invoke-Checked { npx --yes pnpm@12.4.2 desktop:build }
 Invoke-Checked { node scripts/test-runtime.mjs }
@@ -38,4 +39,5 @@ if ($Integration) {
     Invoke-Checked { node scripts/test-chromium.mjs }
     Invoke-Checked { node scripts/test-chromium-capture.mjs }
     Invoke-Checked { node scripts/test-firefox.mjs }
+    Invoke-Checked { node scripts/test-firefox-capture.mjs }
 }

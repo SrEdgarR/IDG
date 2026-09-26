@@ -14,7 +14,7 @@
     "check": "pnpm --filter @idg/desktop check && pnpm --filter @idg/extension check",
     "extension:build": "pnpm --filter @idg/extension build",
     "test": "node scripts/test-runtime.mjs",
-    "test:unit": "vitest run --config apps/desktop/vitest.config.ts",
+    "test:unit": "node scripts/test-native-host-name.mjs && vitest run --config apps/desktop/vitest.config.ts",
     "test:unit:watch": "vitest --config apps/desktop/vitest.config.ts",
     "test:coverage": "vitest run --config apps/desktop/vitest.config.ts --coverage",
     "gallery": "pnpm --filter @idg/desktop gallery",

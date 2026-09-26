@@ -4,10 +4,13 @@ param([ValidateSet('Chromium','Firefox')][string[]]$Browser = @('Chromium','Fire
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $binary = Join-Path $root 'target/debug/idg-native-host.exe'
-if (-not (Test-Path -LiteralPath $binary)) { throw 'Compila idg-native-host en debug antes de registrar.' }
+foreach ($name in @('idg-native-host.exe','idg-runtime.exe','idg-desktop.exe')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $root "target/debug/$name"))) { throw "Falta $name en target/debug de este checkout; compila los binarios primero." }
+}
 $identity = Get-Content (Join-Path $root 'apps/extension/development-identity.json') -Raw | ConvertFrom-Json
+$hostName = (& node (Join-Path $root 'scripts/native-host-name.mjs') --write).Trim()
+if ($LASTEXITCODE -ne 0 -or $hostName -notmatch '^io\.github\.sredgarr\.idg\.dev\.[0-9a-f]{16}$') { throw 'Identidad de host de desarrollo no válida.' }
 $directory = Join-Path $root '.local/native-host'
-$hostName = 'io.github.sredgarr.idg.dev'
 $entries = @()
 foreach ($kind in $Browser) {
     $file = Join-Path $directory "$kind.json"

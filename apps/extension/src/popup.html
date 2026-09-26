@@ -12,16 +12,7 @@
       <header>
         <div class="popup-brand">
           <span class="popup-brand-mark" aria-hidden="true">
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <path d="M12 3v12 M7 10l5 5 5-5 M4 16v5h16v-5" />
             </svg>
           </span>
@@ -34,43 +25,19 @@
         <p id="detail">Comprobando el motor local.</p>
         <button id="reconnect" type="button">Reconectar</button>
       </section>
-      <section>
-        <h2>AutoPick</h2>
-        <label for="autopick">Modo</label>
-        <select id="autopick" disabled>
-          <option value="always">Siempre usar IDG</option>
-          <option value="ask">Preguntarme</option>
-          <option value="browser">Usar el navegador</option>
-        </select>
-        <p>Chromium no informa el método de una descarga ya iniciada; por seguridad, permanece en el navegador. Previsualiza y elige un enlace GET público y repetible para abrirlo en IDG.</p>
-        <button id="capture-permission" type="button">Activar detección global</button>
-        <button id="suspend" type="button">Suspender una hora</button>
-        <label class="site"><input id="ignore-site" type="checkbox" disabled /> Ignorar este sitio</label>
-        <details>
-          <summary>Excepciones y tamaño</summary>
-          <label for="ignore-ext">Extensiones ignoradas, separadas por comas</label>
-          <input id="ignore-ext" type="text" placeholder="zip, exe" />
-          <label for="ignore-mime">Tipos MIME ignorados, separados por comas</label>
-          <input id="ignore-mime" type="text" placeholder="application/pdf" />
-          <label for="min-kib">Tamaño mínimo (KiB)</label>
-          <input id="min-kib" type="number" min="0" max="1048576" value="0" />
-          <label for="unknown">Si no se conoce el tamaño</label>
-          <select id="unknown"><option value="browser">Usar navegador</option><option value="offer">Ofrecer en IDG</option></select>
-          <button id="save-rules" type="button">Guardar excepciones</button>
-        </details>
+      <section aria-labelledby="capture-title">
+        <h2 id="capture-title">Captura automática deshabilitada</h2>
+        <p>AutoPick sigue siendo un requisito del producto, pero esta versión no transfiere descargas ya iniciadas en Chromium.</p>
+        <p>Para enviar un archivo a IDG, elige un enlace HTTP/HTTPS directo, público y repetible. No se transfieren cookies, credenciales ni solicitudes de sesión autenticada; si el enlace requiere sesión o POST, descárgalo en el navegador.</p>
       </section>
       <section>
-        <h2>Descargas en IDG</h2>
-        <ul id="jobs"><li>Sin trabajos activos.</li></ul>
-      </section>
-      <section>
-        <h2>Propuestas de Chromium</h2>
-        <ul id="offers"><li>No hay propuestas pendientes.</li></ul>
+        <h2>Descargas de IDG</h2>
+        <ul id="jobs"><li>Comprobando el motor…</li></ul>
       </section>
       <section>
         <h2>Enlaces de esta página</h2>
         <button id="find-links" type="button">Previsualizar enlaces</button>
-        <p>Solo se leen los enlaces al pulsar. Selecciona uno para abrir «Nueva descarga»; no se añaden todos.</p>
+        <p>Solo se leen al pulsar. Elige un enlace para revisar la solicitud en IDG; la extensión no inicia descargas silenciosas.</p>
         <ul id="links"></ul>
       </section>
       <p id="notice" role="status"></p>

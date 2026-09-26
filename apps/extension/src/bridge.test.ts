@@ -29,7 +29,7 @@ describe("Chromium Native Messaging bridge", () => {
     vi.stubGlobal("chrome", { runtime: { connectNative, lastError: undefined } });
 
     const reply = request("ping", "request-1");
-    expect(connectNative).toHaveBeenCalledWith("io.github.sredgarr.idg.dev");
+    expect(connectNative).toHaveBeenCalledWith(__IDG_NATIVE_HOST_NAME__);
     expect(nativePort.postMessage).toHaveBeenNthCalledWith(1, {
       version: 1,
       id: "request-1-hello",

@@ -273,12 +273,10 @@ async function maybeObserve(item: chrome.downloads.DownloadItem) {
 }
 async function menu() {
   await chrome.contextMenus.removeAll();
-  if (!await chrome.permissions.contains({ permissions: ["downloads"] })) return;
-  chrome.contextMenus.create({ id: "idg-link", title: "Descargar enlace con IDG", contexts: ["link"] });
-  chrome.contextMenus.create({ id: "idg-video", title: "Descargar vídeo directo con IDG", contexts: ["video"] });
+  chrome.contextMenus.create({ id: "idg-link", title: "Enviar enlace directo a IDG", contexts: ["link"] });
 }
 chrome.contextMenus.onClicked.addListener((info) => {
-  const url = info.menuItemId === "idg-link" ? info.linkUrl : info.menuItemId === "idg-video" ? info.srcUrl : undefined;
+  const url = info.menuItemId === "idg-link" ? info.linkUrl : undefined;
   if (!url || !eligible(url)) { notice = "Este enlace requiere el navegador (URL o sesión no transferible)."; void broadcast(); return; }
   let name = "";
   try { name = safeName(decodeURIComponent(new URL(url).pathname.split("/").pop() || "descarga.bin")); } catch { return; }

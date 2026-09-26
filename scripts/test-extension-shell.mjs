@@ -30,16 +30,18 @@ try {
   assert.equal(await page.locator("#status").getAttribute("data-state"), connectionText === "Conectado" ? "online" : "offline");
   const manifest = await page.evaluate(() => chrome.runtime.getManifest());
   assert.equal(manifest.background?.service_worker, "worker.js");
-  assert.deepEqual(manifest.optional_permissions, ["downloads"]);
+  assert.equal(manifest.permissions.includes("downloads"), false, "El manifiesto normal no activa captura automática.");
+  assert.equal("optional_permissions" in manifest, false, "No se ofrece un permiso para una función deshabilitada.");
+  const popupText = await page.locator("body").innerText();
+  assert.match(popupText, /AutoPick sigue siendo un requisito/i);
+  assert.match(popupText, /Captura automática deshabilitada/i);
+  assert.match(popupText, /no se transfieren cookies, credenciales/i);
+  assert.equal(await page.locator("#autopick, #capture-permission, #save-rules").count(), 0);
   assert.ok(await page.getByRole("button", { name: "Previsualizar enlaces" }).isVisible());
-  await page.getByRole("button", { name: "Activar detección global" }).click();
-  await page.waitForFunction(() => document.querySelector("#capture-permission")?.textContent?.includes("autorizada") || !!document.querySelector("#notice")?.textContent, null, { timeout: 3000 }).catch(() => {});
-  const permissionLabel = await page.locator("#capture-permission").innerText();
-  if (permissionLabel.includes("autorizada")) {
-    assert.equal(await worker.evaluate(() => typeof chrome.downloads), "object");
-  }
+  assert.ok(await page.getByRole("button", { name: "Reconectar" }).isVisible());
+  assert.ok(await page.getByRole("button", { name: "Abrir IDG" }).isVisible());
   assert.deepEqual(failures, []);
-  console.log(`PASS Chromium: worker y popup cargan sin errores; permiso global ${permissionLabel.includes("autorizada") ? "concedido" : "no resuelto en headless"}.`);
+  console.log("PASS Chromium: manifiesto normal y popup cargan sin errores; captura automática permanece deshabilitada y los controles visibles tienen acciones reales.");
 } finally {
   await context.close();
 }

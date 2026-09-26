@@ -17,39 +17,26 @@
         <p id="detail">Comprobando el host local…</p>
         <button id="reconnect" type="button">Reconectar</button>
       </section>
-      <section>
-        <h2>Captura de descargas</h2>
-        <label for="autopick">AutoPick</label
-        ><select id="autopick" disabled aria-describedby="pending">
-          <option>Preguntarme · pendiente</option>
-          <option>Siempre usar IDG</option>
-          <option>Usar el navegador</option>
-        </select>
-        <p id="pending">
-          La captura se integrará en fases 07/08. Esta extensión no lee tus
-          páginas.
-        </p>
-        <label class="site"
-          ><input
-            type="checkbox"
-            disabled
-            aria-describedby="pending"
-          />Excepción para el sitio actual</label
-        >
+      <section aria-label="Acciones manuales">
+        <h2>Enviar un enlace elegido</h2>
+        <form id="direct-form">
+          <label for="direct-url">Enlace directo HTTP o HTTPS</label>
+          <input id="direct-url" type="url" autocomplete="off" required />
+          <button id="download-link" type="submit">Enviar enlace a IDG</button>
+        </form>
+        <p>Solo envía la URL que escribes y confirmas. Sin parámetros, fragmento ni sesión; revisa el nombre y acepta la descarga en IDG. Si no se puede reproducir con seguridad, continúa en Firefox.</p>
+        <button id="open" type="button">Abrir IDG</button>
+        <p id="notice" role="status" aria-live="polite"></p>
       </section>
       <section>
-        <h2>Descargas</h2>
-        <p>
-          El motor de descargas aún no está disponible. No hay trabajos que
-          mostrar.
-        </p>
+        <h2>AutoPick sigue pendiente</h2>
+        <p>AutoPick sigue siendo un requisito del producto, pero la captura automática está deshabilitada. Las descargas iniciadas por Firefox continúan en Firefox; las sesiones autenticadas no se transfieren ni se copian cookies o credenciales.</p>
       </section>
-      <footer>
-        <button disabled aria-describedby="open-pending">Abrir IDG</button
-        ><small id="open-pending"
-          >Apertura desde la extensión: pendiente de integración.</small
-        >
-      </footer>
+      <section>
+        <h2>Descargas de IDG</h2>
+        <ul id="jobs"><li>Comprobando el motor…</li></ul>
+      </section>
+      <footer><small>Sin integración en ventanas privadas.</small></footer>
     </main>
     <script src="popup.js"></script>
   </body>

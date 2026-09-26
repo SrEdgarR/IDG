@@ -59,25 +59,223 @@ pub async fn notify_download(
     Ok(true)
 }
 #[tauri::command]
-pub fn detect_browsers(window: tauri::Window) -> Result<Vec<(String, bool)>, String> {
+pub fn detect_browsers(window: tauri::Window) -> Result<Vec<(String, bool, String)>, String> {
     authorized(&window)?;
     let roots = ["LOCALAPPDATA", "ProgramFiles", "ProgramFiles(x86)"];
+    let identity: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../apps/extension/development-identity.json"
+    ))
+    .map_err(|_| "No se pudo leer la identidad de desarrollo")?;
+    let chromium_id = identity["chromium_id"]
+        .as_str()
+        .ok_or("Falta el ID Chromium de desarrollo")?;
+    let firefox_id = identity["firefox_id"]
+        .as_str()
+        .ok_or("Falta el ID Firefox de desarrollo")?;
+    let native_host_name = development_native_host_name();
     Ok([
-        ("Chrome", "Google/Chrome/Application/chrome.exe"),
-        ("Edge", "Microsoft/Edge/Application/msedge.exe"),
-        ("Firefox", "Mozilla Firefox/firefox.exe"),
+        (
+            "Chrome",
+            "Google/Chrome/Application/chrome.exe",
+            r"Software\Google\Chrome\NativeMessagingHosts",
+            Some(format!("chrome-extension://{chromium_id}/")),
+            None,
+        ),
+        (
+            "Edge",
+            "Microsoft/Edge/Application/msedge.exe",
+            r"Software\Microsoft\Edge\NativeMessagingHosts",
+            Some(format!("chrome-extension://{chromium_id}/")),
+            None,
+        ),
+        (
+            "Firefox",
+            "Mozilla Firefox/firefox.exe",
+            r"Software\Mozilla\NativeMessagingHosts",
+            None,
+            Some(firefox_id),
+        ),
     ]
     .into_iter()
-    .map(|(name, relative)| {
+    .map(|(name, relative, key_prefix, origin, extension_id)| {
+        let key = format!(r"{key_prefix}\{native_host_name}");
         (
             name.to_owned(),
             roots
                 .iter()
                 .filter_map(std::env::var_os)
                 .any(|root| std::path::PathBuf::from(root).join(relative).is_file()),
+            native_host_status(&key, origin.as_deref(), extension_id, &native_host_name),
         )
     })
     .collect())
+}
+
+#[cfg(windows)]
+fn native_host_status(
+    key: &str,
+    chromium_origin: Option<&str>,
+    firefox_id: Option<&str>,
+    expected_host_name: &str,
+) -> String {
+    let Some(windir) = std::env::var_os("WINDIR") else {
+        return "No se pudo comprobar el registro".into();
+    };
+    let reg = std::path::PathBuf::from(windir).join("System32/reg.exe");
+    let registry_key = format!("HKCU\\{key}");
+    let Ok(result) = std::process::Command::new(reg)
+        .args(["query", registry_key.as_str(), "/ve"])
+        .output()
+    else {
+        return "No se pudo comprobar el registro".into();
+    };
+    if !result.status.success() {
+        return "Host no registrado para este navegador".into();
+    }
+    let output = String::from_utf8_lossy(&result.stdout);
+    let Some(path) = output.lines().find_map(|line| {
+        let (_, value) = line.split_once("REG_SZ")?;
+        let value = value.trim();
+        (!value.is_empty()).then_some(std::path::PathBuf::from(value))
+    }) else {
+        return "Registro sin manifiesto legible".into();
+    };
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return "Manifiesto del host no encontrado".into();
+    };
+    let Ok(manifest) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return "Manifiesto del host inválido".into();
+    };
+    let identity_matches =
+        host_manifest_matches(&manifest, expected_host_name, chromium_origin, firefox_id);
+    let executable_exists = manifest["path"]
+        .as_str()
+        .is_some_and(|value| std::path::Path::new(value).is_file());
+    if identity_matches && manifest["type"].as_str() == Some("stdio") && executable_exists {
+        "Host registrado; manifiesto, ID y ejecutable comprobados".into()
+    } else {
+        "Registro incompatible con la extensión de desarrollo".into()
+    }
+}
+
+fn host_manifest_allows(
+    manifest: &serde_json::Value,
+    chromium_origin: Option<&str>,
+    firefox_id: Option<&str>,
+) -> bool {
+    chromium_origin.is_some_and(|origin| {
+        manifest["allowed_origins"]
+            .as_array()
+            .is_some_and(|items| items.iter().any(|item| item.as_str() == Some(origin)))
+    }) || firefox_id.is_some_and(|id| {
+        manifest["allowed_extensions"]
+            .as_array()
+            .is_some_and(|items| items.iter().any(|item| item.as_str() == Some(id)))
+    })
+}
+
+fn host_manifest_matches(
+    manifest: &serde_json::Value,
+    expected_host_name: &str,
+    chromium_origin: Option<&str>,
+    firefox_id: Option<&str>,
+) -> bool {
+    manifest["name"].as_str() == Some(expected_host_name)
+        && host_manifest_allows(manifest, chromium_origin, firefox_id)
+}
+
+fn development_native_host_name() -> String {
+    let name = std::env::current_exe()
+        .ok()
+        .and_then(|executable| {
+            executable.ancestors().find_map(|root| {
+                root.join("apps/extension/development-identity.json")
+                    .is_file()
+                    .then(|| root.join(".local/native-host/host-name.txt"))
+            })
+        })
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .map(|name| name.trim().to_owned())
+        .filter(|name| valid_development_native_host_name(name));
+    name.unwrap_or_else(|| "io.github.sredgarr.idg.dev".into())
+}
+
+fn valid_development_native_host_name(name: &str) -> bool {
+    name.strip_prefix("io.github.sredgarr.idg.dev.")
+        .is_some_and(|suffix| {
+            suffix.len() == 16
+                && suffix
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        })
+}
+
+#[cfg(not(windows))]
+fn native_host_status(
+    _key: &str,
+    _chromium_origin: Option<&str>,
+    _firefox_id: Option<&str>,
+    _expected_host_name: &str,
+) -> String {
+    "Comprobación del registro disponible solo en Windows".into()
+}
+
+#[cfg(test)]
+mod browser_detection_tests {
+    use super::{host_manifest_matches, valid_development_native_host_name};
+
+    #[test]
+    fn native_host_allowlists_require_the_exact_browser_identity() {
+        assert!(valid_development_native_host_name(
+            "io.github.sredgarr.idg.dev.0123456789abcdef"
+        ));
+        assert!(!valid_development_native_host_name(
+            "io.github.sredgarr.idg.dev.phase08"
+        ));
+        assert!(!valid_development_native_host_name(
+            "io.github.sredgarr.idg.dev.0123456789ABCDEf"
+        ));
+
+        let firefox = serde_json::json!({
+            "name": "io.github.sredgarr.idg.dev.0123456789abcdef",
+            "allowed_extensions": ["idg-dev@sredgarr.github.io"]
+        });
+        assert!(host_manifest_matches(
+            &firefox,
+            "io.github.sredgarr.idg.dev.0123456789abcdef",
+            None,
+            Some("idg-dev@sredgarr.github.io")
+        ));
+        assert!(!host_manifest_matches(
+            &firefox,
+            "io.github.sredgarr.idg.dev.ffffffffffffffff",
+            None,
+            Some("idg-dev@sredgarr.github.io")
+        ));
+        assert!(!host_manifest_matches(
+            &firefox,
+            "io.github.sredgarr.idg.dev.0123456789abcdef",
+            None,
+            Some("other@example.test")
+        ));
+
+        let chromium = serde_json::json!({
+            "name": "io.github.sredgarr.idg.dev.0123456789abcdef",
+            "allowed_origins": ["chrome-extension://keopaccdnmianljlfkpinbkfppcpfdlk/"]
+        });
+        assert!(host_manifest_matches(
+            &chromium,
+            "io.github.sredgarr.idg.dev.0123456789abcdef",
+            Some("chrome-extension://keopaccdnmianljlfkpinbkfppcpfdlk/"),
+            None
+        ));
+        assert!(!host_manifest_matches(
+            &chromium,
+            "io.github.sredgarr.idg.dev.0123456789abcdef",
+            Some("chrome-extension://other/"),
+            None
+        ));
+    }
 }
 
 pub async fn call(command: Command) -> Result<Payload, String> {

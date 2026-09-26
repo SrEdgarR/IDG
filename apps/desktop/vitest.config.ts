@@ -1,14 +1,17 @@
 import { fileURLToPath } from "node:url";
 import { configDefaults, defineConfig, mergeConfig } from "vitest/config";
+import { developmentNativeHostName } from "../../scripts/native-host-name.mjs";
 import desktopViteConfig from "./vite.config.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
+const nativeHostName = developmentNativeHostName(repositoryRoot);
 const runningInCi = process.env.CI === "true";
 
 export default mergeConfig(
   desktopViteConfig,
   defineConfig({
     root: repositoryRoot,
+    define: { __IDG_NATIVE_HOST_NAME__: JSON.stringify(nativeHostName) },
     test: {
       include: [
         "apps/desktop/src/**/*.test.ts",

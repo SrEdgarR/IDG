@@ -282,7 +282,9 @@ export function Settings({
               </label>
               <p>
                 Preferencia guardada para la fase de captura. Actualmente no
-                intercepta descargas.
+                intercepta descargas automáticamente. Las descargas nuevas se
+                envían eligiendo un enlace directo; las sesiones autenticadas no
+                se transfieren.
               </p>
             </>
           ) : backend && section === "Privacidad" ? (
@@ -448,7 +450,7 @@ export function FirstRunWizard({
       ) : (
         <>
           <label className="field">
-            AutoPick
+            Preferencia para AutoPick (no activa todavía)
             <select
               aria-label="AutoPick"
               value={auto}
@@ -462,8 +464,9 @@ export function FirstRunWizard({
             </select>
           </label>
           <p className="muted">
-            Siempre usar IDG seguirá abriendo un diálogo de revisión. Esta
-            elección {backend ? "guardada" : "de muestra"} no activa captura.
+            AutoPick sigue en el plan del producto, pero la captura automática
+            está deshabilitada. Esta elección {backend ? "se guarda" : "es de muestra"}
+            como preferencia futura y no cambia cómo se descargan los archivos hoy.
           </p>
         </>
       )}
@@ -561,12 +564,12 @@ function LimitsSettings() {
   );
 }
 function BrowserStatus() {
-  const [browsers, setBrowsers] = useState<[string, boolean][]>([]),
-    [hosts, setHosts] = useState(0);
+  const [browsers, setBrowsers] = useState<[string, boolean, string][]>([]),
+    [hosts, setHosts] = useState<number | null>(null);
   useEffect(() => {
     let disposed = false,
       off: (() => void) | undefined;
-    void invoke<[string, boolean][]>("detect_browsers").then((b) => {
+    void invoke<[string, boolean, string][]>("detect_browsers").then((b) => {
       if (!disposed) setBrowsers(b);
     });
     void listen<ConnectionState>("runtime-state", (e) =>
@@ -583,19 +586,21 @@ function BrowserStatus() {
   return (
     <>
       <ul>
-        {browsers.map(([name, detected]) => (
+        {browsers.map(([name, detected, host]) => (
           <li key={name}>
             {name}:{" "}
             {detected
               ? "detectado en ubicación habitual"
               : "no detectado en ubicaciones habituales"}{" "}
-            · extensión cargada: no comprobada aquí.
+            · {host}.
           </li>
         ))}
       </ul>
       <p>
-        Conexiones reales de Native Messaging: {hosts}. Esta conexión no
-        identifica por sí sola el navegador ni demuestra captura AutoPick.
+        Extensión y permisos: no se pueden consultar desde IDG; abre el popup
+        del navegador para comprobar un handshake real. Conexiones activas al
+        runtime: {hosts === null ? "sin consulta" : hosts}; este total no
+        identifica el navegador ni demuestra AutoPick.
       </p>
     </>
   );

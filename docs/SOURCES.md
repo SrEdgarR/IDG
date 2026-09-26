@@ -1,6 +1,6 @@
 # Referencias técnicas primarias
 
-Consultadas el 19 de septiembre de 2026. Son referencias para verificar contratos y restricciones, no una garantía de que cualquier versión futura tenga idéntica API. En cada fase, contrastar documentación con las versiones fijadas en el repositorio. Los requisitos propios de producto son decisiones del proyecto.
+S01–S14 consultadas el 19 de septiembre de 2026; S15–S17 contrastadas para fase 08 el 26 de septiembre de 2026. Son referencias para verificar contratos y restricciones, no una garantía de que cualquier versión futura tenga idéntica API. En cada fase, contrastar documentación con las versiones fijadas en el repositorio. Los requisitos propios de producto son decisiones del proyecto.
 
 [S01] OpenAI — instrucciones de repositorio con AGENTS.md.
 `https://developers.openai.com/codex/guides/agents-md`
@@ -58,6 +58,22 @@ Diferencia entre copiar streams, remux y recodificar; compatibilidad del contene
 [S14] FFmpeg — licencias y consideraciones de redistribución.
 `https://ffmpeg.org/legal.html`
 Las obligaciones dependen de configuración y componentes del build distribuido.
+
+[S15] Mozilla — background scripts y service workers en manifest.json.
+`https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/background`
+Firefox usa scripts de fondo en su variante de MV3; `background.service_worker` no se trata como intercambiable entre navegadores.
+
+[S16] Mozilla — permisos de WebExtensions.
+`https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/permissions`
+Definición de permisos declarados y su alcance en el manifiesto Firefox.
+
+[S17] Mozilla — API de menús contextuales.
+`https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/menus`
+Contrato de `menus` utilizado para el menú limitado a enlaces.
+
+[S18] Mozilla — acceso a ventanas privadas.
+`https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/incognito`
+Modos de ejecución de extensiones en ventanas privadas; IDG deniega ese contexto en sus builds de desarrollo actuales.
 
 [S15] Microsoft — IAttachmentExecute / Attachment Services.
 `https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nn-shobjidl_core-iattachmentexecute`
