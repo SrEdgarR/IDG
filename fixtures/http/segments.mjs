@@ -20,8 +20,9 @@ export async function startSegments({size=8*1024*1024+13,rate=0,condition='per-r
  const records=[];const attempts=new Map();let active=0,peak=0;
  let holdCheckpointGap=true;const gates=new Set();
  const releaseCheckpointGap=()=>{holdCheckpointGap=false;for(const release of gates)release();gates.clear();};
- let holdHandoffOutage=true;const handoffGates=new Set();
- const releaseHandoffOutage=()=>{holdHandoffOutage=false;for(const release of handoffGates)release();handoffGates.clear();};
+ const transferGates=new Map(['/handoff-outage.bin','/host-crash.bin','/worker-crash.bin'].map(route=>[route,{held:true,waiters:new Set()}]));
+ const releaseGate=route=>{const gate=transferGates.get(route);if(!gate)return;gate.held=false;for(const release of gate.waiters)release();gate.waiters.clear();};
+ const waitAtGate=(gate,res)=>new Promise(resolve=>{const release=()=>{res.off('close',release);gate.waiters.delete(release);resolve();};gate.waiters.add(release);res.once('close',release);if(res.destroyed)release();});
  const shared=new SharedPacer(rate,minimumTimerMs);const measurements=[];const begun=performance.now();let measuredAt=begun,measuredBytes=0,bodyBytes=0;
  const server=http.createServer(async(req,res)=>{
   const route=new URL(req.url,'http://fixture').pathname;
@@ -40,14 +41,14 @@ export async function startSegments({size=8*1024*1024+13,rate=0,condition='per-r
   const headers={'Content-Type':'application/octet-stream','Content-Length':ignored?size:end-start,ETag:route==='/changed'&&match?'"v2"':'"v1"'};
   if(condition!=='no-ranges')headers['Accept-Ranges']='bytes';
   if(status===206)headers['Content-Range']=`bytes ${route==='/overlap'?Math.max(0,start-1):start}-${end-1}/${size}`;
+  // Hold the first body-bearing request before headers or bytes, including a
+  // non-Range probe, so crash tests can observe the pre-durable boundary.
+  const transferGate=transferGates.get(route);
+  if(req.method!=='HEAD'&&transferGate?.held)await waitAtGate(transferGate,res);
   res.writeHead(status,headers);
   let due=performance.now();
   try{
    if(route==='/late'&&match)await sleep(500);
-   // Hold the IDG range until the Chromium handoff test stops the runtime.
-   if(route==='/handoff-outage.bin'&&match&&holdHandoffOutage){
-    await new Promise(resolve=>{const release=()=>{res.off('close',release);handoffGates.delete(release);resolve();};handoffGates.add(release);res.once('close',release);if(res.destroyed)release();});
-   }
    for(let offset=ignored?0:start;offset<(ignored?size:end);offset+=16384){
     if(res.destroyed)break;
     const count=Math.min(16384,(ignored?size:end)-offset);
@@ -68,6 +69,6 @@ export async function startSegments({size=8*1024*1024+13,rate=0,condition='per-r
   }catch{res.destroy();}
  });
  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,'127.0.0.1',resolve);});
- return{url:`http://127.0.0.1:${server.address().port}`,size,records,measurements,releaseCheckpointGap,releaseHandoffOutage,get peak(){return peak;},get active(){return active;},close:()=>new Promise(r=>{releaseCheckpointGap();releaseHandoffOutage();shared.close();server.closeAllConnections();server.close(r);})};
+ return{url:`http://127.0.0.1:${server.address().port}`,size,records,measurements,releaseCheckpointGap,releaseHandoffOutage:()=>releaseGate('/handoff-outage.bin'),releaseHostCrash:()=>releaseGate('/host-crash.bin'),releaseWorkerCrash:()=>releaseGate('/worker-crash.bin'),get peak(){return peak;},get active(){return active;},close:()=>new Promise(r=>{releaseCheckpointGap();for(const route of transferGates.keys())releaseGate(route);shared.close();server.closeAllConnections();server.close(r);})};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){const f=await startSegments({port:Number(process.argv[2]??8788),size:64*1024*1024,rate:4*1024*1024});console.log(JSON.stringify({url:f.url+'/file',size:f.size,sha256:expectedHash(f.size)}));}

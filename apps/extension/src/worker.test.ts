@@ -183,7 +183,7 @@ describe("Chromium worker policies and recovery", () => {
     expect(bridge.request).not.toHaveBeenCalledWith(expect.objectContaining({ prepare_capture: expect.anything() }), expect.anything());
   });
 
-  it("offers an unknown-size transfer only when that policy is selected", async () => {
+  it("keeps unknown-size observed transfers in Chromium even when offering unknown sizes is enabled", async () => {
     saved.settings = { ignoredSites: [], ignoredExtensions: [], ignoredMimes: [], minBytes: 0, unknownSize: "offer", suspendedUntil: 0 };
     await connectWorker();
 
@@ -198,7 +198,9 @@ describe("Chromium worker policies and recovery", () => {
       state: "in_progress",
     });
 
-    await waitFor(() => expect(saved.offers).toEqual([{ downloadId: 8, url: "https://cdn.example/stream", name: "stream.bin" }]));
+    await letTasksSettle();
+    expect(saved.offers).toBeUndefined();
+    expect((await send({ type: "state" })).notice).toMatch(/no informa el método HTTP/i);
     expect(bridge.request).not.toHaveBeenCalledWith(expect.objectContaining({ prepare_capture: expect.anything() }), expect.anything());
   });
 
@@ -235,9 +237,58 @@ describe("Chromium worker policies and recovery", () => {
     await letTasksSettle();
     expect(saved.offers).toBeUndefined();
 
-    chromeApi.downloads.onCreated.listeners[0]({ ...candidate, id: 35 });
-    await waitFor(() => expect(saved.offers).toEqual([{ downloadId: 35, url: candidate.url, name: candidate.filename }]));
+    const allowed = { ...candidate, id: 35 };
+    chromeApi.runtime.sendMessage.mockClear();
+    chromeApi.downloads.onCreated.listeners[0](allowed);
+    await waitFor(() => expect(chromeApi.runtime.sendMessage).toHaveBeenCalledWith({ type: "updated" }));
+    expect(saved.offers).toBeUndefined();
+    expect(allowed.state).toBe("in_progress");
     expect(bridge.request).not.toHaveBeenCalledWith(expect.objectContaining({ prepare_capture: expect.anything() }), expect.anything());
+  });
+
+  it("keeps an observed download in Chromium when its HTTP method cannot be verified", async () => {
+    mode = "always";
+    await connectWorker();
+    const browserDownload = {
+      id: 36,
+      url: "http://127.0.0.1:8788/post-only.bin",
+      finalUrl: "http://127.0.0.1:8788/post-only.bin",
+      referrer: "http://127.0.0.1:8788/form",
+      mime: "application/octet-stream",
+      totalBytes: 2 * 1024 * 1024,
+      filename: "post-only.bin",
+      state: "in_progress",
+    };
+    expect("method" in browserDownload).toBe(false);
+
+    chromeApi.runtime.sendMessage.mockClear();
+    chromeApi.downloads.onCreated.listeners[0](browserDownload);
+    await waitFor(() => expect(chromeApi.runtime.sendMessage).toHaveBeenCalledWith({ type: "updated" }));
+    await letTasksSettle();
+
+    const state = await send({ type: "state" });
+    expect(state.notice).toMatch(/no informa el método HTTP/i);
+    expect(browserDownload.state).toBe("in_progress");
+    expect(saved.pending).toBeUndefined();
+    expect(saved.offers).toBeUndefined();
+    expect(bridge.request).not.toHaveBeenCalledWith(expect.objectContaining({ prepare_capture: expect.anything() }), expect.anything());
+    expect(chromeApi.downloads.cancel).not.toHaveBeenCalled();
+    expect(chromeApi.downloads.download).not.toHaveBeenCalled();
+  });
+
+  it("does not replay an old observed offer as a GET after a worker update", async () => {
+    saved.offers = [{ downloadId: 37, url: "http://127.0.0.1:8788/post-only.bin", name: "post-only.bin" }];
+    const browserDownload = { id: 37, state: "in_progress" };
+    items.set(37, browserDownload);
+    await connectWorker();
+
+    const result = await send({ type: "acceptOffer", downloadId: 37 });
+    expect(result).toMatchObject({ ok: false, error: expect.stringMatching(/no informa el método HTTP/i) });
+    expect(saved.offers).toEqual([]);
+    expect(browserDownload.state).toBe("in_progress");
+    expect(bridge.request).not.toHaveBeenCalledWith(expect.objectContaining({ prepare_capture: expect.anything() }), expect.anything());
+    expect(chromeApi.downloads.cancel).not.toHaveBeenCalled();
+    expect(chromeApi.downloads.download).not.toHaveBeenCalled();
   });
 
   it("rejects a transfer URL containing a query before sending it to IDG", async () => {
@@ -293,26 +344,17 @@ describe("Chromium worker policies and recovery", () => {
   it("does not prepare the same offered browser download twice on rapid clicks", async () => {
     saved.offers = [{ downloadId: 25, url: "https://cdn.example/one.bin", name: "one.bin" }];
     items.set(25, { id: 25, state: "in_progress" });
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => { release = resolve; });
-    bridge.request.mockImplementation(async (command: any) => {
-      if (typeof command === "object" && "prepare_capture" in command) {
-        await gate;
-        return { kind: "capture_status", decision: "pending", job: null };
-      }
-      if (typeof command === "object" && "get_capture_status" in command) throw Error("host disconnected");
-      return { kind: "pong" };
-    });
     await loadWorker();
 
-    const first = send({ type: "acceptOffer", downloadId: 25 });
-    const second = send({ type: "acceptOffer", downloadId: 25 });
-    await waitFor(() => expect(bridge.request.mock.calls.filter(([command]) => typeof command === "object" && "prepare_capture" in command)).toHaveLength(1));
-    release();
-    const replies = await Promise.all([first, second]);
-    expect(replies.every((reply) => reply.ok)).toBe(true);
-    expect(bridge.request.mock.calls.filter(([command]) => typeof command === "object" && "prepare_capture" in command)).toHaveLength(1);
-    expect((saved.pending as any[])).toHaveLength(1);
+    const replies = await Promise.all([
+      send({ type: "acceptOffer", downloadId: 25 }),
+      send({ type: "acceptOffer", downloadId: 25 }),
+    ]);
+    expect(replies.every((reply) => !reply.ok && /no informa el método HTTP/i.test(reply.error))).toBe(true);
+    expect(bridge.request.mock.calls.filter(([command]) => typeof command === "object" && "prepare_capture" in command)).toHaveLength(0);
+    expect(saved.pending).toBeUndefined();
+    expect(saved.offers).toEqual([]);
+    expect(items.get(25).state).toBe("in_progress");
   });
 
   it("retains an uncertain proposal and resumes it after a lost host response", async () => {

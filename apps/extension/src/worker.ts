@@ -265,13 +265,10 @@ async function maybeObserve(item: chrome.downloads.DownloadItem) {
     if (item.totalBytes < 0 && prefs.unknownSize === "browser") return;
     if (item.totalBytes >= 0 && item.totalBytes < 1024 * 1024) return;
     if (item.totalBytes >= 0 && item.totalBytes < prefs.minBytes) return;
-    // No pause here: an unrepeatable original must keep its browser path.
-    if (engine?.autopick_mode === "ask") {
-      await saveOffers([...await offers(), { downloadId: item.id, url, name }]);
-      await chrome.action.setBadgeText({ text: "?" });
-      return;
-    }
-    await prepare({ id: crypto.randomUUID(), source: "observed", url, name, downloadId: item.id });
+    // downloads.DownloadItem has no method or request-body field. Keep unknown
+    // observed requests in Chromium instead of replaying them as an improvised GET.
+    notice = "Chromium no informa el método HTTP de esta descarga. Se conserva en el navegador; usa un enlace directo si confirmas que es un GET público y repetible.";
+    await broadcast();
   } finally { observed.delete(item.id); }
 }
 async function menu() {
@@ -334,8 +331,10 @@ chrome.runtime.onMessage.addListener((message: { type: string; [key: string]: un
       const all = await offers();
       const offer = all.find((entry) => entry.downloadId === message.downloadId);
       if (!offer || (await browserItem(offer.downloadId))?.state !== "in_progress") throw Error("Esta descarga ya no está activa en Chromium.");
-      if (!await prepare({ id: crypto.randomUUID(), source: "observed", url: offer.url, name: offer.name, downloadId: offer.downloadId })) throw Error("No se pudo preparar en IDG; Chromium conserva la descarga.");
       await saveOffers(all.filter((entry) => entry.downloadId !== message.downloadId));
+      notice = "Chromium no informa el método HTTP de esta descarga. Se conserva en el navegador; usa un enlace directo si confirmas que es un GET público y repetible.";
+      await broadcast();
+      throw Error(notice);
     }
     if (message.type === "open") await request("open_desktop");
     if (message.type === "pause" && typeof message.id === "string") await request({ pause_download: { job_id: message.id } });
