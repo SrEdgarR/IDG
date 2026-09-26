@@ -1,6 +1,6 @@
 # Estado de implementación
 
-Estado actual: **fase 05 integrada; fase 06 implementada, EN_CURSO de revisión**. Comprobaciones locales del conjunto final aprobadas; ver cierre 06 y límites de verificación. El propietario confirma que el recorrido manual de 05 funciona correctamente. Es un resultado comunicado por el propietario, no una prueba automatizada ni una certificación de Windows 10, accesibilidad exhaustiva o matriz completa.
+Estado actual (2026-09-26): **fase 08 EN_CURSO** en `feat/08-firefox-y-navegadores`, dependiente de `feat/07-extension-chromium`. La PR #7 permanece en borrador y conserva su base en fase 06; PR #8 ya fue integrada a fase 07 antes de esta tarea. No se integró ninguna PR nueva aquí. Fase 07 mantiene pendientes sus permisos y gestos con manifiesto normal. La cancelación de energía simulada de fase 06 continúa BLOQUEADA / PENDIENTE. Las secciones históricas conservan su estado al momento de cada commit; el bloque de fase 08 al final es la evidencia vigente.
 No marcar una fila completada solo por generar archivos. Completar evidencia conforme se ejecute cada fase.
 
 Estados: PLANIFICADO, EN_CURSO, IMPLEMENTADO_NO_VERIFICADO, VERIFICADO, BLOQUEADO, DIFERIDO.
@@ -22,7 +22,7 @@ Estados: PLANIFICADO, EN_CURSO, IMPLEMENTADO_NO_VERIFICADO, VERIFICADO, BLOQUEAD
 | ORG-03 | 06, 07 | EN_CURSO | Importación/preview y monitor opt-in; recogida de enlaces desde páginas pendiente de 07. |
 | ORG-04 | 06, 12 | EN_CURSO | Retención/historial restaurable; presencia/identificación general de archivos en 12. |
 | ORG-05 a ORG-06 | 06, 12 | IMPLEMENTADO; ver cierre 06 y límites | URL/contexto/hash, estadísticas locales opt-in con método documentado. Modo privado completo en 12. |
-| EXT-01 a EXT-08 | 01, 07, 08 | EN_CURSO | Puente y estado de conexión verificados en 01; captura/AutoPick y matriz completa PLANIFICADOS. |
+| EXT-01 a EXT-08 | 01, 07, 08 | EN_CURSO | Chromium: enlace público elegido explícitamente verificado en fase 07; descargas ya iniciadas no se capturan. Firefox: build, popup, adaptador, manifiesto y pruebas unitarias implementados; transferencia real bloqueada por registro del host en otro checkout. AutoPick sigue siendo requisito; captura automática deshabilitada. Sesiones autenticadas no soportadas. Permisos y gestos con manifiestos normales pendientes. Matriz por navegador al final. |
 | MEDIA-01 a MEDIA-03 | 09, 10 | PLANIFICADO | — |
 | MEDIA-04 a MEDIA-07 | 10 | PLANIFICADO | — |
 | SEC-01 a SEC-06 | Todas; revisión 12, 15 | PLANIFICADO | — |
@@ -472,4 +472,41 @@ Los fallos iniciales de esta ampliación fueron del arnés y se corrigieron ante
 
 La cancelación de energía simulada de fase 06 sigue **BLOQUEADA / PENDIENTE** y no se repitió. Edge, Windows 10, accesibilidad exhaustiva y DPI físico siguen separados como compatibilidad ampliada. Tampoco se tocaron los perfiles temporales cuya limpieza fue rechazada.
 
-**SIGUIENTE_PASO vigente:** cuando haya una superficie de Chrome interactiva disponible, comprobar con el manifiesto normal la concesión/rechazo, el icono y el menú contextual en perfil aislado. Mantener la PR #7 en borrador hasta resolver ese pendiente; consultar siempre el CI del HEAD que se publique. No fusionar PR #6/#7, no publicar la extensión ni avanzar a fase 08.
+**SIGUIENTE_PASO al cierre de fase 07 (supersedido por la autorización del 2026-09-26):** cuando haya una superficie de Chrome interactiva disponible, comprobar con el manifiesto normal la concesión/rechazo, el icono y el menú contextual en perfil aislado. Mantener la PR #7 en borrador hasta resolver ese pendiente; consultar siempre el CI del HEAD que se publique. No fusionar PR #6/#7 ni publicar la extensión.
+
+## Fase 08 — Firefox y compatibilidad de navegadores (2026-09-26)
+
+**Estado: EN_CURSO.** Rama `feat/08-firefox-y-navegadores`, basada en el HEAD vigente de `feat/07-extension-chromium` (`1637e6b484bcc273d2b0f1535ec5620c1149c074`). El código implementado y comprobado localmente está en `a9e9c321ba29fdb2d70855b9137931cafe409095`; este registro documental se guarda después. Mantener PR #7 en borrador y PR 08 dependiente de la rama 07; no cambiar bases ni fusionar PR #6 o #7.
+
+### Capacidades y límites actuales
+
+- **Comprobado, con alcance atribuido:** la descarga de un enlace HTTP(S) directo, público y repetible, elegido explícitamente y confirmado en IDG, se transfirió y terminó con hash correcto en el arnés Chromium/Tauri/HTTP de fase 07. Esa evidencia corresponde a la rama/commit de fase 07 y no se presenta como una nueva ejecución sobre este HEAD.
+- **Deshabilitada:** la captura automática de descargas ya iniciadas. Esas descargas permanecen en el navegador. AutoPick sigue siendo requisito del producto; no está implementado ni se quita de la especificación. `DownloadItem` no expone método HTTP ni cuerpo original, lo que limita esa ruta de captura observada y no demuestra imposibilidad general. Se requiere resolverla mediante una vía compatible y segura antes de habilitarla.
+- **No soportada:** transferencia de sesiones autenticadas. No se copian cookies, credenciales ni encabezados de sesión. POST, `blob:`, fragmentos, URLs con credenciales, páginas de acceso y solicitudes cuya repetición no se confirme conservan la alternativa segura del navegador.
+- **Pendientes de fase 07/08:** solicitud, concesión y rechazo de permisos y gestos de icono/`activeTab`/menú contextual con el manifiesto normal. No se acreditan con el manifiesto preconcedido de integración ni con una página de popup abierta por WebDriver.
+- **Onboarding y popup:** el escritorio distingue navegador detectado, host registrado/conectado y estado no consultable de la extensión/permisos. Popups informan conexión real, reconexión y trabajos del runtime; Firefox ofrece entrada directa y menú de enlace, sin simular AutoPick. No hay enlace de tienda ni instalación de usuario final.
+
+### Evidencia de esta rama
+
+**Pruebas automatizadas aprobadas:** `pnpm test:unit` 50/50; `pnpm check`; `pnpm extension:build`; `node scripts/test-firefox-manifest.mjs`; `scripts/Check.ps1` sin `-Integration`; `cargo fmt`, Clippy y pruebas del workspace incluidos en esa comprobación general. Los dos paquetes descomprimidos Chromium/Firefox compilaron. No se cambió el stack, cobertura o umbrales.
+
+Se generaron ZIPs de desarrollo separados y verificados en `.local/development-packages/idg-chromium-development-0.1.0.zip` y `.local/development-packages/idg-firefox-development-0.1.0.zip`; `.local/` está ignorado por Git. No son releases ni publicaciones en tiendas.
+
+**Firefox real bloqueado, no aprobado:** `node scripts/test-firefox-capture.mjs` abrió Firefox 156.0 con un perfil WebDriver temporal, pero no obtuvo el handshake. La lectura de HKCU confirmó que `io.github.sredgarr.idg.dev` apunta al manifiesto/host del checkout principal; el runtime fase 08 está en este worktree. `idg-platform-windows` autentica host/runtime hermanos. `Register-NativeHost.ps1` rechaza sustituir una ubicación ajena. Se conservó el registro, no se repitió el recorrido y no se comprobó archivo/hash Firefox. Ambos arneses Firefox ahora detectan esta discrepancia y salen antes de iniciar procesos.
+
+| Navegador y versión observada | Build / funciones evaluadas en esta etapa | Estado y restricción |
+|---|---|---|
+| Firefox 156.0 | Build MV3 `background.scripts`, ID Gecko estable, popup directo, menús, permisos mínimos, perfil aislado y manifiesto privado deshabilitado; unitarias y test de manifest | Build, unitarias y manifest **aprobados**. Native Messaging/transferencia/hash **BLOQUEADOS** por registro de host en otro checkout. Permisos/gestos normales **PENDIENTES**. |
+| Chrome for Testing 153.0.8010.12 | El arnés Chromium/Tauri/HTTP de fase 07 probó enlace explícito, recuperación y hash en el commit documentado históricamente | Evidencia válida para ese commit anterior; en este HEAD **no repetido** por el registro perteneciente al checkout principal. Permisos/gestos normales **PENDIENTES**. |
+| Google Chrome estable 154.0.8037.58 | Versión local detectada; no se cargó esta rama ni se ejecutó integración | **PENDIENTE**; no acreditado por la prueba anterior de Chrome for Testing. |
+| Microsoft Edge 153.0.4234.48 | Versión local detectada; no se cargó esta rama ni se ejecutó integración | **PENDIENTE**. |
+| Brave 154.1.96.59 | Ejecutable local detectado; sin carga de extensión ni transferencia en esta rama | **PENDIENTE**. |
+| Opera / Vivaldi | No localizados en las ubicaciones estándar consultadas | Instalación/versión/función **NO COMPROBADAS**. |
+
+Los manifiestos de desarrollo Chrome/Firefox declaran `incognito: "not_allowed"`, verificado estáticamente; no se probó una sesión privada. Firefox Containers no tiene adaptación de identidad/contexto implementada. Las extensiones no copian cookies, credenciales ni estado de sesión entre contextos.
+
+`Check.ps1` sin `-Integration` aprobó build, tipos, unitarias, Rust y suites generales descritas arriba. `-Integration` no se ejecutó: el registro no pertenece a esta copia, el permiso normal requiere interacción autorizada y la matriz no debe modificar otra instalación. El workflow de GitHub tampoco sustituye Tauri/WebView2 ni las pruebas reales de navegadores. CI del commit fase 08 se consulta y registra cuando exista el push; no se atribuye una ejecución de otro SHA.
+
+La energía simulada de fase 06 sigue **BLOQUEADA / PENDIENTE** y no se repitió. Windows 10, otros navegadores, accesibilidad exhaustiva y DPI físico permanecen como compatibilidad futura. Los dos perfiles cuya eliminación fue rechazada no se tocaron.
+
+**SIGUIENTE_PASO vigente:** integrar esta rama mediante una PR dependiente hacia `feat/07-extension-chromium` y conservarla en borrador hasta que se pueda usar el registro Native Messaging propio de este checkout y completar la transferencia/hash Firefox; comprobar después, con manifiestos normales y perfil aislado, los permisos y gestos pendientes. No fusionar PR #6, #7 ni la PR de fase 08, y no avanzar a fase 09.
