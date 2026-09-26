@@ -1,5 +1,6 @@
 import type { ExtensionState, DownloadSnapshot } from "../../../packages/shared-types/protocol";
 import { request, watch } from "./bridge";
+import { handleMediaMessage } from "./media-background";
 
 type Settings = {
   ignoredSites: string[];
@@ -221,7 +222,7 @@ async function prepareOnce(item: Pending): Promise<boolean> {
   }
   await savePending(item);
   try {
-    const result = await request({ prepare_capture: { proposal: { id: item.id, url: item.url, name: item.name, source: item.source } } }, item.id);
+    const result = await request({ prepare_capture: { proposal: { id: item.id, url: item.url, name: item.name, source: item.source, media: null } } }, item.id);
     if (result.kind !== "capture_status") throw Error("No se confirmó la preparación");
     void request("open_desktop").catch(() => {});
     void runCapture(item);
@@ -311,7 +312,12 @@ chrome.permissions.onRemoved.addListener(() => {
   void menu();
 });
 
-chrome.runtime.onMessage.addListener((message: { type: string; [key: string]: unknown }, _sender, respond) => {
+chrome.runtime.onMessage.addListener((message: { type: string; [key: string]: unknown }, sender, respond) => {
+  const media = handleMediaMessage(message, sender);
+  if (media !== undefined) {
+    void media.then(respond);
+    return true;
+  }
   if (message.type === "updated") return false;
   void (async () => {
     if (message.type === "reconnect") { closeWatch(); connect(); await refresh(); }

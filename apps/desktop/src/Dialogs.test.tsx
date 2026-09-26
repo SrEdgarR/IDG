@@ -12,12 +12,13 @@ import {
   cleanup,
   render,
   screen,
+  within,
   waitFor,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NewDownloadDialog } from "./Dialogs";
 import type { DesktopApi } from "./desktop";
-import type { AppPreferences, Payload } from "../../../packages/shared-types/protocol";
+import type { AppPreferences, MediaMetadata, Payload } from "../../../packages/shared-types/protocol";
 
 vi.mock("./Organization", () => ({
   useOrganization: () => ({ state: null, error: "" }),
@@ -85,6 +86,46 @@ describe("NewDownloadDialog", () => {
     expect(url.getAttribute("aria-invalid")).toBe("true");
     expect(screen.getByLabelText("Nombre del archivo").getAttribute("aria-invalid")).toBe("true");
     expect(screen.getByRole("status").textContent).toBe("Revisa los campos indicados.");
+  });
+
+  it("shows only metadata received for a directly selected media file and escapes its title", () => {
+    const media: MediaMetadata = {
+      kind: "video",
+      title: "<img src=x onerror=alert(1)>",
+      mime_type: "video/mp4",
+      width: 640,
+      height: 360,
+      frame_rate_milli: null,
+      video_codec: null,
+      audio_codec: null,
+      video_tracks: null,
+      audio_tracks: null,
+      duration_ms: null,
+      size_bytes: null,
+      size_kind: "unknown",
+      manifest_kind: "none",
+    };
+    render(
+      <NewDownloadDialog
+        onClose={() => {}}
+        backend={makeBackend()}
+        captureId="media-capture-1"
+        initialUrl="http://127.0.0.1:8788/clip.mp4"
+        initialName="clip.mp4"
+        media={media}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: media.title })).toBeTruthy();
+    expect(screen.getByText("640 × 360")).toBeTruthy();
+    const summary = within(screen.getByRole("region", { name: "Medio seleccionado" }));
+    expect(summary.getByText("Desconocida")).toBeTruthy();
+    expect(summary.getByText("Desconocido")).toBeTruthy();
+    expect(summary.getByText("Desconocidos; no se deducen")).toBeTruthy();
+    expect(screen.getByText(/no separa pistas, no convierte/i)).toBeTruthy();
+    expect(document.querySelector(".media-capture-summary img")).toBeNull();
+    expect(document.querySelector<HTMLInputElement>("input[value='Videos']")).toBeNull();
+    expect(screen.getByLabelText("Categoría")).toHaveProperty("value", "Videos");
   });
 
   it("does not let a late preference response replace a folder the user started editing", async () => {

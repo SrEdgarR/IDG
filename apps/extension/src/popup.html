@@ -40,6 +40,16 @@
         <p>Solo se leen al pulsar. Elige un enlace para revisar la solicitud en IDG; la extensión no inicia descargas silenciosas.</p>
         <ul id="links"></ul>
       </section>
+      <section aria-labelledby="media-title">
+        <h2 id="media-title">Video y audio</h2>
+        <label class="media-toggle"><input id="media-global" type="checkbox" /> Activar detección global</label>
+        <label class="media-toggle"><input id="media-site" type="checkbox" /> <span id="media-site-label">Detectar medios en este sitio</span></label>
+        <button id="media-site-reset" type="button" hidden>Seguir el ajuste global</button>
+        <p>La búsqueda comienza al abrir esta extensión y se limita a la pestaña actual. Los medios directos necesitan confirmación en IDG; HLS/DASH se identifican pero aún no se procesan. Los blobs locales no se transfieren.</p>
+        <button id="media-scan" type="button">Buscar medios de esta pestaña</button>
+        <p id="media-notice" role="status" aria-live="polite">La detección está desactivada.</p>
+        <ul id="media-candidates" aria-label="Medios detectados"></ul>
+      </section>
       <p id="notice" role="status"></p>
       <footer><button id="open" type="button">Abrir IDG</button><small>Sin publicación en tiendas</small></footer>
     </main>

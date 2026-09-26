@@ -27,7 +27,15 @@ export type StartPolicy = "now" | "later" | "queue";
 export type CreateDownload = { context: string, private: boolean, apply_rules: boolean, rule_overrides: Array<string>, queue_id: string, input: NewDownload, options: TransferOptions, category: string, start: StartPolicy, };
 export type AppPreferences = { welcome_done: boolean, directory: string, theme: string, view: string, close_action: string, autopick_mode: string, notify_completed: boolean, notify_failed: boolean, mini_window: boolean, drop_target: boolean, queue_running: boolean, };
 export type ExtensionState = { autopick_mode: string, active_count: number, jobs: Array<DownloadSnapshot>, };
-export type CaptureProposal = { id: string, url: string, name: string, source: string, };
+export type MediaKind = "video" | "audio";
+export type MediaManifestKind = "none" | "hls" | "dash";
+export type MediaSizeKind = "unknown" | "exact" | "estimated";
+export type MediaMetadata = { kind: MediaKind, title: string, mime_type: string | null, width: number | null, height: number | null, frame_rate_milli: number | null, video_codec: string | null, audio_codec: string | null, video_tracks: number | null, audio_tracks: number | null,
+/**
+ * Decimal strings avoid loss of precision when the UI handles 64-bit data.
+ */
+duration_ms: string | null, size_bytes: string | null, size_kind: MediaSizeKind, manifest_kind: MediaManifestKind, };
+export type CaptureProposal = { id: string, url: string, name: string, source: string, media: MediaMetadata | null, };
 export type CaptureDecision = "pending" | "accepted" | "rejected";
 export type RequestMode = "automatic" | { "manual": { requests: number, } };
 export type Priority = "high" | "normal" | "low";

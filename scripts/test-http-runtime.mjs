@@ -18,6 +18,11 @@ const spec=(route,name)=>({url:f.url+route,directory:files,name,expected_sha256:
 try{
  await start();
  const capabilities=await probe(['capabilities']);assert.equal(capabilities.schema_version,4);assert.equal(capabilities.max_write_bytes,65536);assert.equal(capabilities.strong_validator_required,true);assert.ok(capabilities.operations.includes('add_download_with_options'));assert.ok(capabilities.operations.includes('create_download'));assert.ok(capabilities.operations.includes('organization'));
+ await probe(['add','media-audio'],{url:f.url+'/fixture-audio.wav',directory:files,name:'fixture-audio.wav',expected_sha256:f.mediaSha256,conflict:'reject'});
+ const audioJob=await wait('media-audio',j=>j.state==='completed');const audioBytes=await readFile(path.join(files,'fixture-audio.wav'));
+ assert.equal(audioJob.verified_against_reference,true);assert.equal(audioJob.calculated_sha256,f.mediaSha256);assert.equal(createHash('sha256').update(audioBytes).digest('hex'),f.mediaSha256);
+ assert.equal(audioBytes.toString('ascii',0,4),'RIFF');assert.equal(audioBytes.toString('ascii',8,12),'WAVE');
+ assert.equal(f.records.filter(r=>r.route==='/fixture-audio.wav').length,1,JSON.stringify(f.records.filter(r=>r.route==='/fixture-audio.wav')));
  await probe(['limits','set'],{max_downloads:1,global_requests:16,origin_requests:8,bytes_per_second:null});
  watcher=spawn(exe('idg-probe'),['watch'],{windowsHide:true,stdio:['ignore','pipe','ignore']});
  watcher.stdout.on('data',b=>watched+=b);
@@ -37,7 +42,7 @@ try{
  await probe(['resume','crash']);const complete=await wait('crash',j=>j.state==='completed');assert.equal(complete.verified_against_reference,true);assert.equal(complete.calculated_sha256,expectedHash());
  const final=await readFile(path.join(files,'crash.bin'));assert.equal(createHash('sha256').update(final).digest('hex'),expectedHash());
  const ranged=f.records.find(r=>r.route==='/slow'&&r.range);assert.equal(ranged.range,`bytes=${recovered.durable_bytes}-`);assert.equal(ranged.bytes,SIZE-Number(recovered.durable_bytes));
- await probe(['add','crash'],input);assert.equal((await probe(['list'])).jobs.length,1);
+ await probe(['add','crash'],input);assert.deepEqual((await probe(['list'])).jobs.map(j=>j.id).sort(),['crash','media-audio']);
  for(const [route,id,error] of [['/ignore-range','ignore','range_ignored'],['/bad-range','bad','invalid_range'],['/changed','changed','resource_changed']]){
   await probe(['add',id],spec(route,id+'.bin'));await wait(id,j=>Number(j.durable_bytes)>=1048576&&j.state==='downloading');await probe(['pause',id]);const paused=await wait(id,j=>j.state==='paused');await probe(['resume',id]);const failed=await wait(id,j=>j.state==='failed');assert.equal(failed.error,error);assert.equal(failed.durable_bytes,paused.durable_bytes);
  }
