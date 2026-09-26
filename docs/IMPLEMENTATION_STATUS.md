@@ -1,6 +1,6 @@
 # Estado de implementación
 
-Estado actual (2026-09-26): **fase 08 EN_CURSO** en `feat/08-firefox-y-navegadores`, dependiente de `feat/07-extension-chromium`. La PR #7 permanece en borrador y conserva su base en fase 06; PR #8 ya fue integrada a fase 07 antes de esta tarea. No se integró ninguna PR nueva aquí. Fase 07 mantiene pendientes sus permisos y gestos con manifiesto normal. La cancelación de energía simulada de fase 06 continúa BLOQUEADA / PENDIENTE. Las secciones históricas conservan su estado al momento de cada commit; el bloque de fase 08 al final es la evidencia vigente.
+Estado actual (2026-09-26): **fase 09 EN_CURSO** en `feat/09-deteccion-multimedia`, dependiente de `feat/08-firefox-y-navegadores`. PR #9 sigue en borrador contra fase 07; PR #7 sigue en borrador contra fase 06; PR #8 está integrada en fase 07. La PR de fase 09 se abrirá contra fase 08 y no se fusionará en esta tarea. Fases 07/08 conservan sus pendientes de permisos/gestos normales y transferencia/hash real de Firefox. AutoPick sigue pendiente con captura automática deshabilitada; las sesiones autenticadas no se transfieren. La cancelación de energía simulada de fase 06 sigue **BLOQUEADA / PENDIENTE** y no se repitió. Las secciones anteriores son evidencia histórica; el último bloque de fase 09 refleja el estado actual.
 No marcar una fila completada solo por generar archivos. Completar evidencia conforme se ejecute cada fase.
 
 Estados: PLANIFICADO, EN_CURSO, IMPLEMENTADO_NO_VERIFICADO, VERIFICADO, BLOQUEADO, DIFERIDO.
@@ -22,9 +22,9 @@ Estados: PLANIFICADO, EN_CURSO, IMPLEMENTADO_NO_VERIFICADO, VERIFICADO, BLOQUEAD
 | ORG-03 | 06, 07 | EN_CURSO | Importación/preview y monitor opt-in; recogida de enlaces desde páginas pendiente de 07. |
 | ORG-04 | 06, 12 | EN_CURSO | Retención/historial restaurable; presencia/identificación general de archivos en 12. |
 | ORG-05 a ORG-06 | 06, 12 | IMPLEMENTADO; ver cierre 06 y límites | URL/contexto/hash, estadísticas locales opt-in con método documentado. Modo privado completo en 12. |
-| EXT-01 a EXT-08 | 01, 07, 08 | EN_CURSO | Chromium: enlace público elegido explícitamente verificado en fase 07; descargas ya iniciadas no se capturan. Firefox: build, popup, adaptador, manifiesto y pruebas unitarias implementados; transferencia real bloqueada por registro del host en otro checkout. AutoPick sigue siendo requisito; captura automática deshabilitada. Sesiones autenticadas no soportadas. Permisos y gestos con manifiestos normales pendientes. Matriz por navegador al final. |
-| MEDIA-01 a MEDIA-03 | 09, 10 | PLANIFICADO | — |
-| MEDIA-04 a MEDIA-07 | 10 | PLANIFICADO | — |
+| EXT-01 a EXT-08 | 01, 07, 08 | EN_CURSO | Chromium: enlace directo explícito verificado en fase 07; captura automática deshabilitada. Firefox: build/manifiesto/popup y unitarias; último arnés llegó al diálogo real, que no cerró tras aceptar; sin archivo/hash. Registro propio de este checkout retirado. AutoPick requerido; sesiones autenticadas no soportadas; gestos del manifiesto normal pendientes. |
+| MEDIA-01 a MEDIA-03 | 09, 10 | IMPLEMENTADO_NO_VERIFICADO (E2E) | Modelo acotado, detección opt-in DOM y metadatos de respuesta en el origen autorizado de Chrome, popup y diálogo de aceptación; audio/video directos seleccionan el original. Unitarias y WAV real por runtime/hash pasan. Extensión→Tauri→archivo/hash pendiente; Firefox solo DOM/metadatos declarados. HLS/DASH identificados, no procesados. |
+| MEDIA-04 a MEDIA-07 | 10 | PLANIFICADO | Resolver variantes HLS/DASH, selección de pistas/calidad, conversión y otros procesamientos siguen para fase 10; sin soporte de evasión DRM. |
 | SEC-01 a SEC-06 | Todas; revisión 12, 15 | PLANIFICADO | — |
 | SEC-07 sincronización | Opcional 17 | DIFERIDO | No forma parte de la entrega base. |
 | SEC-08 BitTorrent | Opcional 16 | DIFERIDO | No forma parte de la entrega base. |
@@ -528,3 +528,43 @@ La energía de fase 06 sigue **BLOQUEADA / PENDIENTE**, sin repetición. Permiso
 La PR #9 continúa en borrador y con su base `feat/07-extension-chromium`. Los dos runs GitHub de su padre `f0498f8f4e986da395517aa1812de7731ca109ca` estaban aprobados; esos runs no acreditan este nuevo commit. La modificación de host se conserva únicamente en la rama/PR 08.
 
 **SIGUIENTE_PASO vigente:** publicar esta corrección en `feat/08-firefox-y-navegadores`, mantener PR #9 en borrador por el pendiente de transferencia/permisos, y abrir el worktree `feat/09-deteccion-multimedia` desde el HEAD vigente de fase 08. Continuar solo con fase 09; no fusionar PR #6, #7, #9 ni la nueva PR, no publicar extensiones y no avanzar a fase 10.
+
+## Fase 09 — detección multimedia y selección del original (2026-09-26)
+
+**Estado: EN_CURSO; no declarar la fase completa.** Rama `feat/09-deteccion-multimedia`, basada en el HEAD de fase 08 `170ec9b99041e2ae0014faf808c066b19bfa27f7`. Depende de `feat/08-firefox-y-navegadores` y PR #9, que continúa en borrador contra `feat/07-extension-chromium`. PR #7 mantiene su base en fase 06; ninguna PR se fusionó aquí. No se alteró el código de host de fase 08: el nombre por checkout y los scripts de registro/desregistro heredados se mantienen en la PR #9.
+
+### Implementado en el alcance 09
+
+- `idg-protocol` incorpora `MediaMetadata` versionado, acotado y redactado en `Debug`; los tipos TS se regeneran. `idg-runtime` valida fuente/metadata y solo persiste datos multimedia saneados cuando el usuario acepta la propuesta directa.
+- La extensión normaliza candidatos vídeo/audio desde elementos `video`, `audio` y `source`; lista por tab/frame/reproductor, deduplica, ofrece configuración global/por sitio y botón accesible por reproductor. Domina mutaciones y resize/fullscreen sin sondeo frecuente. En Chrome, el observador opt-in pide solo encabezados de respuesta del origen principal autorizado temporalmente por una acción `activeTab`; no inspecciona cuerpos ni cookies. Firefox recurre a DOM y deja los campos de red como desconocidos; no declara ni pide `webRequest`/host permissions.
+- La selección explícita admite el archivo original HTTP(S) público, sin credenciales, parámetros o fragmentos; IDG presenta confirmación real y conserva metadatos permitidos. No se inventa calidad, FPS, códec, duración o tamaño. HLS/DASH se detectan y se explican como limitados; `blob:` de MediaSource no se trata como archivo. Solo video/audio, variantes/calidades, separación de pistas y conversión siguen fuera de fase 09, principalmente fase 10; no hay evasión DRM.
+- Se añadieron suites unitarias de modelo, content script, background, popup y diálogo. El fixture WAV se descargó por el runtime real y el SHA-256 final coincidió con el servidor. Esto verifica el motor/archivo, no la integración de captura multimedia desde el navegador.
+
+### Verificación local vinculada al código final antes de publicar
+
+`npx --yes pnpm@12.4.2 test:unit`: 14 archivos, 70/70 aprobados. `npx --yes pnpm@12.4.2 check`: aprobado. `scripts/Check.ps1` en Windows, con el PATH de Cargo fijado solo para esa sesión: formato Rust, Clippy `-D warnings`, 73 tests del workspace, generación estable, TypeScript, 70 unitarias, builds Chromium/Firefox, test de permisos/manifiestos, build Tauri, runtime/HTTP y segmentación: salida 0. El arnés de HTTP validó el WAV local, RIFF/WAVE y SHA-256 de referencia. Coverage no se volvió a medir; no se cambiaron métricas, exclusiones o umbrales. `cargo llvm-cov` sigue incluyendo tests inline `#[cfg(test)]` y no se reporta un porcentaje nuevo. CI remoto se consultará para el HEAD real tras el push.
+
+Un primer `Check.ps1` detectó una expectativa antigua en `test-http-runtime.mjs`: el nuevo caso WAV añadía un segundo trabajo, mientras la prueba de replay esperaba solo `crash`. Se cambió la aserción a la lista exacta `['crash','media-audio']`, útil para detectar duplicados. La repetición completa aprobó; no se modificó el motor por este fallo de harness.
+
+### Registro de host y navegadores
+
+El host de Firefox específico de este checkout se registró temporalmente con `Register-NativeHost.ps1 -Browser Firefox`; no se registraron Chrome/Edge ni se sustituyó el nombre habitual. `test-firefox-capture.mjs` pasó el handshake real y abrió Firefox 156 aislado y el diálogo Tauri de nueva descarga. Tras aceptar, el diálogo permaneció visible hasta el timeout de 15 segundos. `Unregister-NativeHost.ps1 -Browser Firefox` corrió en `finally` y la clave única quedó retirada. No se completó el trabajo, no se encontró archivo final ni se calculó hash; no se repitió el recorrido.
+
+| Navegador observado en el entorno | Build/estático | Interacción fase 09 | Transferencia multimedia y hash |
+|---|---|---|---|
+| Chrome estable 154.0.8037.58 | Build Chromium, manifiesto y pruebas unitarias aprobados | No ejecutada para medios | PENDIENTE; el enlace de fase 07 no acredita multimedia |
+| Edge 153.0.4234.48 | Build Chromium/estáticos; no demuestra integración Edge | No ejecutada | PENDIENTE |
+| Firefox 156.0 | Build Firefox, manifiesto y pruebas unitarias aprobados | Automatizada: popup/Native Messaging conectó y abrió diálogo con enlace directo; aceptación venció | No hay archivo/hash; E2E de selección desde reproductor no ejecutado |
+| Brave, Opera, Vivaldi | Sin build o ejecución específica de este cierre | No ejecutada | PENDIENTE |
+
+No hubo prueba manual humana ni captura visual real de reproductor. Ninguna prueba con permisos preconcedidos se usa como evidencia de permisos normales. `activeTab` ofrece capacidades distintas por motor: [documentación Chrome](https://developer.chrome.com/docs/extensions/develop/concepts/activeTab) permite webRequest del origen principal temporal; [Mozilla](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/permissions) documenta eventos `webRequest` bajo permisos de host que Firefox no solicita aquí.
+
+### Pendientes conservados
+
+- Fase 07/08: permisos/gestos del manifiesto normal, incluido conceder/rechazar, abrir por icono y menú contextual, pendientes de comprobación permitida/humana. Firefox: archivo final y hash reales pendientes; el último arnés no terminó tras aceptación. PR #9 permanece borrador.
+- AutoPick sigue siendo requisito del producto, pero la captura automática de descargas ya iniciadas está deshabilitada. No se infiere imposibilidad general desde `DownloadItem`.
+- Sesiones autenticadas no soportadas. No transferir cookies/credenciales. Ventanas privadas están denegadas en manifiestos de desarrollo; no se verificó modo privado. Firefox Containers no está implementado; no hay mezcla de contextos.
+- Chrome/Edge/Firefox aún necesitan E2E de selección multimedia desde reproductor y transferencia de archivo/hash. HLS/DASH solo se identifican, su resolución pertenece a fase 10. Windows 10, accesibilidad exhaustiva y navegadores adicionales siguen pendientes.
+- Cancelación de energía simulada de fase 06: **BLOQUEADA / PENDIENTE**, no repetida. No se modificaron preferencias de energía ni se activaron acciones.
+
+**SIGUIENTE_PASO:** publicar los cambios como PR dependiente hacia fase 08 y revisar el CI del HEAD exacto. Mantener PR #9 en borrador hasta que su transferencia Firefox/permisos pendientes tengan resultado; revisar fase 09 sin fusionar PR #6, #7, #9 o la nueva PR. No publicar extensiones ni releases y no avanzar a fase 10.
