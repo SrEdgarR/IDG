@@ -69,7 +69,7 @@ Después de compilar host y extensión:
 .\scripts\Register-NativeHost.ps1
 ```
 
-Registra solo `io.github.sredgarr.idg.dev` bajo HKCU, para Chrome/Chromium/Edge y Firefox. Los manifiestos quedan en `.local/native-host`, con ruta absoluta y allowlist exacta. El script rechaza un registro del mismo nombre perteneciente a otra ubicación; no reemplaza otras instalaciones. Ejecuta este registro otra vez si mueves el repositorio, retirando primero el registro desde su ubicación original.
+El build y los scripts obtienen el host de desarrollo de `scripts/native-host-name.mjs`: su sufijo de 16 caracteres deriva de la ruta canónica de este checkout, sin publicar la ruta. El nombre generado también queda en el archivo local ignorado `.local/native-host/host-name.txt`, para que el escritorio consulte el mismo registro. Así copias y worktrees no comparten el host habitual `io.github.sredgarr.idg.dev`. El registro se limita a HKCU y a los navegadores indicados; los manifiestos quedan en `.local/native-host`, con ruta absoluta y allowlist exacta. El script rechaza un registro del mismo nombre perteneciente a otra ubicación y el desregistro solo retira claves que apuntan a sus manifiestos locales sin valores o subclaves adicionales.
 
 Chromium: abre `chrome://extensions` (Edge: `edge://extensions`), activa el modo de desarrollo y carga **descomprimida** `apps/extension/build/chromium`. Abre la extensión IDG desde el menú de extensiones. El ID de desarrollo estable es `keopaccdnmianljlfkpinbkfppcpfdlk`.
 
@@ -77,7 +77,7 @@ Firefox: compila el build separado, abre `about:debugging#/runtime/this-firefox`
 
 Los dos popups muestran el estado real de Native Messaging, permiten reconectar y muestran trabajos del motor; Pausar/Reanudar envía comandos reales. Chromium permite previsualizar enlaces de la página tras una acción explícita. Firefox permite escribir una URL HTTP(S) directa o elegir un enlace desde su menú contextual. En ambos casos la solicitud requiere confirmación en IDG y excluye parámetros, fragmentos y sesión autenticada. Los manifiestos normales no solicitan el permiso `downloads` ni habilitan la captura automática. AutoPick sigue siendo un requisito del producto y la captura de descargas ya iniciadas está deshabilitada; esa limitación de `DownloadItem` no prueba que cualquier vía futura sea imposible. Se deben conservar las descargas del navegador mientras no exista una vía segura.
 
-La transferencia directa de Chromium se comprobó con fixture local en fase 07 y está atribuida a ese commit en el estado del proyecto; no se volvió a ejecutar en este worktree porque el registro Native Messaging apunta a otro checkout. En fase 08 pasaron las pruebas unitarias y del manifiesto Firefox, y se añadió un arnés de transferencia real con hash. Su ejecución se bloqueó antes de conectar: el registro HKCU de Firefox todavía apunta al host compilado en la otra copia. `Register-NativeHost.ps1` protege esa instalación y se niega a sustituirla; no se cambió el registro. Para ejecutar la prueba real, compila host/runtime en este checkout y cambia el registro de forma reversible desde la copia propietaria, solo después de cerrar sus procesos. El arnés ahora detecta y explica este requisito antes de iniciar la prueba.
+La transferencia directa de Chromium se comprobó con fixture local en fase 07 y está atribuida a ese commit; no se repitió aquí. En fase 08 se compiló Firefox y pasó la prueba de manifiesto. Los scripts ahora derivan un nombre de host de desarrollo por ruta de checkout. El ciclo HKCU Firefox de esta copia se registró y retiró: la entrada habitual del checkout principal conservó su valor exacto y la allowlist Firefox siguió conteniendo solo el ID estable. La prueba de transferencia se intentó una vez con Tauri/WebView2 del mismo worktree, pero el arnés agotó 15 s esperando el estado `Conectado` antes de abrir Firefox; no se creó un archivo y no hay hash que atribuir a Firefox. No se repitió el recorrido.
 
 Los permisos y gestos del manifiesto normal (concesión o rechazo, abrir desde el icono, `activeTab` y menú contextual) siguen pendientes. Las pruebas con manifiesto de integración preconcedido no los acreditan. Las sesiones autenticadas no están soportadas: no se copian cookies ni credenciales; cuando una solicitud no pueda reproducirse con seguridad, se conserva la alternativa del navegador.
 
@@ -89,7 +89,15 @@ Retirada reversible:
 .\scripts\Unregister-NativeHost.ps1
 ```
 
-Retira únicamente los registros que todavía apuntan a esta copia; conserva manifiestos y archivos. Quita la extensión local desde el navegador. Puedes volver a registrarla. Los scripts admiten `-Browser Chromium` o `-Browser Firefox`. La prueba de registro/desregistro y host ausente pasó aquí. En fase 05 los registros preexistentes de esta copia se conservan. No retires registros de otra instalación.
+Retira únicamente los registros que todavía apuntan a esta copia; conserva manifiestos y archivos. Quita la extensión local desde el navegador. Puedes volver a registrarla. Los scripts admiten `-Browser Chromium` o `-Browser Firefox`. Para repetir solo la prueba de transferencia Firefox:
+
+```powershell
+.\scripts\Register-NativeHost.ps1 -Browser Firefox
+node scripts/test-firefox-capture.mjs
+.\scripts\Unregister-NativeHost.ps1 -Browser Firefox
+```
+
+El arnés requiere que IDG/Tauri alcance `Conectado`; si no lo hace, no acredita el handshake ni el archivo/hash. La prueba de registro/desregistro Firefox acotada pasó para este worktree. No retires registros de otra instalación.
 
 ## Comprobaciones reproducibles
 

@@ -5,16 +5,20 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import assert from "node:assert/strict";
+import { developmentNativeHostName } from "./native-host-name.mjs";
 const root = process.cwd();
 const identity = JSON.parse(
   await readFile("apps/extension/development-identity.json", "utf8"),
 );
+const nativeHostName = developmentNativeHostName(root);
+assert.match(nativeHostName, /^io\.github\.sredgarr\.idg\.dev\.[0-9a-f]{16}$/);
 const nativeManifestPath = execFileSync("powershell.exe", [
   "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
-  "(Get-Item -LiteralPath 'HKCU:\\Software\\Mozilla\\NativeMessagingHosts\\io.github.sredgarr.idg.dev').GetValue('')",
+  `(Get-Item -LiteralPath 'HKCU:\\Software\\Mozilla\\NativeMessagingHosts\\${nativeHostName}').GetValue('')`,
 ], { encoding: "utf8", windowsHide: true }).trim();
 const nativeManifest = JSON.parse(await readFile(nativeManifestPath, "utf8"));
-assert.ok(nativeManifest.allowed_extensions?.includes(identity.firefox_id), "El host registrado debe permitir el ID estable de Firefox IDG.");
+assert.equal(nativeManifest.name, nativeHostName, "El manifiesto debe tener el mismo nombre de host que la extensión.");
+assert.deepEqual(nativeManifest.allowed_extensions, [identity.firefox_id], "El host debe permitir solo el ID estable de Firefox IDG.");
 const runtimeDirectory = path.dirname(path.resolve("target/debug/idg-runtime.exe"));
 const hostRuntimeDirectory = path.dirname(path.resolve(nativeManifest.path));
 if (runtimeDirectory.toLowerCase() !== hostRuntimeDirectory.toLowerCase()) {

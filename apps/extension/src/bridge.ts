@@ -1,7 +1,9 @@
 import type { Command, Payload, Request, Response, Snapshot } from "../../../packages/shared-types/protocol";
 import { getBrowserApi } from "./browser-api";
 
-const host = "io.github.sredgarr.idg.dev";
+declare const __IDG_NATIVE_HOST_NAME__: string;
+
+const host = __IDG_NATIVE_HOST_NAME__;
 const timeoutMs = 5000;
 
 function valid(value: unknown): value is Response {

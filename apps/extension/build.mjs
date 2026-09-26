@@ -1,21 +1,29 @@
 import { build } from "esbuild";
 import { fileURLToPath } from "node:url";
 import { mkdir, readFile, copyFile, writeFile } from "node:fs/promises";
+import { developmentNativeHostName, saveDevelopmentNativeHostName } from "../../scripts/native-host-name.mjs";
+const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
 const identity = JSON.parse(
   await readFile(new URL("./development-identity.json", import.meta.url)),
 );
+const nativeHostName = developmentNativeHostName(repositoryRoot);
+saveDevelopmentNativeHostName(repositoryRoot, nativeHostName);
+const compileOptions = {
+  bundle: true,
+  format: "iife",
+  target: "es2022",
+  define: { __IDG_NATIVE_HOST_NAME__: JSON.stringify(nativeHostName) },
+};
 for (const browser of ["chromium", "firefox"]) {
   const output = new URL(`./build/${browser}/`, import.meta.url);
   await mkdir(output, { recursive: true });
   await build({
     entryPoints: { popup: fileURLToPath(new URL(browser === "chromium" ? "./src/popup.ts" : "./src/popup-firefox.ts", import.meta.url)) },
     outdir: fileURLToPath(output),
-    bundle: true,
-    format: "iife",
-    target: "es2022",
+    ...compileOptions,
   });
-  if (browser === "chromium") await build({ entryPoints: [fileURLToPath(new URL("./src/worker.ts", import.meta.url))], outfile: fileURLToPath(new URL("worker.js", output)), bundle: true, format: "iife", target: "es2022" });
-  else await build({ entryPoints: [fileURLToPath(new URL("./src/firefox-background.ts", import.meta.url))], outfile: fileURLToPath(new URL("background.js", output)), bundle: true, format: "iife", target: "es2022" });
+  if (browser === "chromium") await build({ entryPoints: [fileURLToPath(new URL("./src/worker.ts", import.meta.url))], outfile: fileURLToPath(new URL("worker.js", output)), ...compileOptions });
+  else await build({ entryPoints: [fileURLToPath(new URL("./src/firefox-background.ts", import.meta.url))], outfile: fileURLToPath(new URL("background.js", output)), ...compileOptions });
   for (const name of ["popup.css"])
     await copyFile(
       new URL(`./src/${name}`, import.meta.url),

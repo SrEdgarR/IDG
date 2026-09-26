@@ -7,21 +7,27 @@ import { Builder, By, until } from "selenium-webdriver";
 import firefox from "selenium-webdriver/firefox.js";
 import { desktopHarness, sleep } from "./desktop-harness.mjs";
 import { expectedHash, startSegments } from "../fixtures/http/segments.mjs";
+import { developmentNativeHostName } from "./native-host-name.mjs";
 
 const root = process.cwd();
 const identity = JSON.parse(await readFile("apps/extension/development-identity.json", "utf8"));
+const nativeHostName = developmentNativeHostName(root);
+assert.match(nativeHostName, /^io\.github\.sredgarr\.idg\.dev\.[0-9a-f]{16}$/);
 const nativeManifestPath = execFileSync("powershell.exe", [
   "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
-  "(Get-Item -LiteralPath 'HKCU:\\Software\\Mozilla\\NativeMessagingHosts\\io.github.sredgarr.idg.dev').GetValue('')",
+  `(Get-Item -LiteralPath 'HKCU:\\Software\\Mozilla\\NativeMessagingHosts\\${nativeHostName}').GetValue('')`,
 ], { encoding: "utf8", windowsHide: true }).trim();
 const nativeManifest = JSON.parse(await readFile(nativeManifestPath, "utf8"));
-assert.ok(nativeManifest.allowed_extensions?.includes(identity.firefox_id), "El host registrado debe permitir solo el ID estable de Firefox IDG.");
+assert.equal(nativeManifest.name, nativeHostName, "El manifiesto debe tener el mismo nombre de host que la extensión.");
+assert.deepEqual(nativeManifest.allowed_extensions, [identity.firefox_id], "El host debe permitir solo el ID estable de Firefox IDG.");
 assert.ok(await readFile(nativeManifest.path).then(() => true, () => false), "El ejecutable del host registrado debe existir.");
 const runtimeDirectory = path.dirname(path.resolve("target/debug/idg-runtime.exe"));
 const hostRuntimeDirectory = path.dirname(path.resolve(nativeManifest.path));
 if (runtimeDirectory.toLowerCase() !== hostRuntimeDirectory.toLowerCase()) {
   throw new Error("BLOQUEADA: el registro Native Messaging de Firefox pertenece a otro checkout. No se cambió el registro; ejecuta la prueba solo cuando host y runtime sean hermanos en esta copia.");
 }
+const desktopDirectory = path.dirname(path.resolve("target/debug/idg-desktop.exe"));
+assert.equal(desktopDirectory.toLowerCase(), hostRuntimeDirectory.toLowerCase(), "El escritorio, runtime y host deben pertenecer al mismo checkout.");
 
 await mkdir("artifacts", { recursive: true });
 const fixture = await startSegments({ size: 1024 * 1024, rate: 512 * 1024 });
