@@ -1,5 +1,5 @@
 import { RuleResult } from "./Rules";
-import type { RulePreview } from "../../../packages/shared-types/protocol";
+import type { AppPreferences, RulePreview } from "../../../packages/shared-types/protocol";
 import type { DesktopApi } from "./desktop";
 import { DownloadFailure, execute } from "./desktop";
 import { useOrganization } from "./Organization";
@@ -13,6 +13,7 @@ import type {
 } from "../../../packages/shared-types/protocol";
 import { Modal, Pending } from "./ui/Modal";
 import { validateDraft } from "./model";
+import type { DownloadAuthDraft, DownloadProxyDraft } from "./model";
 
 function describeMediaMetadata(media: MediaMetadata): string {
   const details = [
@@ -65,6 +66,7 @@ export function NewDownloadDialog({
   onAccepted?: () => void;
 }) {
   const [directory, setDirectory] = useState("");
+  const [globalProxy, setGlobalProxy] = useState<AppPreferences["proxy"] | null>(null);
   const { state: organization } = useOrganization(Boolean(backend));
   const [queueId, setQueueId] = useState("main");
   const [applyRules, setApplyRules] = useState(true),
@@ -86,6 +88,7 @@ export function NewDownloadDialog({
         .preferences()
         .then((p) => {
           if (!directoryEdited.current) setDirectory(p.directory);
+          setGlobalProxy(p.proxy ?? { mode: "direct" });
           setFfmpegConfigured(Boolean(p.media_ffmpeg_path));
         })
         .catch(() => {});
@@ -94,6 +97,16 @@ export function NewDownloadDialog({
   const [requests, setRequests] = useState("automatic");
   const [limit, setLimit] = useState("");
   const [priority, setPriority] = useState<"normal" | "high" | "low">("normal");
+  const [authUsername, setAuthUsername] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authHeaders, setAuthHeaders] = useState<
+    { id: string; name: string; value: string }[]
+  >([]);
+  const [allowCleartextFtp, setAllowCleartextFtp] = useState(false);
+  const [proxyMode, setProxyMode] = useState<DownloadProxyDraft["mode"]>("inherit");
+  const [proxyUrl, setProxyUrl] = useState("");
+  const [name, setName] = useState(initialName);
+  const [url, setUrl] = useState(initialUrl);
   const [failure, setFailure] = useState("");
   const [busy, setBusy] = useState(false);
   const [mediaPlan, setMediaPlan] = useState<MediaPlan | null>(null);
@@ -104,6 +117,16 @@ export function NewDownloadDialog({
   const [ffmpegConfigured, setFfmpegConfigured] = useState(false);
   const sending = useRef(false);
   const requestId = useRef(crypto.randomUUID());
+  const authDraft: DownloadAuthDraft = {
+    username: authUsername,
+    password: authPassword,
+    headers: authHeaders.map(({ name, value }) => ({ name, value })),
+  };
+  const proxyDraft: DownloadProxyDraft = { mode: proxyMode, url: proxyUrl };
+  const validationErrors = validateDraft(name, url, authDraft, allowCleartextFtp, proxyDraft);
+  const hasAuth = Boolean(
+    authUsername || authPassword || authHeaders.some(({ name, value }) => name || value),
+  );
   async function submit(
     start: StartPolicy = "now",
     policy: ConflictPolicy = conflict,
@@ -111,14 +134,15 @@ export function NewDownloadDialog({
     if (!backend || sending.current) return;
     setChecked(true);
     setFailure("");
-    if (Object.keys(validateDraft(name, url)).length || !directory) {
-      setFailure("Revisa URL, nombre y carpeta.");
-      return;
-    }
     const isManifest =
       media?.manifest_kind === "hls" ||
       media?.manifest_kind === "dash" ||
       manifestUrl(url);
+    const draftErrors = validateDraft(name, url, authDraft, allowCleartextFtp, proxyDraft);
+    if (Object.keys(draftErrors).length || !directory || (isManifest && hasAuth)) {
+      setFailure("Revisa URL, nombre, carpeta y datos de conexión.");
+      return;
+    }
     if (isManifest && !mediaPlan) {
       setFailure("Analiza el manifiesto antes de crear el trabajo multimedia.");
       return;
@@ -154,15 +178,38 @@ export function NewDownloadDialog({
     sending.current = true;
     setBusy(true);
     setRecoverable(null);
+    const scheme = (() => {
+      try {
+        return new URL(url).protocol;
+      } catch {
+        return "";
+      }
+    })();
+    const sequentialFtp = scheme === "ftp:" || scheme === "ftps:";
+    if (sequentialFtp && globalProxy?.mode !== "direct") {
+      setFailure("FTP/FTPS requiere Conexión directa en Ajustes; el motor aún no puede enrutar esos protocolos por proxy.");
+      return;
+    }
+    const newInput = {
+      url,
+      directory,
+      name,
+      expected_sha256: null,
+      conflict: policy,
+      auth: hasAuth
+        ? {
+            username: authUsername || null,
+            password: authPassword || null,
+            headers: authHeaders
+              .filter(({ name: headerName, value }) => headerName || value)
+              .map(({ name: headerName, value }) => ({ name: headerName, value })),
+          }
+        : null,
+      allow_cleartext_ftp: scheme === "ftp:" && allowCleartextFtp,
+    };
     try {
       if (policy === "reject" && !captureId) {
-        const match = await backend.recoverable({
-          url,
-          directory,
-          name,
-          expected_sha256: null,
-          conflict: policy,
-        });
+        const match = await backend.recoverable(newInput);
         if (match) {
           setRecoverable(match);
           setPendingStart(start);
@@ -171,15 +218,21 @@ export function NewDownloadDialog({
         }
       }
       const id = captureId ?? requestId.current;
-      const newInput = { url, directory, name, expected_sha256: null, conflict: policy };
       const transferOptions = {
-          mode:
-            requests === "automatic"
+          mode: sequentialFtp
+            ? { manual: { requests: 1 } }
+            : requests === "automatic"
               ? "automatic"
               : { manual: { requests: Number(requests) } },
           replay_safe: replaySafe,
           bytes_per_second: limit ? Number(limit) * 1024 : null,
           priority,
+          proxy:
+            proxyMode === "inherit"
+              ? null
+              : proxyMode === "explicit"
+                ? { mode: "explicit" as const, url: proxyUrl }
+                : { mode: proxyMode },
         } as const;
       const draft = {
         input: newInput,
@@ -217,7 +270,18 @@ export function NewDownloadDialog({
       if (captureId) onAccepted?.();
       else onClose();
     } catch (e) {
-      setFailure(e instanceof Error ? e.message : String(e));
+      const message = e instanceof Error ? e.message : String(e);
+      const secrets = [
+        authUsername,
+        authPassword,
+        proxyUrl,
+        ...authHeaders.map(({ value }) => value),
+      ];
+      setFailure(
+        secrets.some((secret) => secret && message.includes(secret))
+          ? "No se pudo crear la descarga. Revisa los datos y vuelve a intentarlo."
+          : message,
+      );
       if (e instanceof DownloadFailure && e.code === "conflict") {
         setPendingStart(start);
         setConflictOpen(true);
@@ -227,8 +291,19 @@ export function NewDownloadDialog({
       setBusy(false);
     }
   }
-  const [name, setName] = useState(initialName);
-  const [url, setUrl] = useState(initialUrl);
+  const protocol = (() => {
+    try {
+      return new URL(url).protocol;
+    } catch {
+      return "";
+    }
+  })();
+  const isCleartextFtp = protocol === "ftp:";
+  const isFtps = protocol === "ftps:";
+  const sequentialFtp = isCleartextFtp || isFtps;
+  const supportsHeaders = protocol === "http:" || protocol === "https:";
+  const supportsDownloadProxy = supportsHeaders;
+  const ftpProxyUnavailable = sequentialFtp && globalProxy?.mode !== "direct";
   const isManifest =
     media?.manifest_kind === "hls" ||
     media?.manifest_kind === "dash" ||
@@ -277,7 +352,8 @@ export function NewDownloadDialog({
   }
   const [reveal, setReveal] = useState(false);
   const [checked, setChecked] = useState(false);
-  const errors = checked ? validateDraft(name, url) : {};
+  const mediaAuthUnsupported = isManifest && hasAuth;
+  const errors = checked ? validationErrors : {};
   return (
     <Modal
       title="Nueva descarga"
@@ -378,7 +454,11 @@ export function NewDownloadDialog({
             required
             aria-invalid={!!errors.url}
             aria-describedby="url-help url-error"
-            onChange={(e) => { setUrl(e.target.value); setMediaPlan(null); }}
+            onChange={(e) => {
+              setUrl(e.target.value);
+              setMediaPlan(null);
+              setAllowCleartextFtp(false);
+            }}
           />
         </label>
         <small id="url-help" className="muted">
@@ -395,6 +475,31 @@ export function NewDownloadDialog({
         <p id="url-error" className="error-text">
           {errors.url}
         </p>
+        {isCleartextFtp && (
+          <>
+            <p role="alert" className="error-text">
+              FTP no cifra usuario, contraseña ni archivo; otros equipos de la red podrían leerlos o modificarlos.
+            </p>
+            <label className="check-field">
+              <input
+                type="checkbox"
+                checked={allowCleartextFtp}
+                aria-invalid={!!errors.cleartextFtp}
+                aria-describedby="ftp-confirmation-error"
+                onChange={(e) => setAllowCleartextFtp(e.target.checked)}
+              />
+              Confirmo que quiero usar FTP sin cifrar
+            </label>
+            <p id="ftp-confirmation-error" className="error-text">
+              {errors.cleartextFtp}
+            </p>
+          </>
+        )}
+        {isFtps && (
+          <p className="muted">
+            FTPS usa TLS y valida el certificado del servidor. Si el certificado no es válido, la conexión falla.
+          </p>
+        )}
         <label className="field">
           Nombre del archivo
           <input
@@ -549,7 +654,7 @@ export function NewDownloadDialog({
               >
                 Previsualizar reglas
               </button>
-              {rulePreview && <RuleResult preview={rulePreview} />}
+          {rulePreview && <RuleResult preview={rulePreview} />}
             </section>
           )}
           {backend && (
@@ -574,18 +679,23 @@ export function NewDownloadDialog({
             <label className="field">
               Conexiones
               <select
-                disabled={!backend || busy}
-                value={requests}
+                disabled={!backend || busy || sequentialFtp}
+                value={sequentialFtp ? "1" : requests}
                 onChange={(e) => setRequests(e.target.value)}
               >
                 <option value="automatic">Automáticas</option>
                 {[1, 2, 4, 8, 16, 32].map((n) => (
                   <option key={n} value={n}>
-                    {n} solicitudes como máximo
+                    {n === 1 ? "1 conexión secuencial" : `${n} solicitudes como máximo`}
                   </option>
                 ))}
               </select>
             </label>
+            {sequentialFtp && (
+              <p className="muted">
+                FTP/FTPS usa una conexión secuencial; no se puede descargar en paralelo.
+              </p>
+            )}
             <label className="field">
               Límite
               <input
@@ -616,38 +726,168 @@ export function NewDownloadDialog({
               </select>
             </label>
           </div>
-          <p className="muted">
-            Proxy y datos de solicitud protegidos: fases 11–12.
-          </p>
           <label className="field">
-            Proxy
-            <select disabled aria-describedby="backend-pending">
-              <option>Configuración heredada · pendiente</option>
+            Proxy para esta descarga
+            <select
+              disabled={busy || !supportsDownloadProxy}
+              value={proxyMode}
+              aria-invalid={!!errors.proxy}
+              aria-describedby="proxy-help proxy-error"
+              onChange={(e) => setProxyMode(e.target.value as DownloadProxyDraft["mode"])}
+            >
+              <option value="inherit">Heredar configuración global</option>
+              <option value="direct" disabled={!supportsDownloadProxy}>Conexión directa</option>
+              <option value="environment" disabled={!supportsDownloadProxy}>Sistema y entorno</option>
+              <option value="explicit" disabled={!supportsDownloadProxy}>Proxy explícito</option>
             </select>
           </label>
-          <label className="field">
-            Datos de solicitud permitidos
-            <input
-              type="password"
-              disabled
-              placeholder="Importación segura pendiente · sin datos privados"
-              aria-describedby="backend-pending"
-            />
-          </label>
+          {proxyMode === "explicit" && (
+            <label className="field">
+              URL del proxy
+              <input
+                type="url"
+                autoComplete="off"
+                disabled={busy || !supportsDownloadProxy}
+                value={proxyUrl}
+                aria-invalid={!!errors.proxy}
+                aria-describedby="proxy-help proxy-error"
+                onChange={(e) => setProxyUrl(e.target.value)}
+                placeholder="socks5h://proxy.example:1080"
+              />
+            </label>
+          )}
+          <small id="proxy-help" className="muted">
+          El proxy explícito admite HTTP, HTTPS, SOCKS5 y SOCKS5H, con host y puerto, sin credenciales ni ruta. No usa conexión directa si el proxy explícito falla.
+          </small>
+          {isManifest && (
+            <p className="muted">
+              El análisis del manifiesto no recibe el override por descarga; este se aplica al trabajo multimedia creado después.
+            </p>
+          )}
+          {errors.proxy && <p id="proxy-error" role="alert" className="error-text">{errors.proxy}</p>}
+          {!supportsDownloadProxy && (
+            <p className="muted">
+              {globalProxy === null
+                ? "Espera a que IDG compruebe la configuración global; no se crea el trabajo mientras ese estado sea desconocido."
+                : globalProxy.mode === "direct"
+                ? "FTP/FTPS solo admite conexión directa y no permite cambiar el proxy por descarga."
+                : "FTP/FTPS no puede usar la política global de proxy actual. Cambia a Conexión directa en Ajustes antes de crear el trabajo."}
+            </p>
+          )}
+          <section aria-label="Autenticación y cabeceras" className="media-capture-summary">
+            <h3>Autenticación y cabeceras</h3>
+            <p className="muted">
+              El usuario, la contraseña y los valores de cabecera se envían al motor y se protegen en el registro local. No los escribas en el URL.
+            </p>
+            {protocol === "http:" && hasAuth && (
+              <p role="alert" className="error-text">
+                HTTP no cifra el usuario, la contraseña ni las cabeceras; usa HTTPS para protegerlos durante el envío.
+              </p>
+            )}
+            <label className="field">
+              Usuario del servidor (opcional)
+              <input
+                autoComplete="off"
+                disabled={busy}
+                value={authUsername}
+                aria-invalid={!!errors.auth}
+                aria-describedby="auth-error"
+                onChange={(e) => setAuthUsername(e.target.value)}
+              />
+            </label>
+            <label className="field">
+              Contraseña (opcional)
+              <input
+                type="password"
+                autoComplete="new-password"
+                disabled={busy}
+                value={authPassword}
+                aria-invalid={!!errors.auth}
+                aria-describedby="auth-error"
+                onChange={(e) => setAuthPassword(e.target.value)}
+              />
+            </label>
+            {errors.auth && <p id="auth-error" role="alert" className="error-text">{errors.auth}</p>}
+            <p className="muted">
+              Las cabeceras personalizadas solo se admiten en HTTP/HTTPS. Cookies, autorización y cabeceras que controlan el destino, el rango o el transporte están bloqueadas.
+            </p>
+            {authHeaders.map((header, index) => (
+              <div className="form-grid" key={header.id}>
+                <label className="field">
+                  Nombre de cabecera {index + 1}
+                  <input
+                    autoComplete="off"
+                    disabled={busy || !supportsHeaders || isManifest}
+                    value={header.name}
+                    aria-invalid={!!errors.headers}
+                    aria-describedby="headers-error"
+                    onChange={(e) => setAuthHeaders((current) => current.map((item) =>
+                      item.id === header.id ? { ...item, name: e.target.value } : item,
+                    ))}
+                  />
+                </label>
+                <label className="field">
+                  Valor de cabecera {index + 1}
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    disabled={busy || !supportsHeaders || isManifest}
+                    value={header.value}
+                    aria-invalid={!!errors.headers}
+                    aria-describedby="headers-error"
+                    onChange={(e) => setAuthHeaders((current) => current.map((item) =>
+                      item.id === header.id ? { ...item, value: e.target.value } : item,
+                    ))}
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={busy}
+                  aria-label={`Quitar cabecera ${index + 1}`}
+                  onClick={() => setAuthHeaders((current) => current.filter((item) => item.id !== header.id))}
+                >
+                  Quitar
+                </button>
+              </div>
+            ))}
+            {errors.headers && <p id="headers-error" role="alert" className="error-text">{errors.headers}</p>}
+            <button
+              type="button"
+              disabled={busy || !supportsHeaders || isManifest || authHeaders.length >= 32}
+              onClick={() => setAuthHeaders((current) => [...current, { id: crypto.randomUUID(), name: "", value: "" }])}
+            >
+              Añadir cabecera
+            </button>
+            {!supportsHeaders && !isManifest && (
+              <p className="muted">FTP y FTPS no admiten cabeceras personalizadas.</p>
+            )}
+            {isManifest && (
+              <p className="muted">El análisis HLS/DASH no admite autenticación ni cabeceras; usa un manifiesto público compatible.</p>
+            )}
+            {mediaAuthUnsupported && (
+              <p role="alert" className="error-text">
+                Quita los datos de autenticación y las cabeceras para analizar un manifiesto HLS/DASH.
+              </p>
+            )}
+          </section>
         </details>
         {backend ? (
           <>
             <label className="check-field">
               <input
                 type="checkbox"
-                disabled={busy}
+                disabled={busy || sequentialFtp}
                 checked={replaySafe}
                 onChange={(e) => setReplaySafe(e.target.checked)}
               />
               El enlace permite solicitudes repetidas
             </label>
             <p className="muted">
-              {captureId ? "Obligatorio para transferir desde el navegador: confirma que es un GET público, repetible y sin sesión. Si no estás seguro, cancela y usa el navegador." : "Actívalo solo para un enlace reutilizable. Ante dudas o enlaces de un solo uso se usa una solicitud secuencial; Automático no anula esta protección."}
+              {sequentialFtp
+                ? "FTP/FTPS siempre usa una transferencia secuencial; no ofrece solicitudes repetidas ni descargas segmentadas."
+                : captureId
+                  ? "Obligatorio para transferir desde el navegador: confirma que es un GET público, repetible y sin sesión. Si no estás seguro, cancela y usa el navegador."
+                  : "Actívalo solo para un enlace reutilizable. Ante dudas o enlaces de un solo uso se usa una solicitud secuencial; Automático no anula esta protección."}
             </p>
           </>
         ) : (
@@ -661,7 +901,7 @@ export function NewDownloadDialog({
         <button type="submit">Validar datos</button>
         {checked && (
           <p role="status">
-            {Object.keys(errors).length
+            {Object.keys(errors).length || mediaAuthUnsupported
               ? "Revisa los campos indicados."
               : "Formato válido. No se ha creado ni iniciado ninguna descarga."}
           </p>
@@ -672,14 +912,14 @@ export function NewDownloadDialog({
           </button>
           {!captureId && <button
             type="button"
-            disabled={!backend || busy}
+            disabled={!backend || busy || ftpProxyUnavailable}
             onClick={() => void submit("later")}
           >
             Descargar después
           </button>}
           {!captureId && <button
             type="button"
-            disabled={!backend || busy}
+            disabled={!backend || busy || ftpProxyUnavailable}
             onClick={() => void submit("queue")}
           >
             Añadir a cola
@@ -687,7 +927,7 @@ export function NewDownloadDialog({
           <button
             type="button"
             className="primary"
-            disabled={!backend || busy}
+            disabled={!backend || busy || ftpProxyUnavailable}
             onClick={() => void submit()}
           >
             {captureId ? "Aceptar en IDG" : "Descargar ahora"}

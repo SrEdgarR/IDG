@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { LibraryPreferences } from "./Library";
 import { execute, type DesktopApi } from "./desktop";
 import type {
@@ -97,6 +97,17 @@ export function Settings({
   const [error, setError] = useState("");
   const save = (change: Partial<AppPreferences>) =>
     void savePreferences?.(change).catch((e) => setError(String(e)));
+  const saveProxy = async (proxy: AppPreferences["proxy"]) => {
+    if (!savePreferences) return false;
+    try {
+      await savePreferences({ proxy });
+      setError("");
+      return true;
+    } catch (e) {
+      setError(String(e));
+      return false;
+    }
+  };
   return (
     <Modal title="Configuración" onClose={onClose} wide>
       <div className="settings-layout">
@@ -328,6 +339,33 @@ export function Settings({
               <button onClick={onQueues}>Gestionar colas</button>
               <button onClick={onRules}>Gestionar reglas y categorías</button>
             </div>
+          ) : section === "Conexión" ? (
+            backend && preferences && savePreferences ? (
+              <ProxySettings policy={preferences.proxy} onSave={saveProxy} />
+            ) : (
+              <>
+                <p className="muted">
+                  La configuración de conexión requiere el runtime y aún no se
+                  guarda desde esta galería.
+                </p>
+                <fieldset disabled>
+                  <legend>Proxy no disponible</legend>
+                  <label className="field">
+                    Política de proxy
+                    <select defaultValue="direct">
+                      <option value="direct">Conexión directa</option>
+                      <option value="environment">Sistema y entorno</option>
+                      <option value="explicit">Endpoint explícito</option>
+                    </select>
+                  </label>
+                  <label className="field">
+                    Endpoint HTTP(S)/SOCKS5
+                    <input placeholder="No disponible todavía" />
+                  </label>
+                </fieldset>
+                <Pending>Sin runtime conectado.</Pending>
+              </>
+            )
           ) : (
             <>
               <p className="muted">
@@ -358,6 +396,135 @@ export function Settings({
     </Modal>
   );
 }
+
+function validProxyEndpoint(value: string) {
+  const separator = value.indexOf("://");
+  if (separator < 1 || value.length > 2048) return false;
+  const scheme = value.slice(0, separator);
+  const authority = value.slice(separator + 3);
+  if (
+    !["http", "https", "socks5", "socks5h"].includes(scheme) ||
+    !authority ||
+    /[@/?#\\\s\u0000-\u001f\u007f]/u.test(authority)
+  )
+    return false;
+  let rawPort = "";
+  if (authority.startsWith("[")) {
+    const end = authority.indexOf("]");
+    if (end < 0 || authority[end + 1] !== ":") return false;
+    rawPort = authority.slice(end + 2);
+  } else {
+    const separator = authority.lastIndexOf(":");
+    if (separator < 1 || authority.slice(0, separator).includes(":")) return false;
+    rawPort = authority.slice(separator + 1);
+  }
+  const port = Number(rawPort);
+  if (!/^\d+$/.test(rawPort) || !Number.isInteger(port) || port < 1 || port > 65535)
+    return false;
+  try {
+    const url = new URL(value);
+    return !url.username && !url.password && !!url.hostname && !url.search && !url.hash;
+  } catch {
+    return false;
+  }
+}
+
+function ProxySettings({
+  policy,
+  onSave,
+}: {
+  policy: AppPreferences["proxy"];
+  onSave: (policy: AppPreferences["proxy"]) => Promise<boolean>;
+}) {
+  const [mode, setMode] = useState(policy.mode);
+  const [url, setUrl] = useState(policy.mode === "explicit" ? policy.url : "");
+  const [inputError, setInputError] = useState("");
+  useEffect(() => {
+    setMode(policy.mode);
+    setUrl(policy.mode === "explicit" ? policy.url : "");
+    setInputError("");
+  }, [policy]);
+
+  async function selectMode(next: typeof mode) {
+    setMode(next);
+    setInputError("");
+    if (next !== "explicit" && !(await onSave({ mode: next })))
+      setMode(policy.mode);
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!validProxyEndpoint(url)) {
+      setInputError("Usa HTTP, HTTPS o SOCKS5 con host y puerto, sin credenciales ni ruta.");
+      return;
+    }
+    if (await onSave({ mode: "explicit", url })) setMode("explicit");
+    else setMode(policy.mode);
+  }
+
+  return (
+    <>
+      <label className="field">
+        Política de proxy
+        <select
+          aria-label="Política de proxy"
+          value={mode}
+          onChange={(event) => void selectMode(event.target.value as typeof mode)}
+        >
+          <option value="direct">Conexión directa</option>
+          <option value="environment">Sistema y entorno</option>
+          <option value="explicit">Endpoint explícito requerido</option>
+        </select>
+      </label>
+      {mode === "environment" && (
+        <p className="muted">
+          Usa la configuración de proxy del sistema y las variables
+          HTTP_PROXY, HTTPS_PROXY, ALL_PROXY y NO_PROXY compatibles. Puedes
+          elegir conexión directa o un endpoint explícito para reemplazarla.
+        </p>
+      )}
+      {mode === "explicit" && (
+        <form onSubmit={(event) => void submit(event)}>
+          <label className="field">
+            Endpoint HTTP(S)/SOCKS5
+            <input
+              type="url"
+              value={url}
+              onChange={(event) => setUrl(event.target.value)}
+              aria-invalid={inputError ? true : undefined}
+              aria-describedby={
+                inputError
+                  ? "proxy-endpoint-help proxy-endpoint-error"
+                  : "proxy-endpoint-help"
+              }
+            />
+          </label>
+          <p id="proxy-endpoint-help" className="muted">
+            Ejemplo: http://127.0.0.1:8080. No admite usuario ni contraseña. Si
+            el endpoint es inválido o no responde, la descarga falla sin
+            conexión directa.
+          </p>
+          {inputError && (
+            <p id="proxy-endpoint-error" role="alert">
+              {inputError}
+            </p>
+          )}
+          <button type="submit">Guardar endpoint</button>
+        </form>
+      )}
+      <p>
+        La autenticación manual y las cabeceras permitidas se configuran por
+        descarga HTTP(S); el runtime las limita al origen inicial y no las añade
+        a snapshots.
+      </p>
+      <p className="muted">
+        FTP/FTPS solo funcionan con conexión directa en esta fase. Cambia a
+        Direct para crear esos trabajos mientras no haya proxy para FTP.
+      </p>
+    </>
+  );
+}
+
 export function FirstRunWizard({
   onClose,
   backend,

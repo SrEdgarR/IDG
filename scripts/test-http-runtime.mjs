@@ -28,7 +28,7 @@ try{
  watcher.stdout.on('data',b=>watched+=b);
  await sleep(150);
  const secret='fixture-private-query-'+Date.now();const input=spec('/slow?token='+secret,'crash.bin');
- await probe(['add','crash'],input);
+ const crashCreated=await probe(['add','crash'],input);assert.equal(crashCreated.job.options.proxy.mode,'direct');
  await wait('crash',j=>Number(j.durable_bytes)>=1048576);
  await assert.rejects(probe(['add','busy'],spec('/file','busy.bin')),/busy/);
  await stop(true);
@@ -42,7 +42,7 @@ try{
  await probe(['resume','crash']);const complete=await wait('crash',j=>j.state==='completed');assert.equal(complete.verified_against_reference,true);assert.equal(complete.calculated_sha256,expectedHash());
  const final=await readFile(path.join(files,'crash.bin'));assert.equal(createHash('sha256').update(final).digest('hex'),expectedHash());
  const ranged=f.records.find(r=>r.route==='/slow'&&r.range);assert.equal(ranged.range,`bytes=${recovered.durable_bytes}-`);assert.equal(ranged.bytes,SIZE-Number(recovered.durable_bytes));
- await probe(['add','crash'],input);assert.deepEqual((await probe(['list'])).jobs.map(j=>j.id).sort(),['crash','media-audio']);
+ const replayed=await probe(['add','crash'],input);assert.equal(replayed.job.id,'crash');assert.equal(replayed.job.options.proxy.mode,'direct');assert.deepEqual((await probe(['list'])).jobs.map(j=>j.id).sort(),['crash','media-audio']);
  for(const [route,id,error] of [['/ignore-range','ignore','range_ignored'],['/bad-range','bad','invalid_range'],['/changed','changed','resource_changed']]){
   await probe(['add',id],spec(route,id+'.bin'));await wait(id,j=>Number(j.durable_bytes)>=1048576&&j.state==='downloading');await probe(['pause',id]);const paused=await wait(id,j=>j.state==='paused');await probe(['resume',id]);const failed=await wait(id,j=>j.state==='failed');assert.equal(failed.error,error);assert.equal(failed.durable_bytes,paused.durable_bytes);
  }

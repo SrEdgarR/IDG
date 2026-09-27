@@ -8,7 +8,9 @@ import assert from "node:assert/strict";
 import { chromium } from "playwright";
 import { startSegments, expectedHash } from "../fixtures/http/segments.mjs";
 const root = process.cwd(),
-  exe = (name) => path.join(root, `target/debug/${name}.exe`);
+  exe = (name) => path.join(root, `target/debug/${name}.exe`),
+  artifactRoot = process.env.IDG_TEST_ARTIFACT_ROOT ?? "docs",
+  screenshotPath = process.env.IDG_TEST_SCREENSHOT_PATH ?? path.join(artifactRoot, "screenshots/fase05/nueva-descarga.png");
 const probe = (args) =>
   JSON.parse(
     execFileSync(exe("idg-probe"), args, {
@@ -17,6 +19,115 @@ const probe = (args) =>
       stdio: ["ignore", "pipe", "ignore"],
     }),
   );
+
+async function listenLocal(server) {
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+}
+
+async function closeServer(server) {
+  if (server.listening) await new Promise((resolve) => server.close(resolve));
+}
+
+async function startFtpFixture(bytes) {
+  const sockets = new Set();
+  const passiveServers = new Set();
+  const stats = { connections: 0, userAccepted: false, passwordAccepted: false, completed: 0 };
+  const track = (socket) => {
+    sockets.add(socket);
+    socket.on("close", () => sockets.delete(socket));
+    socket.on("error", () => {});
+  };
+  const control = net.createServer((socket) => {
+    stats.connections++;
+    track(socket);
+    socket.write("220 IDG local FTP fixture\r\n");
+    let input = "",
+      commands = Promise.resolve(),
+      dataConnection;
+    const reply = (text) => socket.write(`${text}\r\n`);
+    const handle = async (line) => {
+      const [command, ...parts] = line.trim().split(" ");
+      const argument = parts.join(" ");
+      switch (command.toUpperCase()) {
+        case "USER":
+          stats.userAccepted = argument === "idg-fixture-user";
+          reply(stats.userAccepted ? "331 Password required" : "530 Login denied");
+          break;
+        case "PASS":
+          stats.passwordAccepted = stats.userAccepted && argument === "idg-fixture-password";
+          reply(stats.passwordAccepted ? "230 Logged in" : "530 Login denied");
+          break;
+        case "TYPE":
+          reply("200 Binary mode");
+          break;
+        case "SIZE":
+          reply(argument === "/file" ? `213 ${bytes.length}` : "550 File unavailable");
+          break;
+        case "MDTM":
+          reply(argument === "/file" ? "213 20260926120000" : "550 File unavailable");
+          break;
+        case "EPSV": {
+          const passive = net.createServer(track);
+          passiveServers.add(passive);
+          passive.on("close", () => passiveServers.delete(passive));
+          dataConnection = new Promise((resolve) => passive.once("connection", resolve));
+          await listenLocal(passive);
+          reply(`229 Entering Extended Passive Mode (|||${passive.address().port}|)`);
+          break;
+        }
+        case "RETR": {
+          if (argument !== "/file" || !dataConnection) {
+            reply("550 File unavailable");
+            break;
+          }
+          reply("150 Opening data connection");
+          const data = await dataConnection;
+          await new Promise((resolve, reject) => {
+            data.once("error", reject);
+            data.end(bytes, resolve);
+          });
+          stats.completed++;
+          reply("226 Transfer complete");
+          break;
+        }
+        case "SYST":
+          reply("215 UNIX Type: L8");
+          break;
+        case "NOOP":
+          reply("200 OK");
+          break;
+        case "QUIT":
+          reply("221 Bye");
+          socket.end();
+          break;
+        default:
+          reply("502 Command not implemented");
+      }
+    };
+    socket.on("data", (chunk) => {
+      input += chunk.toString("utf8");
+      let end;
+      while ((end = input.indexOf("\n")) >= 0) {
+        const line = input.slice(0, end).replace(/\r$/, "");
+        input = input.slice(end + 1);
+        commands = commands.then(() => handle(line)).catch(() => socket.destroy());
+      }
+    });
+  });
+  await listenLocal(control);
+  return {
+    url: `ftp://127.0.0.1:${control.address().port}/file`,
+    stats,
+    async close() {
+      for (const socket of sockets) socket.destroy();
+      await Promise.all([control, ...passiveServers].map(closeServer));
+    },
+  };
+}
+
 let existing = false;
 try {
   probe(["ping"]);
@@ -42,7 +153,7 @@ const env = {
   WEBVIEW2_USER_DATA_FOLDER: path.join(dir, "webview"),
   WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}`,
 };
-let runtime, desktop, browser, locker;
+let runtime, desktop, browser, locker, ftpFixture;
 let heldRequests = 0;
 const held = createServer((_req, _res) => {
   heldRequests++;
@@ -50,6 +161,7 @@ const held = createServer((_req, _res) => {
 await new Promise((resolve) => held.listen(0, "127.0.0.1", resolve));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 try {
+  ftpFixture = await startFtpFixture(Buffer.from("IDG FTP local fixture; not executable.\n"));
   desktop = spawn(exe("idg-desktop"), [], {
     env,
     windowsHide: true,
@@ -101,36 +213,57 @@ try {
   await page
     .getByRole("button", { name: "Nueva descarga", exact: true })
     .click();
-  for (const scheme of ["ftp", "ftps"]) {
-    await page
-      .getByLabel("URL del archivo", { exact: true })
-      .fill(`${scheme}://127.0.0.1/rejected.bin`);
-    await page
-      .getByLabel("Nombre del archivo", { exact: true })
-      .fill(`rejected-${scheme}.bin`);
-    await page.getByLabel("Carpeta", { exact: true }).fill(files);
-    await page
-      .getByRole("button", { name: "Descargar ahora", exact: true })
-      .click();
-    await page
-      .getByText("Introduce una URL HTTP o HTTPS válida", { exact: false })
-      .waitFor();
-    assert.equal(
-      await page.getByLabel("URL del archivo", { exact: true }).getAttribute("aria-invalid"),
-      "true",
-    );
-    assert.equal(probe(["list"]).jobs.length, 0);
-    assert.equal(fixture.records.length, 0);
+  const ftpDialog = page.getByRole("dialog", { name: "Nueva descarga", exact: true });
+  await ftpDialog.getByLabel("URL del archivo", { exact: true }).fill(ftpFixture.url);
+  await ftpDialog.getByLabel("Nombre del archivo", { exact: true }).fill("ftp-auth.bin");
+  await ftpDialog.getByLabel("Carpeta", { exact: true }).fill(files);
+  await ftpDialog.getByText(/FTP no cifra usuario, contraseña ni archivo/).waitFor();
+  const ftpConsent = ftpDialog.getByLabel("Confirmo que quiero usar FTP sin cifrar", { exact: true });
+  assert.equal(await ftpConsent.isChecked(), false);
+  await page.getByText("Avanzado", { exact: true }).click();
+  await ftpDialog.getByLabel("Usuario del servidor (opcional)", { exact: true }).fill("idg-fixture-user");
+  await ftpDialog.getByLabel("Contraseña (opcional)", { exact: true }).fill("idg-fixture-password");
+  const ftpConnections = ftpDialog.getByRole("combobox", { name: "Conexiones", exact: true });
+  assert.equal(await ftpConnections.isDisabled(), true);
+  assert.equal(await ftpConnections.inputValue(), "1");
+  assert.equal(ftpFixture.stats.connections, 0, "editing never opens FTP");
+  await ftpDialog.getByRole("button", { name: "Descargar ahora", exact: true }).click();
+  await ftpDialog.getByRole("alert").filter({ hasText: "Revisa URL, nombre, carpeta y datos de conexión" }).waitFor();
+  assert.equal(probe(["list"]).jobs.length, 0, "FTP consent is required before creating a job");
+  assert.equal(ftpFixture.stats.connections, 0, "missing consent never sends credentials");
+  await ftpConsent.check();
+  await ftpDialog.getByRole("button", { name: "Descargar ahora", exact: true }).click();
+  await ftpDialog.waitFor({ state: "hidden" });
+  await page.locator(".download-row").filter({ hasText: "ftp-auth.bin" }).waitFor();
+  const ftpDeadline = Date.now() + 15000;
+  let ftpJob;
+  while (Date.now() < ftpDeadline) {
+    ftpJob = probe(["list"]).jobs.find((job) => job.name === "ftp-auth.bin");
+    if (ftpJob?.state === "completed") break;
+    await sleep(100);
   }
+  assert.equal(ftpJob?.state, "completed");
+  assert.equal(ftpFixture.stats.connections, 1);
+  assert.equal(ftpFixture.stats.userAccepted, true);
+  assert.equal(ftpFixture.stats.passwordAccepted, true);
+  assert.equal(ftpFixture.stats.completed, 1);
+  const ftpBytes = await readFile(path.join(files, "ftp-auth.bin"));
+  assert.equal(
+    createHash("sha256").update(ftpBytes).digest("hex"),
+    createHash("sha256").update("IDG FTP local fixture; not executable.\n").digest("hex"),
+  );
+  assert.equal(fixture.records.length, 0, "FTP fixture is independent of HTTP fixture");
+  console.log("PASS Tauri FTP: confirmación explícita, auth ficticia, archivo final y SHA-256 correctos.");
+  await page.getByRole("button", { name: "Nueva descarga", exact: true }).click();
   await page
     .getByLabel("URL del archivo", { exact: true })
     .fill(fixture.url + "/file");
   await page.getByLabel("Nombre del archivo", { exact: true }).fill("real.bin");
   await page.getByLabel("Carpeta", { exact: true }).fill(files);
   assert.equal(fixture.records.length, 0, "editing never consumes the URL");
-  await mkdir("docs/screenshots/fase05", { recursive: true });
+  await mkdir(path.dirname(screenshotPath), { recursive: true });
   await page.screenshot({
-    path: "docs/screenshots/fase05/nueva-descarga.png",
+    path: screenshotPath,
     mask: [page.getByLabel("Carpeta", { exact: true })],
   });
   await page
@@ -151,7 +284,7 @@ try {
     await sleep(100);
   }
   assert.equal(job?.state, "completed");
-  assert.equal(probe(["list"]).jobs.length, 1);
+  assert.equal(probe(["list"]).jobs.length, 2);
   assert.equal(
     createHash("sha256")
       .update(await readFile(path.join(files, "real.bin")))
@@ -163,9 +296,10 @@ try {
     1,
     "uncertain replay capability keeps one GET",
   );
-  console.log("PASS Tauri: FTP/FTPS rechazados; HTTP local completado con SHA-256 esperado.");
+  console.log("PASS Tauri HTTP local completado con SHA-256 esperado.");
   await page
     .locator(".download-row")
+    .filter({ hasText: "real.bin" })
     .filter({ hasText: "Completadas" })
     .waitFor();
   async function add(name, action, url = fixture.url + "/file") {
@@ -363,7 +497,8 @@ try {
       j.state === "downloading" &&
       BigInt(j.received_bytes) > BigInt(paused.received_bytes),
   );
-  await mkdir("docs/screenshots/fase05", { recursive: true });
+  const themeScreenshotDir = path.join(artifactRoot, "screenshots/fase05");
+  await mkdir(themeScreenshotDir, { recursive: true });
   for (const theme of ["light", "dark"]) {
     await page.getByLabel("Tema", { exact: true }).selectOption(theme);
     await page.waitForFunction(
@@ -386,7 +521,7 @@ try {
       );
     });
     await page.screenshot({
-      path: `docs/screenshots/fase05/progreso-${theme}.png`,
+      path: path.join(themeScreenshotDir, `progreso-${theme}.png`),
     });
   }
   const beforeHide = probe(["list"]).jobs.find(
@@ -425,8 +560,10 @@ try {
       { encoding: "utf8", windowsHide: true },
     ),
   );
+  const memoryReport = path.join(artifactRoot, "test-evidence/fase05-memory.json");
+  await mkdir(path.dirname(memoryReport), { recursive: true });
   await writeFile(
-    "docs/test-evidence/fase05-memory.json",
+    memoryReport,
     JSON.stringify(
       {
         scenario:
@@ -807,6 +944,7 @@ try {
     "PASS cola guarda comienzo antes del GET; caída y reapertura recuperan pausado sin repetir petición.",
   );
 } finally {
+  await ftpFixture?.close();
   held.closeAllConnections();
   await new Promise((resolve) => held.close(resolve));
   locker?.stdin.end("\n");

@@ -1,11 +1,16 @@
 use super::*;
-use reqwest::{Client, Response, Url, header::*};
+use idg_protocol::ProxyPolicy;
+use reqwest::{Client, Proxy, Response, Url, header::*};
 use sha2::{Digest, Sha256};
 use std::time::{Duration, Instant};
 use tokio::{io::AsyncWriteExt, sync::watch};
 
 pub fn client() -> Result<Client, DownloadError> {
-    Client::builder()
+    client_with_policy(&ProxyPolicy::Environment)
+}
+pub fn client_with_policy(policy: &ProxyPolicy) -> Result<Client, DownloadError> {
+    policy.validate()?;
+    let mut builder = Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .referer(false)
         .retry(reqwest::retry::never())
@@ -15,9 +20,15 @@ pub fn client() -> Result<Client, DownloadError> {
         .no_zstd()
         .connect_timeout(Duration::from_secs(15))
         .read_timeout(Duration::from_secs(20))
-        .user_agent("IDG/0.1 development")
-        .build()
-        .map_err(|_| DownloadError::Tls)
+        .user_agent("IDG/0.1 development");
+    builder = match policy {
+        ProxyPolicy::Direct => builder.no_proxy(),
+        ProxyPolicy::Environment => builder,
+        ProxyPolicy::Explicit { url } => {
+            builder.proxy(Proxy::all(url).map_err(|_| DownloadError::InvalidInput)?)
+        }
+    };
+    builder.build().map_err(|_| DownloadError::Tls)
 }
 pub(super) fn network(e: reqwest::Error) -> DownloadError {
     if e.is_timeout() {
@@ -41,6 +52,7 @@ async fn get(
 ) -> Result<(Response, resources::Permit), DownloadError> {
     let mut url = Url::parse(&job.input.url).map_err(|_| DownloadError::InvalidInput)?;
     url.set_fragment(None);
+    let initial_origin = url.origin().ascii_serialization();
     for hop in 0..=5 {
         let permit = budget
             .acquire(
@@ -59,7 +71,28 @@ async fn get(
                     job.etag.as_ref().ok_or(DownloadError::UnsafeResume)?,
                 );
         }
-        let response = request.send().await.map_err(network)?;
+        let mut has_basic_auth = false;
+        if url.origin().ascii_serialization() == initial_origin
+            && let Some(auth) = &job.input.auth
+        {
+            if let Some(username) = &auth.username {
+                request = request.basic_auth(username, auth.password.as_deref());
+                has_basic_auth = true;
+            }
+            for header in &auth.headers {
+                let name = HeaderName::from_bytes(header.name.as_bytes())
+                    .map_err(|_| DownloadError::InvalidInput)?;
+                let mut value = HeaderValue::from_bytes(header.value.as_bytes())
+                    .map_err(|_| DownloadError::InvalidInput)?;
+                value.set_sensitive(true);
+                request = request.header(name, value);
+            }
+        }
+        let mut request = request.build().map_err(network)?;
+        if has_basic_auth && let Some(value) = request.headers_mut().get_mut(AUTHORIZATION) {
+            value.set_sensitive(true);
+        }
+        let response = client.execute(request).await.map_err(network)?;
         if response.status().is_redirection() {
             if hop == 5 {
                 return Err(DownloadError::HttpStatus);
@@ -88,7 +121,7 @@ pub(super) fn range(s: &str) -> Option<(u64, u64, u64)> {
     Some((start.parse().ok()?, end.parse().ok()?, total.parse().ok()?))
 }
 
-async fn checkpoint(
+pub(super) async fn checkpoint(
     file: &mut tokio::fs::File,
     job: &mut Job,
     hash: &Sha256,
@@ -160,6 +193,13 @@ pub async fn transfer_managed(
     store: &mut dyn Checkpoint,
     budget: std::sync::Arc<resources::Resources>,
 ) -> Result<(), DownloadError> {
+    let configured_client = job
+        .options
+        .proxy
+        .as_ref()
+        .map(client_with_policy)
+        .transpose()?;
+    let client = configured_client.as_ref().unwrap_or(client);
     let mut attempts = 0;
     let result = loop {
         let result = transfer_inner(client, job, control, store, budget.clone()).await;
@@ -223,6 +263,9 @@ async fn transfer_inner(
             TransferState::PublishPending | TransferState::Verifying | TransferState::Completed
         )
     {
+        if job.input.auth.is_some() {
+            return Err(DownloadError::UnsafeResume);
+        }
         return super::segmented::transfer(client, job, control, store, budget).await;
     }
     if matches!(
@@ -457,7 +500,8 @@ async fn transfer_inner(
     finish(job, store).await
 }
 fn eligible(job: &Job) -> bool {
-    job.options.replay_safe
+    job.input.auth.is_none()
+        && job.options.replay_safe
         && !matches!(job.options.mode, RequestMode::Manual { requests: 1 })
         && job.etag.is_some()
         && job.total.is_some_and(|n| n >= 4 * ranges::MIN_RANGE)
@@ -466,6 +510,34 @@ fn eligible(job: &Job) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    #[derive(Default)]
+    struct Store;
+    impl super::super::Checkpoint for Store {
+        fn save(&mut self, _: &super::super::Job) -> Result<(), DownloadError> {
+            Ok(())
+        }
+    }
+
+    async fn receive_request(
+        listener: &tokio::net::TcpListener,
+    ) -> (tokio::net::TcpStream, String) {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let mut bytes = Vec::new();
+        loop {
+            let mut chunk = [0u8; 1024];
+            let count = stream.read(&mut chunk).await.unwrap();
+            assert_ne!(count, 0, "proxy request ended before its headers");
+            bytes.extend_from_slice(&chunk[..count]);
+            if let Some(end) = bytes.windows(4).position(|window| window == b"\r\n\r\n") {
+                bytes.truncate(end + 4);
+                break;
+            }
+        }
+        (stream, String::from_utf8(bytes).unwrap())
+    }
+
     #[test]
     fn content_range_is_not_accept_ranges() {
         assert_eq!(range("bytes 50-99/100"), Some((50, 99, 100)));
@@ -504,5 +576,290 @@ mod tests {
             write_chunk(&mut Full, b"not durable").await,
             Err(DownloadError::DiskFull)
         );
+    }
+
+    #[tokio::test]
+    async fn explicit_proxy_carries_redirects_and_strips_origin_auth_cross_origin() {
+        use crate::download::{Control, create_job, resources::Resources};
+        use idg_protocol::{
+            ConflictPolicy, DownloadAuth, DownloadHeader, NewDownload, ProxyPolicy, TransferOptions,
+        };
+        use std::time::Duration;
+
+        let proxy = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let proxy_addr = proxy.local_addr().unwrap();
+        let first_origin = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let first_addr = first_origin.local_addr().unwrap();
+        drop(first_origin);
+        let target = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let target_addr = target.local_addr().unwrap();
+        drop(target);
+        let proxy_task = tokio::spawn(async move {
+            let (mut first_stream, first) = receive_request(&proxy).await;
+            first_stream
+                .write_all(
+                    format!(
+                        "HTTP/1.1 302 Found\r\nLocation: http://{target_addr}/file\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    )
+                    .as_bytes(),
+                )
+                .await
+                .unwrap();
+            let (mut second_stream, second) =
+                tokio::time::timeout(Duration::from_secs(3), receive_request(&proxy))
+                    .await
+                    .expect("redirect bypassed the configured proxy");
+            second_stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\nContent-Type: application/octet-stream\r\nConnection: close\r\n\r\ndata")
+                .await
+                .unwrap();
+            (first, second)
+        });
+
+        let directory = tempfile::tempdir().unwrap();
+        let mut job = create_job(
+            "proxy-redirect-auth",
+            NewDownload {
+                url: format!("http://{first_addr}/start"),
+                directory: directory.path().to_string_lossy().into_owned(),
+                name: "auth.bin".into(),
+                expected_sha256: None,
+                conflict: ConflictPolicy::Reject,
+                auth: Some(DownloadAuth {
+                    username: Some("user".into()),
+                    password: Some("secret".into()),
+                    headers: vec![DownloadHeader {
+                        name: "x-idg-secret".into(),
+                        value: "token-secret".into(),
+                    }],
+                }),
+                allow_cleartext_ftp: false,
+            },
+        )
+        .unwrap();
+        job.options = TransferOptions {
+            proxy: Some(ProxyPolicy::Explicit {
+                url: format!("http://{proxy_addr}"),
+            }),
+            ..Default::default()
+        };
+        let snapshot = job.snapshot();
+        let snapshot_json = serde_json::to_string(&snapshot).unwrap();
+        assert!(!snapshot_json.contains("secret"));
+        assert!(!snapshot_json.contains("token-secret"));
+        let snapshot_debug = format!("{snapshot:?}");
+        assert!(!snapshot_debug.contains(&proxy_addr.to_string()));
+        let input_debug = format!("{:?}", job.input);
+        assert!(!input_debug.contains("secret"));
+        let (_tx, mut control) = tokio::sync::watch::channel(Control::Run);
+        let mut store = Store;
+        transfer_managed(
+            &client().unwrap(),
+            &mut job,
+            &mut control,
+            &mut store,
+            Resources::new(Default::default()),
+        )
+        .await
+        .unwrap();
+
+        let (first, second) = proxy_task.await.unwrap();
+        assert!(first.starts_with(&format!("GET http://{first_addr}/start ")));
+        assert!(
+            first
+                .to_ascii_lowercase()
+                .contains("authorization: basic dxnlcjpzzwnyzxq=")
+        );
+        assert!(
+            first
+                .to_ascii_lowercase()
+                .contains("x-idg-secret: token-secret")
+        );
+        assert!(second.starts_with(&format!("GET http://{target_addr}/file ")));
+        assert!(!second.to_ascii_lowercase().contains("authorization:"));
+        assert!(!second.to_ascii_lowercase().contains("x-idg-secret:"));
+        assert_eq!(std::fs::read(&job.final_path).unwrap(), b"data");
+    }
+
+    #[tokio::test]
+    async fn unavailable_required_proxy_never_falls_back_to_the_origin() {
+        use crate::download::{Control, create_job, resources::Resources};
+        use idg_protocol::{ConflictPolicy, NewDownload, ProxyPolicy};
+        use std::time::Duration;
+
+        let origin = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let origin_addr = origin.local_addr().unwrap();
+        let origin_task = tokio::spawn(async move {
+            tokio::time::timeout(Duration::from_millis(300), origin.accept())
+                .await
+                .is_ok()
+        });
+        let closed_proxy = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let proxy_addr = closed_proxy.local_addr().unwrap();
+        drop(closed_proxy);
+
+        let directory = tempfile::tempdir().unwrap();
+        let mut job = create_job(
+            "proxy-fail-closed",
+            NewDownload {
+                url: format!("http://{origin_addr}/file"),
+                directory: directory.path().to_string_lossy().into_owned(),
+                name: "fail.bin".into(),
+                expected_sha256: None,
+                conflict: ConflictPolicy::Reject,
+                auth: None,
+                allow_cleartext_ftp: false,
+            },
+        )
+        .unwrap();
+        job.options.proxy = Some(ProxyPolicy::Explicit {
+            url: format!("http://{proxy_addr}"),
+        });
+        let (_tx, mut control) = tokio::sync::watch::channel(Control::Run);
+        let mut store = Store;
+        assert_eq!(
+            transfer_managed(
+                &client().unwrap(),
+                &mut job,
+                &mut control,
+                &mut store,
+                Resources::new(Default::default()),
+            )
+            .await,
+            Err(DownloadError::Network)
+        );
+        assert!(
+            !origin_task.await.unwrap(),
+            "request bypassed the failed proxy"
+        );
+    }
+
+    #[tokio::test]
+    async fn socks5h_proxy_tunnels_http_download_and_publishes_verified_bytes() {
+        use crate::download::{Control, create_job, resources::Resources};
+        use idg_protocol::{ConflictPolicy, NewDownload, ProxyPolicy};
+        use std::time::Duration;
+
+        let proxy = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let proxy_addr = proxy.local_addr().unwrap();
+        let payload = b"verified SOCKS5 fixture bytes";
+        let expected_sha256 = format!("{:x}", Sha256::digest(payload));
+        let proxy_task = tokio::spawn(async move {
+            let (mut stream, _) = proxy.accept().await.unwrap();
+
+            let mut greeting = [0; 2];
+            stream.read_exact(&mut greeting).await.unwrap();
+            assert_eq!(greeting[0], 5);
+            let mut methods = vec![0; usize::from(greeting[1])];
+            stream.read_exact(&mut methods).await.unwrap();
+            assert!(methods.contains(&0), "client offered no-auth SOCKS5");
+            stream.write_all(&[5, 0]).await.unwrap();
+
+            let mut request = [0; 4];
+            stream.read_exact(&mut request).await.unwrap();
+            assert_eq!(&request[..3], &[5, 1, 0], "expected SOCKS5 CONNECT");
+            let destination = match request[3] {
+                1 => {
+                    let mut address = [0; 4];
+                    stream.read_exact(&mut address).await.unwrap();
+                    std::net::Ipv4Addr::from(address).to_string()
+                }
+                3 => {
+                    let mut length = [0; 1];
+                    stream.read_exact(&mut length).await.unwrap();
+                    let mut address = vec![0; usize::from(length[0])];
+                    stream.read_exact(&mut address).await.unwrap();
+                    String::from_utf8(address).unwrap()
+                }
+                4 => {
+                    let mut address = [0; 16];
+                    stream.read_exact(&mut address).await.unwrap();
+                    std::net::Ipv6Addr::from(address).to_string()
+                }
+                address_type => panic!("unexpected SOCKS5 address type {address_type}"),
+            };
+            let mut port = [0; 2];
+            stream.read_exact(&mut port).await.unwrap();
+            let destination_port = u16::from_be_bytes(port);
+            assert_eq!(destination, "idg-test.invalid");
+            assert_eq!(destination_port, 80);
+            stream
+                .write_all(&[5, 0, 0, 1, 127, 0, 0, 1, 0, 0])
+                .await
+                .unwrap();
+
+            let mut request = Vec::new();
+            loop {
+                let mut chunk = [0; 512];
+                let count = stream.read(&mut chunk).await.unwrap();
+                assert_ne!(count, 0, "HTTP request ended before its headers");
+                request.extend_from_slice(&chunk[..count]);
+                assert!(
+                    request.len() <= 8192,
+                    "HTTP headers exceeded the test bound"
+                );
+                if request.windows(4).any(|window| window == b"\r\n\r\n") {
+                    break;
+                }
+            }
+            let request = String::from_utf8(request).unwrap();
+            assert!(request.starts_with("GET /file.bin "));
+            stream
+                .write_all(
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: application/octet-stream\r\nConnection: close\r\n\r\n",
+                        payload.len()
+                    )
+                    .as_bytes(),
+                )
+                .await
+                .unwrap();
+            stream.write_all(payload).await.unwrap();
+            (destination, destination_port, request)
+        });
+
+        let directory = tempfile::tempdir().unwrap();
+        let mut job = create_job(
+            "socks5-proxy-download",
+            NewDownload {
+                url: "http://idg-test.invalid/file.bin".into(),
+                directory: directory.path().to_string_lossy().into_owned(),
+                name: "verified.bin".into(),
+                expected_sha256: Some(expected_sha256.clone()),
+                conflict: ConflictPolicy::Reject,
+                auth: None,
+                allow_cleartext_ftp: false,
+            },
+        )
+        .unwrap();
+        job.options.proxy = Some(ProxyPolicy::Explicit {
+            url: format!("socks5h://{proxy_addr}"),
+        });
+        let (_tx, mut control) = tokio::sync::watch::channel(Control::Run);
+        let mut store = Store;
+        tokio::time::timeout(
+            Duration::from_secs(5),
+            transfer_managed(
+                &client().unwrap(),
+                &mut job,
+                &mut control,
+                &mut store,
+                Resources::new(Default::default()),
+            ),
+        )
+        .await
+        .expect("SOCKS5 transfer did not finish through the local proxy")
+        .unwrap();
+
+        let (destination, port, request) = proxy_task.await.unwrap();
+        assert_eq!((destination.as_str(), port), ("idg-test.invalid", 80));
+        assert!(request.starts_with("GET /file.bin "));
+        assert_eq!(std::fs::read(&job.final_path).unwrap(), payload);
+        assert_eq!(
+            job.calculated_sha256.as_deref(),
+            Some(expected_sha256.as_str())
+        );
+        assert!(job.verified);
+        assert_eq!(job.state, TransferState::Completed);
     }
 }

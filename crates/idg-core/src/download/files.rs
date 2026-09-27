@@ -9,11 +9,14 @@ use std::{
 pub fn validate_input(input: &NewDownload) -> Result<(), DownloadError> {
     let url = reqwest::Url::parse(&input.url).map_err(|_| DownloadError::InvalidInput)?;
     let n = &input.name;
+    let ftp = matches!(url.scheme(), "ftp" | "ftps");
     let stem = n.split('.').next().unwrap_or("").to_ascii_uppercase();
-    if !matches!(url.scheme(), "http" | "https")
+    if !matches!(url.scheme(), "http" | "https" | "ftp" | "ftps")
         || url.host_str().is_none()
         || !url.username().is_empty()
         || url.password().is_some()
+        || (ftp && (url.query().is_some() || url.fragment().is_some()))
+        || (url.scheme() == "ftp" && !input.allow_cleartext_ftp)
         || input.url.len() > 8192
         || n.is_empty()
         || n.len() > 240
@@ -30,6 +33,50 @@ pub fn validate_input(input: &NewDownload) -> Result<(), DownloadError> {
             .expected_sha256
             .as_ref()
             .is_some_and(|h| h.len() != 64 || !h.bytes().all(|b| b.is_ascii_hexdigit()))
+    {
+        return Err(DownloadError::InvalidInput);
+    }
+    if let Some(auth) = &input.auth
+        && (auth
+            .username
+            .as_ref()
+            .is_some_and(|v| v.is_empty() || v.len() > 512 || v.chars().any(char::is_control))
+            || auth
+                .password
+                .as_ref()
+                .is_some_and(|v| v.len() > 2048 || v.chars().any(char::is_control))
+            || (auth.username.is_none() && auth.password.is_some())
+            || auth.headers.len() > 32
+            || auth.headers.iter().any(|header| {
+                if header.name.len() > 256 || header.value.len() > 8192 {
+                    return true;
+                }
+                let Ok(name) = reqwest::header::HeaderName::from_bytes(header.name.as_bytes())
+                else {
+                    return true;
+                };
+                let lower = name.as_str();
+                if [
+                    "authorization",
+                    "connection",
+                    "content-length",
+                    "cookie",
+                    "host",
+                    "if-range",
+                    "proxy-authorization",
+                    "range",
+                    "referer",
+                    "transfer-encoding",
+                    "accept-encoding",
+                ]
+                .contains(&lower)
+                    || header.value.chars().any(char::is_control)
+                {
+                    return true;
+                }
+                reqwest::header::HeaderValue::from_str(&header.value).is_err()
+            })
+            || (ftp && !auth.headers.is_empty()))
     {
         return Err(DownloadError::InvalidInput);
     }
@@ -372,6 +419,8 @@ mod phase05_tests {
             name: name.into(),
             expected_sha256: None,
             conflict: ConflictPolicy::Reject,
+            auth: None,
+            allow_cleartext_ftp: false,
         }
     }
 
@@ -384,6 +433,8 @@ mod phase05_tests {
             name: "test.bin".into(),
             expected_sha256: None,
             conflict: ConflictPolicy::Reject,
+            auth: None,
+            allow_cleartext_ftp: false,
         };
         let mut job = create_job("recoverable", input.clone()).unwrap();
         std::fs::write(&job.temporary, b"goodtail").unwrap();
@@ -419,6 +470,46 @@ mod phase05_tests {
                 ..base.clone()
             };
             assert_eq!(validate_input(&candidate), Err(DownloadError::InvalidInput));
+        }
+
+        let plain_ftp = NewDownload {
+            url: "ftp://example.org/file.bin".into(),
+            allow_cleartext_ftp: true,
+            ..base.clone()
+        };
+        assert_eq!(validate_input(&plain_ftp), Ok(()));
+        assert_eq!(
+            validate_input(&NewDownload {
+                url: "ftps://user:password@example.org/file.bin".into(),
+                ..base.clone()
+            }),
+            Err(DownloadError::InvalidInput)
+        );
+        assert_eq!(
+            validate_input(&NewDownload {
+                url: "ftp://example.org/file.bin".into(),
+                allow_cleartext_ftp: false,
+                ..base.clone()
+            }),
+            Err(DownloadError::InvalidInput)
+        );
+        for (name, value) in [
+            ("X-IDG-Test", "valid"),
+            ("Authorization", "Basic fake"),
+            ("X-Test", "bad\r\nInjected: value"),
+        ] {
+            let candidate = NewDownload {
+                auth: Some(idg_protocol::DownloadAuth {
+                    username: None,
+                    password: None,
+                    headers: vec![idg_protocol::DownloadHeader {
+                        name: name.into(),
+                        value: value.into(),
+                    }],
+                }),
+                ..base.clone()
+            };
+            assert_eq!(validate_input(&candidate).is_ok(), name == "X-IDG-Test");
         }
 
         for name in [

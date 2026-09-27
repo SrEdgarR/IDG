@@ -1,11 +1,13 @@
 mod files;
+mod ftp;
 mod http;
 mod media_task;
 pub mod ranges;
 pub mod resources;
 mod segmented;
 pub use files::{create_job, directory_for, recover, recoverable_matches, validate_input};
-pub use http::{client, transfer, transfer_managed};
+pub use ftp::transfer_managed as transfer_ftp_managed;
+pub use http::{client, client_with_policy, transfer, transfer_managed};
 use idg_protocol::*;
 pub use media_task::{MediaSegment, MediaTask};
 use serde::{Deserialize, Serialize};
@@ -194,6 +196,8 @@ mod media_tests {
             name: "media.mkv".into(),
             expected_sha256: None,
             conflict: ConflictPolicy::Reject,
+            auth: None,
+            allow_cleartext_ftp: false,
         };
         let mut job = create_job("generated-media", input).unwrap();
         let bytes = b"verified generated media";

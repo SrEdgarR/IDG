@@ -47,6 +47,8 @@ pub(super) fn effect_valid(
             directory: directory.clone(),
             expected_sha256: None,
             conflict: ConflictPolicy::Reject,
+            auth: None,
+            allow_cleartext_ftp: false,
         })?;
         if !std::path::Path::new(directory).is_dir() {
             return Err(DownloadError::InvalidInput);

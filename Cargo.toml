@@ -16,7 +16,9 @@ ts-rs = "=12.0.1"
 idg-protocol = { path = "crates/idg-protocol" }
 idg-platform-windows = { path = "crates/idg-platform-windows" }
 
-reqwest = { version = "=0.13.5", default-features = false, features = ["rustls", "stream"] }
+reqwest = { version = "=0.13.5", default-features = false, features = ["rustls", "stream", "socks", "system-proxy"] }
+suppaftp = { version = "=12.1.0", default-features = false, features = ["rustls-aws-lc-rs", "tokio-rustls-aws-lc-rs", "no-log"] }
+webpki-roots = "=1.0.9"
 sha2 = "=0.10.9"
 quick-xml = "=0.42.0"
 url = "=2.5.8"

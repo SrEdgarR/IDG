@@ -59,7 +59,7 @@ function deferred<T>() {
 
 function makeBackend(overrides: Partial<DesktopApi> = {}) {
   return {
-    preferences: vi.fn(async () => ({ directory: "C:\\Downloads" }) as AppPreferences),
+    preferences: vi.fn(async () => ({ directory: "C:\\Downloads", proxy: { mode: "direct" } }) as AppPreferences),
     recoverable: vi.fn(async () => null),
     add: vi.fn(async () => ({ kind: "download" }) as Payload),
     ...overrides,
@@ -67,6 +67,28 @@ function makeBackend(overrides: Partial<DesktopApi> = {}) {
 }
 
 describe("NewDownloadDialog", () => {
+  it("blocks FTP downloads when the global proxy policy cannot be used", async () => {
+    const backend = makeBackend({
+      preferences: vi.fn(async () => ({
+        directory: "C:\\Downloads",
+        proxy: { mode: "explicit", url: "http://proxy.example:8080" },
+      }) as AppPreferences),
+    });
+    render(
+      <NewDownloadDialog
+        backend={backend}
+        onClose={() => {}}
+        initialUrl="ftp://files.example/file.bin"
+        initialName="file.bin"
+      />,
+    );
+
+    expect(await screen.findByText(/Cambia a Conexión directa/)).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Descargar ahora" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByLabelText("Proxy para esta descarga") as HTMLSelectElement).disabled).toBe(true);
+    expect(backend.add).not.toHaveBeenCalled();
+  });
+
   it("shows field errors for embedded credentials and reserved Windows names", async () => {
     const user = userEvent.setup();
     render(
