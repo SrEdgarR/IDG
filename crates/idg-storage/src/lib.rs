@@ -527,7 +527,35 @@ mod tests {
     }
 
     #[test]
-    fn private_checkpoints_and_organization_saves_leave_no_download_row() {
+    fn private_checkpoints_leave_no_download_row() {
+        use idg_protocol::{ConflictPolicy, NewDownload};
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = Store::open(Path::new(":memory:")).unwrap();
+        let mut job = idg_core::download::create_job(
+            "private-checkpoint-id",
+            NewDownload {
+                url: "https://example.org/private-checkpoint-url".into(),
+                directory: dir.path().to_string_lossy().into(),
+                name: "private-checkpoint-name.bin".into(),
+                expected_sha256: None,
+                conflict: ConflictPolicy::Reject,
+                auth: None,
+                allow_cleartext_ftp: false,
+            },
+        )
+        .unwrap();
+        job.organization.private = true;
+        store.save(&job).unwrap();
+        let rows: u32 = store
+            .connection
+            .query_row("SELECT COUNT(*) FROM downloads", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(rows, 0);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn organization_saves_leave_no_private_download_row() {
         use idg_protocol::*;
         let dir = tempfile::tempdir().unwrap();
         let mut store = Store::open(Path::new(":memory:")).unwrap();
@@ -545,16 +573,55 @@ mod tests {
         )
         .unwrap();
         job.organization.private = true;
-        store.save(&job).unwrap();
         let organization = OrganizationState::default();
         store
             .save_organization(&organization, &[job], None, None)
             .unwrap();
+        assert_eq!(store.organization().unwrap(), Some(organization));
         let rows: u32 = store
             .connection
             .query_row("SELECT COUNT(*) FROM downloads", [], |row| row.get(0))
             .unwrap();
         assert_eq!(rows, 0);
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn unavailable_protection_rejects_normal_storage_without_plaintext_rows() {
+        use idg_protocol::*;
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = Store::open(Path::new(":memory:")).unwrap();
+        let job = idg_core::download::create_job(
+            "normal-without-protection",
+            NewDownload {
+                url: "https://example.org/protection-required".into(),
+                directory: dir.path().to_string_lossy().into(),
+                name: "protected.bin".into(),
+                expected_sha256: None,
+                conflict: ConflictPolicy::Reject,
+                auth: None,
+                allow_cleartext_ftp: false,
+            },
+        )
+        .unwrap();
+        assert!(matches!(
+            store.save(&job),
+            Err(DownloadError::SecretUnavailable)
+        ));
+        assert!(matches!(
+            store.save_organization(&OrganizationState::default(), &[job], None, None),
+            Err(DownloadError::SecretUnavailable)
+        ));
+        let downloads: u32 = store
+            .connection
+            .query_row("SELECT COUNT(*) FROM downloads", [], |row| row.get(0))
+            .unwrap();
+        let organizations: u32 = store
+            .connection
+            .query_row("SELECT COUNT(*) FROM organization", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(downloads, 0);
+        assert_eq!(organizations, 0);
     }
 
     #[cfg(windows)]
