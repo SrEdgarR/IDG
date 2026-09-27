@@ -172,7 +172,7 @@ impl Downloads {
     }
     async fn execute_with_role(&self, request: Request, extension: bool) -> Payload {
         if matches!(
-            request.command,
+            &request.command,
             Command::InspectMediaManifest { .. } | Command::CreateMediaDownload { .. }
         ) {
             return match self.execute_media_command(request, extension).await {
@@ -206,7 +206,14 @@ impl Downloads {
         }
         match request.command {
             Command::InspectMediaManifest { url } => {
-                let client = download::client()?;
+                let proxy = self
+                    .inner
+                    .lock()
+                    .map_err(|_| DownloadError::Storage)?
+                    .preferences
+                    .proxy
+                    .clone();
+                let client = download::client_with_policy(&proxy)?;
                 let plan = idg_media::inspect_manifest(&client, &url, &self.resources, &request.id)
                     .await?;
                 Ok(Payload::MediaPlan { plan })
@@ -240,7 +247,15 @@ impl Downloads {
                 if let Some(payload) = existing {
                     return Ok(payload);
                 }
-                let client = download::client()?;
+                let proxy = {
+                    let inner = self.inner.lock().map_err(|_| DownloadError::Storage)?;
+                    draft
+                        .options
+                        .proxy
+                        .clone()
+                        .unwrap_or_else(|| inner.preferences.proxy.clone())
+                };
+                let client = download::client_with_policy(&proxy)?;
                 let media = idg_media::prepare_selection(
                     &client,
                     &draft.input.url,
@@ -351,10 +366,17 @@ impl Downloads {
         if let Some(error) = target.and_then(|id| inner.unavailable.get(id)) {
             return Err(error.clone());
         }
-        let requested_options = match &request.command {
+        let mut requested_options = match &request.command {
             Command::AddDownloadWithOptions { options, .. } => options.clone(),
             _ => TransferOptions::default(),
         };
+        if matches!(
+            request.command,
+            Command::AddDownload { .. } | Command::AddDownloadWithOptions { .. }
+        ) && requested_options.proxy.is_none()
+        {
+            requested_options.proxy = Some(inner.preferences.proxy.clone());
+        }
         requested_options.validate()?;
         if let Command::Organization { operation } = &request.command {
             return self.organize(&mut inner, operation.clone(), &request);
@@ -406,6 +428,8 @@ impl Downloads {
                     directory: "C:\\IDG".into(),
                     expected_sha256: None,
                     conflict: ConflictPolicy::Reject,
+                    auth: None,
+                    allow_cleartext_ftp: false,
                 })?;
                 if let Some(job) = inner.jobs.get(&proposal.id) {
                     return if job.creation.as_ref().is_some_and(|c| {
@@ -716,6 +740,9 @@ impl Downloads {
                 {
                     return Err(DownloadError::InvalidInput);
                 }
+                if draft.options.proxy.is_none() {
+                    draft.options.proxy = Some(inner.preferences.proxy.clone());
+                }
                 let queue_limit = inner
                     .organization
                     .queues
@@ -1017,6 +1044,10 @@ impl Downloads {
         {
             return Err(DownloadError::Busy);
         }
+        let inherited_proxy = job.options.proxy.is_none();
+        if inherited_proxy {
+            job.options.proxy = Some(inner.preferences.proxy.clone());
+        }
         let media_tools = if job.media.is_some() {
             let ffmpeg = inner
                 .preferences
@@ -1038,8 +1069,11 @@ impl Downloads {
         };
         // Persist the transition before any GET. After a crash, an already-started
         // queued job must recover paused instead of silently replaying its URL.
-        if matches!(job.state, TransferState::Queued | TransferState::Deferred) {
+        let pending_state = matches!(job.state, TransferState::Queued | TransferState::Deferred);
+        if pending_state {
             job.state = TransferState::Probing;
+        }
+        if pending_state || inherited_proxy {
             inner.store.save(&job)?;
             inner.jobs.insert(job.id.clone(), job.clone());
             self.emit(&job);
@@ -1059,8 +1093,13 @@ impl Downloads {
                     .build()
                     .map_err(|_| DownloadError::Network)
                     .and_then(|rt| {
-                        let client = download::client()?;
                         if job.media.is_some() {
+                            let policy = job
+                                .options
+                                .proxy
+                                .as_ref()
+                                .ok_or(DownloadError::InvalidInput)?;
+                            let client = download::client_with_policy(policy)?;
                             let tools = media_tools.ok_or(DownloadError::MediaToolUnavailable)?;
                             rt.block_on(idg_media::transfer_media(
                                 &client,
@@ -1070,7 +1109,23 @@ impl Downloads {
                                 this.resources.clone(),
                                 &tools,
                             ))
+                        } else if job.input.url.split_once(':').is_some_and(|(scheme, _)| {
+                            scheme.eq_ignore_ascii_case("ftp")
+                                || scheme.eq_ignore_ascii_case("ftps")
+                        }) {
+                            rt.block_on(download::transfer_ftp_managed(
+                                &mut job,
+                                &mut commands,
+                                &mut sink,
+                                this.resources.clone(),
+                            ))
                         } else {
+                            let policy = job
+                                .options
+                                .proxy
+                                .as_ref()
+                                .ok_or(DownloadError::InvalidInput)?;
+                            let client = download::client_with_policy(policy)?;
                             rt.block_on(download::transfer_managed(
                                 &client,
                                 &mut job,
@@ -1202,11 +1257,93 @@ mod capture_tests {
                 name: if private { "private.bin" } else { "public.bin" }.into(),
                 expected_sha256: None,
                 conflict: ConflictPolicy::Reject,
+                auth: None,
+                allow_cleartext_ftp: false,
             },
             options: TransferOptions::default(),
             category: "Otros".into(),
             start,
         }
+    }
+
+    #[tokio::test]
+    async fn global_proxy_routes_http_download_through_the_configured_proxy() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let proxy = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let proxy_addr = proxy.local_addr().unwrap();
+        let proxy_request = tokio::spawn(async move {
+            let (mut stream, _) = proxy.accept().await.unwrap();
+            let mut request = Vec::new();
+            let mut chunk = [0; 1024];
+            loop {
+                let count = stream.read(&mut chunk).await.unwrap();
+                assert_ne!(count, 0, "proxy connection ended before request headers");
+                request.extend_from_slice(&chunk[..count]);
+                if request.windows(4).any(|window| window == b"\r\n\r\n") {
+                    break;
+                }
+            }
+            assert!(
+                request.starts_with(b"GET http://example.invalid/file "),
+                "request did not use the configured proxy: {}",
+                String::from_utf8_lossy(&request)
+            );
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\nContent-Type: application/octet-stream\r\nConnection: close\r\n\r\ndata")
+                .await
+                .unwrap();
+        });
+        let directory = TestDirectory::new();
+        let runtime = Downloads::open_at(directory.path().to_path_buf()).unwrap();
+        let policy = ProxyPolicy::Explicit {
+            url: format!("http://{proxy_addr}"),
+        };
+        let preferences = AppPreferences {
+            proxy: policy.clone(),
+            ..AppPreferences::default()
+        };
+        runtime
+            .handle(req(
+                "preferences",
+                Command::SetAppPreferences { preferences },
+            ))
+            .unwrap();
+
+        let mut draft = create_draft(directory.path(), false, StartPolicy::Now);
+        draft.input.url = "http://example.invalid/file".into();
+        draft.input.expected_sha256 =
+            Some("3a6eb0790f39ac87c94f3856b2dd2c5d110e6811602261a9a923d3bb23adc8b7".into());
+        let Payload::Download { job } = runtime
+            .handle(req("global-proxy", Command::CreateDownload { draft }))
+            .unwrap()
+        else {
+            panic!("expected a started download");
+        };
+        assert_eq!(job.options.proxy, Some(policy));
+        let mut result = job;
+        for _ in 0..100 {
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+            let Payload::Download { job } = runtime
+                .handle(req(
+                    "status",
+                    Command::GetDownload {
+                        job_id: "global-proxy".into(),
+                    },
+                ))
+                .unwrap()
+            else {
+                panic!("expected a download status");
+            };
+            if job.state == TransferState::Completed || job.state == TransferState::Failed {
+                result = job;
+                break;
+            }
+        }
+        assert_eq!(result.state, TransferState::Completed, "{:?}", result.error);
+        assert!(result.verified_against_reference);
+        proxy_request.await.unwrap();
+        runtime.shutdown().await;
     }
 
     fn req(id: &str, command: Command) -> Request {
@@ -1285,6 +1422,8 @@ mod capture_tests {
                 directory: directory.to_string_lossy().into_owned(),
                 expected_sha256: None,
                 conflict: ConflictPolicy::Reject,
+                auth: None,
+                allow_cleartext_ftp: false,
             },
             options: TransferOptions::default(),
             category: "Otros".into(),

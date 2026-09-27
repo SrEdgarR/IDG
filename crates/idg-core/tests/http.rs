@@ -81,6 +81,8 @@ fn input(dir: &tempfile::TempDir, url: String) -> NewDownload {
         name: "prueba-ñ.bin".into(),
         expected_sha256: None,
         conflict: ConflictPolicy::Reject,
+        auth: None,
+        allow_cleartext_ftp: false,
     }
 }
 async fn run(j: &mut Job, s: &mut MemoryStore) -> Result<(), DownloadError> {

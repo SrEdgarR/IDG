@@ -18,6 +18,7 @@
 | Ejecutar las pruebas y leer la cobertura actual | [Pruebas y cobertura](TESTING.md) |
 | Ver el subconjunto HLS/DASH que realmente se procesa | [Alcance multimedia](MEDIA_SUPPORT.md) |
 | Ver el subconjunto HLS/DASH que realmente se procesa | [Alcance multimedia](MEDIA_SUPPORT.md) |
+| Consultar compatibilidad y pruebas por protocolo | [Matriz de protocolos](PROTOCOL_SUPPORT.md) |
 | Consultar las referencias técnicas | [Fuentes](SOURCES.md) |
 | Entender decisiones y pruebas pendientes de arquitectura | [ADR](decisions/README.md) |
 | Relacionar requisitos, pantallas y fases | [Trazabilidad](TRACEABILITY.md) |

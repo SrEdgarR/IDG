@@ -85,8 +85,31 @@ export function formatBytes(value: number | bigint | null) {
   const n = Math.min(3, Math.floor(Math.log(value) / Math.log(1024)));
   return `${(value / 1024 ** n).toLocaleString("es", { maximumFractionDigits: 1 })} ${["B", "KiB", "MiB", "GiB"][n]}`;
 }
-export function validateDraft(name: string, url: string) {
-  const errors: { name?: string; url?: string } = {};
+export type DownloadAuthDraft = {
+  username: string;
+  password: string;
+  headers: { name: string; value: string }[];
+};
+export type DownloadProxyDraft = {
+  mode: "inherit" | "direct" | "environment" | "explicit";
+  url: string;
+};
+
+export function validateDraft(
+  name: string,
+  url: string,
+  auth: DownloadAuthDraft = { username: "", password: "", headers: [] },
+  allowCleartextFtp = false,
+  proxy: DownloadProxyDraft = { mode: "inherit", url: "" },
+) {
+  const errors: {
+    name?: string;
+    url?: string;
+    auth?: string;
+    headers?: string;
+    cleartextFtp?: string;
+    proxy?: string;
+  } = {};
   if (
     !name.trim() ||
     /[<>:"/\\|?*\u0000-\u001f]/.test(name) ||
@@ -99,15 +122,101 @@ export function validateDraft(name: string, url: string) {
   try {
     const u = new URL(url);
     if (
-      !["https:", "http:"].includes(u.protocol) ||
+      !["https:", "http:", "ftp:", "ftps:"].includes(u.protocol) ||
       !u.hostname ||
       u.username ||
-      u.password
+      u.password ||
+      ((u.protocol === "ftp:" || u.protocol === "ftps:") && /[?#]/.test(url))
     )
       throw Error();
+    if (u.protocol === "ftp:" && !allowCleartextFtp)
+      errors.cleartextFtp = "Confirma que aceptas una conexión FTP sin cifrar.";
   } catch {
     errors.url =
-      "Introduce una URL HTTP o HTTPS válida, sin credenciales incrustadas.";
+      "Introduce una URL HTTP, HTTPS, FTP o FTPS válida, sin credenciales incrustadas.";
+  }
+  if (
+    (auth.username !== "" &&
+      (!auth.username.trim() ||
+        new TextEncoder().encode(auth.username).length > 512 ||
+        /\p{Cc}/u.test(auth.username))) ||
+    new TextEncoder().encode(auth.password).length > 2048 ||
+    /\p{Cc}/u.test(auth.password) ||
+    (auth.password !== "" && auth.username === "")
+  )
+    errors.auth = "Revisa el usuario y la contraseña; no se aceptan controles ni valores fuera del límite.";
+
+  const headers = auth.headers.filter((header) => header.name || header.value);
+  let protocol = "";
+  try {
+    protocol = new URL(url).protocol;
+  } catch {
+    // The URL error above is the relevant message.
+  }
+  const reservedHeaders = new Set([
+    "authorization",
+    "connection",
+    "content-length",
+    "cookie",
+    "host",
+    "if-range",
+    "proxy-authorization",
+    "range",
+    "referer",
+    "transfer-encoding",
+    "accept-encoding",
+  ]);
+  if (
+    headers.length > 32 ||
+    headers.some((header) => {
+      const name = header.name.toLowerCase();
+      return (
+        !/^[!#$%&'*+.^_`|~0-9a-z-]+$/i.test(header.name) ||
+        new TextEncoder().encode(header.name).length > 256 ||
+        new TextEncoder().encode(header.value).length > 8192 ||
+        /\p{Cc}/u.test(header.value) ||
+        reservedHeaders.has(name) ||
+        !header.name ||
+        !header.value
+      );
+    }) ||
+    ((protocol === "ftp:" || protocol === "ftps:") && headers.length > 0)
+  )
+    errors.headers =
+      protocol === "ftp:" || protocol === "ftps:"
+        ? "Las cabeceras personalizadas no están disponibles con FTP/FTPS."
+        : "Revisa las cabeceras: hay un campo incompleto, reservado o fuera de los límites permitidos.";
+  if ((protocol === "ftp:" || protocol === "ftps:") && proxy.mode !== "inherit") {
+    errors.proxy = "FTP/FTPS no admite una política de proxy por descarga.";
+  } else if (proxy.mode === "explicit") {
+    try {
+      const u = new URL(proxy.url);
+      const authority = proxy.url.slice(proxy.url.indexOf("://") + 3).split(/[/?#]/, 1)[0];
+      const remainder = proxy.url.slice(proxy.url.indexOf("://") + 3 + authority.length);
+      const portStart = authority.startsWith("[")
+        ? authority.indexOf("]:") + 2
+        : authority.lastIndexOf(":") + 1;
+      const port = Number(authority.slice(portStart));
+      const hasPort = authority.startsWith("[")
+        ? /^\[[^\]]+\]:\d+$/.test(authority)
+        : /:\d+$/.test(authority);
+      if (
+        !["http:", "https:", "socks5:", "socks5h:"].includes(u.protocol) ||
+        !u.hostname ||
+        !hasPort ||
+        port < 1 ||
+        port > 65535 ||
+        authority.includes("@") ||
+        u.username ||
+        u.password ||
+        remainder !== "" ||
+        /\p{Cc}/u.test(proxy.url)
+      )
+        throw Error();
+    } catch {
+      errors.proxy =
+        "Introduce un proxy HTTP, HTTPS, SOCKS5 o SOCKS5H con host y puerto, sin credenciales ni ruta.";
+    }
   }
   return errors;
 }

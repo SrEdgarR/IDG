@@ -40,6 +40,31 @@ pub struct NewDownload {
     pub name: String,
     pub expected_sha256: Option<String>,
     pub conflict: ConflictPolicy,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth: Option<DownloadAuth>,
+    #[serde(default)]
+    #[ts(optional, as = "Option<_>")]
+    pub allow_cleartext_ftp: bool,
+}
+
+/// Secrets are persisted only inside the DPAPI-protected job record and are
+/// deliberately absent from every public snapshot.
+#[derive(Clone, Serialize, Deserialize, TS, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct DownloadAuth {
+    #[serde(default)]
+    pub username: Option<String>,
+    #[serde(default)]
+    pub password: Option<String>,
+    #[serde(default)]
+    pub headers: Vec<DownloadHeader>,
+}
+
+#[derive(Clone, Serialize, Deserialize, TS, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct DownloadHeader {
+    pub name: String,
+    pub value: String,
 }
 impl std::fmt::Debug for NewDownload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -59,6 +84,8 @@ mod tests {
             name: "file.bin".into(),
             expected_sha256: None,
             conflict: ConflictPolicy::Reject,
+            auth: None,
+            allow_cleartext_ftp: false,
         };
         let output = format!("{input:?}");
         assert_eq!(output, "NewDownload { redacted }");
@@ -95,6 +122,7 @@ pub enum DownloadError {
     Network,
     Timeout,
     Tls,
+    ProxyUnsupported,
     AccessDenied,
     RetryLater,
     HttpStatus,
@@ -129,6 +157,9 @@ impl DownloadError {
             }
             Self::Timeout => "El servidor no respondió dentro del plazo.",
             Self::Tls => "No se pudo establecer una conexión TLS validada.",
+            Self::ProxyUnsupported => {
+                "FTP/FTPS no puede aplicar la política de proxy seleccionada; no se abrió una conexión directa."
+            }
             Self::AccessDenied => "El servidor requiere autorización o denegó el acceso.",
             Self::RetryLater => "El servidor pide esperar; no se reintenta automáticamente.",
             Self::HttpStatus => "El servidor devolvió una respuesta HTTP no admitida.",

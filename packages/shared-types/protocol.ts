@@ -25,7 +25,8 @@ export type OrganizationCommand = { "action": "set_library_settings", settings: 
 export type OrganizationState = { library: LibrarySettings, statistics: LocalStatistics, categories: Array<string>, rules: Array<OrganizationRule>, queues: Array<DownloadQueue>, power_message: string, power_remaining: number | null, power_simulated: boolean, };
 export type StartPolicy = "now" | "later" | "queue";
 export type CreateDownload = { context: string, private: boolean, apply_rules: boolean, rule_overrides: Array<string>, queue_id: string, input: NewDownload, options: TransferOptions, category: string, start: StartPolicy, };
-export type AppPreferences = { welcome_done: boolean, directory: string, theme: string, view: string, close_action: string, autopick_mode: string, notify_completed: boolean, notify_failed: boolean, mini_window: boolean, drop_target: boolean, queue_running: boolean, media_ffmpeg_path: string | null, };
+export type ProxyPolicy = { "mode": "direct" } | { "mode": "environment" } | { "mode": "explicit", url: string, };
+export type AppPreferences = { welcome_done: boolean, directory: string, theme: string, view: string, close_action: string, autopick_mode: string, notify_completed: boolean, notify_failed: boolean, mini_window: boolean, drop_target: boolean, queue_running: boolean, proxy: ProxyPolicy, media_ffmpeg_path: string | null, };
 export type ExtensionState = { autopick_mode: string, active_count: number, jobs: Array<DownloadSnapshot>, };
 export type MediaKind = "video" | "audio";
 export type MediaManifestKind = "none" | "hls" | "dash";
@@ -49,15 +50,21 @@ export type TransferOptions = { mode: RequestMode,
 /**
  * Explicit caller assertion that this GET may safely be repeated in parallel.
  */
-replay_safe: boolean, bytes_per_second: number | null, priority: Priority, };
+replay_safe: boolean, bytes_per_second: number | null, priority: Priority,
+/**
+ * `None` inherits the global policy while composing a download.
+ */
+proxy?: ProxyPolicy | null, };
 export type ResourceLimits = { max_downloads: number, global_requests: number, origin_requests: number, bytes_per_second: number | null, };
 export type RangeSnapshot = { start: string, end_exclusive: string, durable: boolean, };
 export type ResumeCapability = "unknown" | "validator_available" | "range_verified";
 export type IntegrityState = "not_checked" | "calculated" | "verified" | "mismatch";
 export type ConflictPolicy = "rename" | "reject" | "replace";
-export type NewDownload = { url: string, directory: string, name: string, expected_sha256: string | null, conflict: ConflictPolicy, };
+export type DownloadHeader = { name: string, value: string, };
+export type DownloadAuth = { username: string | null, password: string | null, headers: Array<DownloadHeader>, };
+export type NewDownload = { url: string, directory: string, name: string, expected_sha256: string | null, conflict: ConflictPolicy, auth?: DownloadAuth | null, allow_cleartext_ftp?: boolean, };
 export type TransferState = "deferred" | "queued" | "probing" | "downloading" | "processing" | "paused" | "verifying" | "publish_pending" | "completed" | "failed" | "cancelled";
-export type DownloadError = "invalid_input" | "busy" | "not_found" | "invalid_state" | "conflict" | "storage" | "network" | "timeout" | "tls" | "access_denied" | "retry_later" | "http_status" | "unsafe_resume" | "resource_changed" | "range_ignored" | "invalid_range" | "expired" | "representation" | "size_mismatch" | "hash_mismatch" | "partial_changed" | "disk_full" | "file_io" | "publish_blocked" | "secret_unavailable" | "media_tool_unavailable";
+export type DownloadError = "invalid_input" | "busy" | "not_found" | "invalid_state" | "conflict" | "storage" | "network" | "timeout" | "tls" | "proxy_unsupported" | "access_denied" | "retry_later" | "http_status" | "unsafe_resume" | "resource_changed" | "range_ignored" | "invalid_range" | "expired" | "representation" | "size_mismatch" | "hash_mismatch" | "partial_changed" | "disk_full" | "file_io" | "publish_blocked" | "secret_unavailable" | "media_tool_unavailable";
 export type UnavailableDownload = { id: string, error: DownloadError, };
 export type DownloadSnapshot = { queue_id: string, queue_order: number, private: boolean, category: string, domain: string, created_at: string, options: TransferOptions, active_requests: number, target_requests: number, ranges_total: number, ranges_durable: number, transferred_bytes: string, retries: number, strategy: string, resume_capability: ResumeCapability, integrity: IntegrityState, id: string, name: string, state: TransferState, received_bytes: string, durable_bytes: string, total_bytes: string | null, resume: string, calculated_sha256: string | null, verified_against_reference: boolean, media_stage: MediaStage | null, error: DownloadError | null, message: string | null, retry_after_seconds: number | null, };
 export type Command = { "library": { operation: LibraryCommand, } } | { "organization": { operation: OrganizationCommand, } } | { "find_recoverable_download": { input: NewDownload, } } | { "create_download": { draft: CreateDownload, } } | { "inspect_media_manifest": { url: string, } } | { "create_media_download": { draft: CreateDownload, fingerprint: string, selection: MediaSelection, } } | "get_app_preferences" | "get_extension_state" | { "set_extension_mode": { mode: string, } } | { "prepare_capture": { proposal: CaptureProposal, } } | { "get_capture_status": { capture_id: string, } } | "get_capture_requests" | { "reject_capture": { capture_id: string, } } | { "start_capture": { capture_id: string, } } | { "abort_capture": { capture_id: string, } } | "open_desktop" | { "get_download_directory": { job_id: string, } } | { "set_app_preferences": { preferences: AppPreferences, } } | "handshake" | "ping" | "get_snapshot" | "subscribe" | "shutdown" | "get_download_capabilities" | { "add_download": { input: NewDownload, } } | { "add_download_with_options": { input: NewDownload, options: TransferOptions, } } | { "set_download_options": { job_id: string, options: TransferOptions, } } | { "set_resource_limits": { limits: ResourceLimits, } } | "get_resource_limits" | { "get_download_ranges": { job_id: string, offset: number, } } | { "get_download": { job_id: string, } } | { "list_downloads": { offset: number, } } | { "pause_download": { job_id: string, } } | { "resume_download": { job_id: string, } } | { "cancel_download": { job_id: string, } };

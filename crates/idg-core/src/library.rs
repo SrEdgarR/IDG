@@ -221,6 +221,8 @@ mod tests {
                 name: "a.bin".into(),
                 expected_sha256: None,
                 conflict: idg_protocol::ConflictPolicy::Reject,
+                auth: None,
+                allow_cleartext_ftp: false,
             },
         )
         .unwrap();
@@ -264,6 +266,8 @@ mod tests {
                     name: format!("Árbol [{n}].txt"),
                     expected_sha256: None,
                     conflict: idg_protocol::ConflictPolicy::Reject,
+                    auth: None,
+                    allow_cleartext_ftp: false,
                 },
             )
             .unwrap();
@@ -303,6 +307,8 @@ mod tests {
             name: "a.bin".into(),
             expected_sha256: None,
             conflict: idg_protocol::ConflictPolicy::Reject,
+            auth: None,
+            allow_cleartext_ftp: false,
         };
         let job = crate::download::create_job("one", input.clone()).unwrap();
         assert!(duplicate(&job, &input, ""));

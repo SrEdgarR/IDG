@@ -1,4 +1,4 @@
-use crate::{DownloadError, NewDownload, TransferOptions};
+use crate::{DownloadError, NewDownload, ProxyPolicy, TransferOptions};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -70,6 +70,8 @@ pub struct AppPreferences {
     pub drop_target: bool,
     pub queue_running: bool,
     #[serde(default)]
+    pub proxy: ProxyPolicy,
+    #[serde(default)]
     pub media_ffmpeg_path: Option<String>,
 }
 impl Default for AppPreferences {
@@ -86,6 +88,7 @@ impl Default for AppPreferences {
             mini_window: false,
             drop_target: false,
             queue_running: false,
+            proxy: ProxyPolicy::Direct,
             media_ffmpeg_path: None,
         }
     }
@@ -97,6 +100,7 @@ impl AppPreferences {
             || !["hide", "exit", "ask"].contains(&self.close_action.as_str())
             || !["always", "ask", "browser"].contains(&self.autopick_mode.as_str())
             || self.directory.len() > 4096
+            || self.proxy.validate().is_err()
             || self
                 .media_ffmpeg_path
                 .as_ref()
@@ -128,6 +132,8 @@ mod tests {
                 name: "file.bin".into(),
                 expected_sha256: None,
                 conflict: crate::ConflictPolicy::Reject,
+                auth: None,
+                allow_cleartext_ftp: false,
             },
             options: TransferOptions::default(),
             category: "Otros".into(),
@@ -213,5 +219,39 @@ mod tests {
         }
         let unknown = serde_json::from_str::<AppPreferences>(r#"{"unexpected":true}"#);
         assert!(unknown.is_err());
+    }
+
+    #[test]
+    fn proxy_preference_rejects_embedded_credentials_before_it_can_be_saved() {
+        let invalid = AppPreferences {
+            proxy: ProxyPolicy::Explicit {
+                url: "http://user:secret@127.0.0.1:8080".into(),
+            },
+            ..Default::default()
+        };
+        assert_eq!(invalid.validate(), Err(DownloadError::InvalidInput));
+        assert_eq!(AppPreferences::default().proxy, ProxyPolicy::Direct);
+        assert_eq!(
+            serde_json::from_str::<AppPreferences>("{}").unwrap().proxy,
+            ProxyPolicy::Direct
+        );
+    }
+
+    #[test]
+    fn manual_auth_secrets_are_absent_from_new_download_debug() {
+        let mut input = draft().input;
+        input.auth = Some(crate::DownloadAuth {
+            username: Some("fixture-user".into()),
+            password: Some("fixture-password".into()),
+            headers: vec![crate::DownloadHeader {
+                name: "x-secret".into(),
+                value: "fixture-header-secret".into(),
+            }],
+        });
+        let debug = format!("{input:?}");
+        assert_eq!(debug, "NewDownload { redacted }");
+        assert!(!debug.contains("fixture-user"));
+        assert!(!debug.contains("fixture-password"));
+        assert!(!debug.contains("fixture-header-secret"));
     }
 }

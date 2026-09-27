@@ -1,0 +1,19 @@
+# Matriz de capacidades por protocolo
+
+Estado documental al 2026-09-26: **fase 11 EN_CURSO**. La rama `feat/11-ftp-proxy-autenticacion` parte de `40b5b346d6e4eba5c4b1d82cf8fe4f575404a242`; el código comprobado está en `825b04d0420ac91cff4e8c41f6cb0d15be040e87`. Cada celda distingue la prueba de protocolo del recorrido Tauri.
+
+| Capacidad | HTTP/HTTPS | FTP | FTPS | Estado/evidencia |
+|---|---|---|---|---|
+| Descarga base | VERIFICADO en fases 03/04 | VERIFICADO en Tauri con fixture FTP local y SHA-256 | Core verificado con fixture TLS; recorrido Tauri pendiente | El E2E de FTP usó credenciales ficticias y finalizó un archivo desde la ventana real automatizada. FTPS aún no tiene E2E Tauri. |
+| Reanudación | VERIFICADO mediante rangos/validadores HTTP | Core verificado cuando REST y la identidad `SIZE` + `MDTM` coinciden; REST rechazado conserva el parcial | Pendiente de recorrido FTPS | No se infiere reanudabilidad por nombre o tamaño. Se exige hash esperado para reanudar FTP. |
+| TLS y certificado | HTTPS verificado; certificado no confiable rechazado en pruebas | No aplica a FTP plano; requiere confirmación antes de enviar credenciales | Core verifica TLS en control/datos y rechaza CA de prueba no confiable | La prueba FTPS usa CA de prueba acotada; no se instaló confianza global. FTP plano no se describe como seguro. |
+| Modo pasivo | No aplica | EPSV probado; no se ofrece modo activo | EPSV en el adaptador TLS; E2E Tauri pendiente | La dirección de datos se obtiene del extremo de control; no se acepta una IP arbitraria incluida en una respuesta EPSV. No hay compatibilidad con FTP proxificado. |
+| Proxy del sistema | Implementado por la configuración del cliente HTTP; selección real de Windows pendiente | No soportado | No soportado | No se modificó la configuración de proxy del sistema durante las pruebas. |
+| Proxy HTTP/SOCKS explícito, global o por descarga | Ruta local comprobada: HTTP global y explícita; SOCKS5H y proxy obligatorio sin fallback en core/runtime | No soportado; se rechaza antes de crear el trabajo si la política global no es directa | No soportado | La ruta proxy desde el formulario Tauri no se probó de extremo a extremo. La prueba de runtime envió la descarga global por un proxy local. |
+| Autenticación manual y cabeceras permitidas | Validación/redacción y DPAPI probadas; Tauri HTTP auth E2E pendiente | Credenciales ficticias completaron el E2E Tauri; contraseña incorrecta se rechaza en core | Credenciales no se envían antes de validar TLS; Tauri E2E pendiente | Cabeceras HTTP reservadas y datos inválidos se rechazan. No se exportaron secretos. |
+| Cookies de sesión del navegador | NO SOPORTADO | NO SOPORTADO | NO SOPORTADO | Las credenciales introducidas manualmente no son una transferencia de cookies o sesión del navegador. |
+| Diagnósticos y reintentos | Pruebas de proxy obligatorio, redirects y redacción | Core prueba clave incorrecta, cancelación, desconexión y REST rechazado | Rechazo de certificado no confiable probado | Logs/snapshots/debug no exponen secretos en las pruebas de protocolo; los mensajes de error de toda configuración del sistema no tienen matriz E2E. |
+
+`EN_CURSO` indica trabajo de fase 11 sin verificación completa. `PENDIENTE` significa que no hay evidencia suficiente para declarar soporte; no implica que se haya ejecutado una prueba fallida. Los comandos y alcances probados están en [TEST_PLAN.md](TEST_PLAN.md#fase-11--ftp-proxies-y-autenticacion), y el avance se registra en [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md).
+
+FTP/FTPS tienen limitaciones de identidad y tamaño frente a HTTP; registrar qué valida realmente el adaptador. No atribuir FTP a `reqwest`. Un control que un protocolo no soporte debe permanecer deshabilitado y explicar la razón. Un proxy no es una VPN ni ofrece aislamiento por proceso.

@@ -312,6 +312,8 @@ mod tests {
                 name: "file.bin".into(),
                 expected_sha256: None,
                 conflict: ConflictPolicy::Reject,
+                auth: None,
+                allow_cleartext_ftp: false,
             },
         )
         .unwrap();
@@ -525,6 +527,55 @@ mod tests {
         drop(store);
         assert_eq!(Store::open(&file).unwrap().preferences().unwrap(), prefs);
     }
+    #[cfg(windows)]
+    #[test]
+    fn manual_download_credentials_and_headers_are_protected_at_rest() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("auth.sqlite3");
+        let mut store = Store::open(&file).unwrap();
+        let job = idg_core::download::create_job(
+            "protected-auth",
+            idg_protocol::NewDownload {
+                url: "https://example.test/file.bin".into(),
+                directory: dir.path().to_string_lossy().into_owned(),
+                name: "file.bin".into(),
+                expected_sha256: None,
+                conflict: idg_protocol::ConflictPolicy::Reject,
+                auth: Some(idg_protocol::DownloadAuth {
+                    username: Some("fixture-user-secret".into()),
+                    password: Some("fixture-password-secret".into()),
+                    headers: vec![idg_protocol::DownloadHeader {
+                        name: "X-Private-Test".into(),
+                        value: "fixture-header-secret".into(),
+                    }],
+                }),
+                allow_cleartext_ftp: false,
+            },
+        )
+        .unwrap();
+        store.save(&job).unwrap();
+        let blob: Vec<u8> = store
+            .connection
+            .query_row("SELECT protected_job FROM downloads", [], |row| row.get(0))
+            .unwrap();
+        for secret in [
+            "fixture-user-secret",
+            "fixture-password-secret",
+            "fixture-header-secret",
+        ] {
+            assert!(
+                !blob
+                    .windows(secret.len())
+                    .any(|window| window == secret.as_bytes())
+            );
+        }
+        drop(store);
+        let loaded = Store::open(&file).unwrap().load().unwrap();
+        let auth = loaded.jobs[0].input.auth.as_ref().unwrap();
+        assert_eq!(auth.username.as_deref(), Some("fixture-user-secret"));
+        assert_eq!(auth.password.as_deref(), Some("fixture-password-secret"));
+        assert_eq!(auth.headers[0].value, "fixture-header-secret");
+    }
     #[test]
     fn interrupted_migration_rolls_back_and_reopens() {
         let dir = tempfile::tempdir().unwrap();
@@ -575,6 +626,8 @@ mod tests {
             name: "safe.bin".into(),
             expected_sha256: None,
             conflict: idg_protocol::ConflictPolicy::Reject,
+            auth: None,
+            allow_cleartext_ftp: false,
         };
         let job = idg_core::download::create_job("safe", input).unwrap();
         store.save(&job).unwrap();
@@ -616,6 +669,8 @@ mod tests {
                 name: "identity.bin".into(),
                 expected_sha256: None,
                 conflict: idg_protocol::ConflictPolicy::Reject,
+                auth: None,
+                allow_cleartext_ftp: false,
             },
         )
         .unwrap();
@@ -655,6 +710,8 @@ mod tests {
             name: "old.bin".into(),
             expected_sha256: None,
             conflict: idg_protocol::ConflictPolicy::Reject,
+            auth: None,
+            allow_cleartext_ftp: false,
         };
         let job = idg_core::download::create_job("old", input).unwrap();
         let mut old = serde_json::to_value(job).unwrap();

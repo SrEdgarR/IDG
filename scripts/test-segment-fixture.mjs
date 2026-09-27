@@ -5,13 +5,15 @@ import {createHash} from 'node:crypto';
 // Deliberately delayed timers reproduce the old sharedDue defect without
 // changing Windows timer resolution or assuming anything about the CI host.
 for (const clients of [2, 3]) {
-  const size = 8 * 1024 * 1024;
+  // Keep fixed request/read/hash overhead small relative to the measured body;
+  // the end-to-end timer still includes fetch startup and all client checks.
+  const size = 16 * 1024 * 1024;
   const rate = 4 * 1024 * 1024;
   const fixture = await startSegments({size, rate, condition: 'shared', minimumTimerMs: 16});
   const started = performance.now();
   try {
     await Promise.all(Array.from({length: clients}, async () => {
-      const response = await fetch(fixture.url + '/file', {signal: AbortSignal.timeout(15000)});
+      const response = await fetch(fixture.url + '/file', {signal: AbortSignal.timeout(30000)});
       const body = Buffer.from(await response.arrayBuffer());
       assert.equal(body.length, size);
       assert.equal(createHash('sha256').update(body).digest('hex'), expectedHash(size));
