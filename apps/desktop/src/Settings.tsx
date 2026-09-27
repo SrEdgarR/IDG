@@ -281,7 +281,10 @@ export function Settings({
             <>
               <label className="field">
                 Ejecutable FFmpeg
-                <input readOnly value={preferences.media_ffmpeg_path ?? "No configurado"} />
+                <input
+                  readOnly
+                  value={preferences.media_ffmpeg_path ?? "No configurado"}
+                />
               </label>
               <button
                 type="button"
@@ -329,7 +332,10 @@ export function Settings({
               </p>
             </>
           ) : backend && section === "Privacidad" ? (
-            <LibraryPreferences />
+            <>
+              <LibraryPreferences />
+              <DiagnosticsExport />
+            </>
           ) : backend && section === "Colas y programación" ? (
             <div>
               <p>
@@ -397,6 +403,72 @@ export function Settings({
   );
 }
 
+export function DiagnosticsExport() {
+  const [preview, setPreview] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  async function refreshPreview() {
+    setBusy(true);
+    setMessage("");
+    setError("");
+    try {
+      setPreview(await invoke<string>("diagnostics_preview"));
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function exportReport() {
+    setBusy(true);
+    setMessage("");
+    setError("");
+    try {
+      const saved = await invoke<boolean>("export_diagnostics");
+      setMessage(saved ? "Diagnóstico guardado." : "Exportación cancelada.");
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section aria-label="Diagnóstico local">
+      <h4>Diagnóstico local</h4>
+      <p>
+        La vista previa contiene solo versión, plataforma, arquitectura y estado
+        de conexión. Excluye descargas, nombres, rutas, URLs, credenciales,
+        historial, estadísticas y reglas. IDG no mantiene logs persistentes ni
+        envía telemetría; por eso no hay logs que rotar. El archivo solo se crea
+        si lo eliges y nunca sobrescribe uno existente.
+      </p>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => void refreshPreview()}
+      >
+        Actualizar vista previa
+      </button>
+      <button
+        type="button"
+        disabled={busy || !preview}
+        onClick={() => void exportReport()}
+      >
+        Guardar diagnóstico…
+      </button>
+      {preview && (
+        <pre aria-label="Vista previa del diagnóstico">{preview}</pre>
+      )}
+      {message && <p role="status">{message}</p>}
+      {error && <p role="alert">{error}</p>}
+    </section>
+  );
+}
+
 function validProxyEndpoint(value: string) {
   const separator = value.indexOf("://");
   if (separator < 1 || value.length > 2048) return false;
@@ -415,15 +487,27 @@ function validProxyEndpoint(value: string) {
     rawPort = authority.slice(end + 2);
   } else {
     const separator = authority.lastIndexOf(":");
-    if (separator < 1 || authority.slice(0, separator).includes(":")) return false;
+    if (separator < 1 || authority.slice(0, separator).includes(":"))
+      return false;
     rawPort = authority.slice(separator + 1);
   }
   const port = Number(rawPort);
-  if (!/^\d+$/.test(rawPort) || !Number.isInteger(port) || port < 1 || port > 65535)
+  if (
+    !/^\d+$/.test(rawPort) ||
+    !Number.isInteger(port) ||
+    port < 1 ||
+    port > 65535
+  )
     return false;
   try {
     const url = new URL(value);
-    return !url.username && !url.password && !!url.hostname && !url.search && !url.hash;
+    return (
+      !url.username &&
+      !url.password &&
+      !!url.hostname &&
+      !url.search &&
+      !url.hash
+    );
   } catch {
     return false;
   }
@@ -455,7 +539,9 @@ function ProxySettings({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!validProxyEndpoint(url)) {
-      setInputError("Usa HTTP, HTTPS o SOCKS5 con host y puerto, sin credenciales ni ruta.");
+      setInputError(
+        "Usa HTTP, HTTPS o SOCKS5 con host y puerto, sin credenciales ni ruta.",
+      );
       return;
     }
     if (await onSave({ mode: "explicit", url })) setMode("explicit");
@@ -469,7 +555,9 @@ function ProxySettings({
         <select
           aria-label="Política de proxy"
           value={mode}
-          onChange={(event) => void selectMode(event.target.value as typeof mode)}
+          onChange={(event) =>
+            void selectMode(event.target.value as typeof mode)
+          }
         >
           <option value="direct">Conexión directa</option>
           <option value="environment">Sistema y entorno</option>
@@ -478,9 +566,9 @@ function ProxySettings({
       </label>
       {mode === "environment" && (
         <p className="muted">
-          Usa la configuración de proxy del sistema y las variables
-          HTTP_PROXY, HTTPS_PROXY, ALL_PROXY y NO_PROXY compatibles. Puedes
-          elegir conexión directa o un endpoint explícito para reemplazarla.
+          Usa la configuración de proxy del sistema y las variables HTTP_PROXY,
+          HTTPS_PROXY, ALL_PROXY y NO_PROXY compatibles. Puedes elegir conexión
+          directa o un endpoint explícito para reemplazarla.
         </p>
       )}
       {mode === "explicit" && (
@@ -662,8 +750,10 @@ export function FirstRunWizard({
           </label>
           <p className="muted">
             AutoPick sigue en el plan del producto, pero la captura automática
-            está deshabilitada. Esta elección {backend ? "se guarda" : "es de muestra"}
-            como preferencia futura y no cambia cómo se descargan los archivos hoy.
+            está deshabilitada. Esta elección{" "}
+            {backend ? "se guarda" : "es de muestra"}
+            como preferencia futura y no cambia cómo se descargan los archivos
+            hoy.
           </p>
         </>
       )}

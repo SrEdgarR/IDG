@@ -128,6 +128,13 @@ Las versiones exactas de dependencias del programa se resolverán en 01. Las pá
 - [Licencias FFmpeg](https://ffmpeg.org/legal.html): opciones GPL y bibliotecas externas cambian la licencia y obligaciones del binario. El build local observado declara GPLv3+ y `--enable-gpl --enable-version3`; no se incorpora al producto.
 - [FFmpeg streamcopy](https://www.ffmpeg.org/ffmpeg.html#Streamcopy) y [ffprobe](https://ffmpeg.org/ffprobe.html): referencia para remultiplexado y comprobación de streams/duración; la aplicación restringe ambos procesos a entradas locales y un formato explícito.
 
+## Privacidad y API de Windows — verificación del 2026-09-27
+
+- [Microsoft WinVerifyTrust](https://learn.microsoft.com/en-us/windows/win32/api/wintrust/nf-wintrust-winverifytrust): verificación de confianza delegada al proveedor del sistema. El resultado «válido» indica confianza para esa operación, no que el contenido sea benigno; las causas de error se conservan como inválido/no verificable.
+- [Microsoft Naming Files, Paths, and Namespaces](https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file) y [Maximum Path Length Limitation](https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation): distinguen `\\?\` para rutas locales extendidas de `\\.\` namespace de dispositivos y UNC. Las comprobaciones de fase 12 aceptan rutas absolutas de disco local, incluso el prefijo extendido de `canonicalize`, y rechazan UNC/dispositivo.
+- [Microsoft IAttachmentExecute](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nn-shobjidl_core-iattachmentexecute): Attachment Services para tratamiento de archivos recibidos y procedencia. La implementación comprueba la marca de procedencia bajo demanda; una marca presente no certifica seguridad.
+- [Tauri Dialog Plugin](https://v2.tauri.app/plugin/dialog/) y [API del crate tauri-plugin-dialog 2.7.3](https://docs.rs/tauri-plugin-dialog/2.7.3/tauri_plugin_dialog/): callbacks nativos de selector/guardado y opción cancelada. Se conserva la versión fijada en Cargo.lock; compilar no acredita interacción del usuario con el diálogo.
+
 ## Referencias FTP/FTPS y proxy HTTP — verificación del 2026-09-26
 
 - [SuppaFTP 12.1.0: documentación de la versión](https://docs.rs/suppaftp/12.1.0/suppaftp/), [README publicado](https://docs.rs/crate/suppaftp/12.1.0/source/README.md) y [manifiesto publicado](https://docs.rs/crate/suppaftp/12.1.0/source/Cargo.toml): fuente del proveedor para las capacidades, nombres de features y licencia declarada en la versión fijada. El README documenta FTP/FTPS con rustls y clientes sync/async; el manifiesto publica los features habilitables. Esto describe la biblioteca, no demuestra que IDG haya integrado o verificado cada modo, servidor o comando.

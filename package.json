@@ -19,6 +19,7 @@
     "test:coverage": "vitest run --config apps/desktop/vitest.config.ts --coverage",
     "gallery": "pnpm --filter @idg/desktop gallery",
     "test:media:e2e": "node scripts/test-media-e2e.mjs",
+    "test:file-reconciliation": "node scripts/test-file-reconciliation.mjs",
     "test:ui": "node --test scripts/test-ui-model.mjs && node scripts/test-ui.mjs"
   },
   "devDependencies": {

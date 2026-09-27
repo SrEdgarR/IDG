@@ -6,6 +6,29 @@ impl Downloads {
         operation: OrganizationCommand,
         request: &Request,
     ) -> Result<Payload, DownloadError> {
+        match &operation {
+            OrganizationCommand::EditJob { job_id, .. }
+            | OrganizationCommand::MoveUp { job_id } => {
+                if inner
+                    .jobs
+                    .get(job_id)
+                    .is_some_and(|job| job.organization.private)
+                {
+                    return Err(DownloadError::NotFound);
+                }
+            }
+            OrganizationCommand::MoveJobs { ids, .. }
+                if ids.iter().any(|id| {
+                    inner
+                        .jobs
+                        .get(id)
+                        .is_some_and(|job| job.organization.private)
+                }) =>
+            {
+                return Err(DownloadError::NotFound);
+            }
+            _ => {}
+        }
         if !matches!(operation, OrganizationCommand::Get)
             && let Some(payload) = inner.store.receipt(request)?
         {
@@ -26,6 +49,7 @@ impl Downloads {
                     for job in inner.jobs.values().filter(|j| {
                         j.state == TransferState::Completed
                             && !inner.active.contains_key(&j.id)
+                            && !j.organization.private
                             && !j.organization.stats_recorded
                     }) {
                         let mut job = job.clone();
@@ -40,6 +64,7 @@ impl Downloads {
                 for job in inner.jobs.values().filter(|j| {
                     j.state == TransferState::Completed
                         && !inner.active.contains_key(&j.id)
+                        && !j.organization.private
                         && !j.organization.stats_recorded
                 }) {
                     let mut job = job.clone();

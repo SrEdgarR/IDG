@@ -1,6 +1,6 @@
 # Desarrollo de IDG
 
-**Estado actual: fase 10, EN_CURSO, dependiente de fase 09.** Esta guía describe compilación y carga local de extensiones de desarrollo; no hay instalador, extensión publicada ni enlace de tienda para usuarios finales. AutoPick se conserva como requisito del producto, pero la captura automática está deshabilitada. El escritorio procesa el subconjunto HLS/DASH de [alcance multimedia](MEDIA_SUPPORT.md) mediante FFmpeg externo elegido por el usuario; la transferencia multimedia iniciada desde el navegador hasta archivo/hash aún no está verificada. Las sesiones autenticadas no son compatibles: no se transfieren cookies ni credenciales.
+**Estado actual: fase 12, EN_CURSO, dependiente de fase 11.** Esta guía describe compilación y carga local de extensiones de desarrollo; no hay instalador, extensión publicada ni enlace de tienda para usuarios finales. AutoPick se conserva como requisito del producto, pero la captura automática está deshabilitada. El escritorio procesa el subconjunto HLS/DASH de [alcance multimedia](MEDIA_SUPPORT.md) mediante FFmpeg externo elegido por el usuario; la transferencia multimedia iniciada desde el navegador hasta archivo/hash aún no está verificada. Las sesiones autenticadas no son compatibles: no se transfieren cookies ni credenciales.
 
 La organización de fase 06 se prueba mediante el [recorrido aislado](FASE06_PRUEBA_MANUAL.md). Comprobaciones nuevas: `node --test scripts/test-import-parser.mjs`, `node scripts/test-organization.mjs`, `node scripts/test-rules.mjs`, `node scripts/test-library.mjs`, `node scripts/test-import.mjs` y `node scripts/test-queue-limits.mjs`. Las últimas cinco abren Tauri real y requieren binarios recién compilados y ningún runtime previo. `scripts/Check.ps1 -Integration` las incorpora; `Check.ps1` sin ese parámetro no acredita la matriz gráfica o navegadores.
 
@@ -21,6 +21,34 @@ El horario acepta una fecha ISO con zona explícita, como `2030-01-01T15:00:00-0
 Guardar «Al terminar» no activa energía. Su botón de confirmación la activa una vez; todos los trabajos deben estar completados/publicados. En modo simulado, completa trabajos de fixture, observa la cuenta atrás y pulsa «Cancelar acción de energía». La prueba automatizada reproducible es `node scripts/test-organization.mjs`, después de compilar escritorio/runtime/probe; utiliza datos propios y rechaza un runtime previo. Nunca invoca energía real.
 
 La fase 05 conecta la ventana con descargas HTTP/HTTPS, preferencias y ciclo de vida reales. La [instalación para usuarios](INSTALACION.md) sigue pendiente de una publicación; cargar esta extensión local es una prueba de desarrollo.
+
+## Historial, privacidad y comprobaciones de Windows (fase 12)
+
+En un checkout de desarrollo, compila el runtime y escritorio de la misma copia y ejecuta el arnés aislado:
+
+```powershell
+$env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
+cargo build --locked -p idg-runtime -p idg-platform-windows --bins
+npx --yes pnpm@12.4.2 desktop:build
+npx --yes pnpm@12.4.2 test:file-reconciliation
+```
+
+El arnés abre Tauri/WebView2 y su runtime, descarga un fixture HTTP local, mueve el archivo en una carpeta temporal, comprueba el estado “No encontrado”, reasocia la ruta por la operación tipada `LocateFile`, reinicia el runtime y compara el SHA-256. **No** automatiza el selector nativo: el arnés pasa una ruta propia directamente por IPC tipado para comprobar identidad sin usar una ventana de archivo. En una comprobación manual aparte, abre un trabajo completado con el archivo movido, pulsa «Localizar archivo», elige el archivo correcto y confirma que el estado vuelve a disponible; un archivo distinto debe rechazarse sin cambiar la asociación. La interacción del selector nativo queda pendiente hasta tener una herramienta de GUI permitida.
+
+En Ajustes → Privacidad, «Eliminar metadatos terminados» pide confirmación y solo quita registros completados/cancelados y recibos asociados. No borra descargas; preserva trabajos activos, pausados y fallidos recuperables. El modo privado mantiene sus metadatos en la sesión actual, no los recupera al reiniciar el runtime y no borra el archivo guardado.
+
+«Diagnóstico local» muestra la vista previa antes de abrir el diálogo del sistema. El informe contiene versión, plataforma, arquitectura y estado de conexión; no exporta trabajos, nombres, rutas, URLs, estadísticas, credenciales o reglas. El guardado utiliza creación exclusiva y rechaza sobrescribir. La interfaz no envía telemetría. IDG no escribe logs persistentes, de modo que la rotación no aplica mientras no exista un escritor de logs. El diálogo nativo de guardado, cancelación y archivo existente deben verificarse manualmente cuando la herramienta de GUI esté disponible.
+
+Pruebas unitarias focalizadas sin volver a ejecutar el recorrido de energía:
+
+```powershell
+cargo test --locked -p idg-runtime history_metadata_cleanup_removes_only_terminal_records_and_keeps_files
+cargo test --locked -p idg-storage explicit_history_cleanup_removes_job_and_receipts_without_touching_other_jobs
+cargo test --locked -p idg-desktop diagnostics_tests
+npx --yes pnpm@12.4.2 exec vitest run apps/desktop/src/Library.test.tsx apps/desktop/src/Settings.test.tsx --config apps/desktop/vitest.config.ts
+```
+
+No ejecutes `scripts/test-library.mjs` para esta verificación: ese arnés también recorre la energía simulada, que permanece **BLOQUEADA/PENDIENTE**. Los comandos específicos y sus resultados actuales están en [IMPLEMENTATION_STATUS](IMPLEMENTATION_STATUS.md).
 
 ## Entorno y versiones comprobados
 

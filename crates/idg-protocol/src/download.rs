@@ -200,6 +200,7 @@ pub struct DownloadSnapshot {
     pub queue_id: String,
     pub queue_order: u32,
     pub private: bool,
+    pub file_presence: crate::FilePresence,
     pub category: String,
     pub domain: String,
     pub created_at: String,

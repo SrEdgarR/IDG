@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { stat, writeFile, readFile } from "node:fs/promises";
+import { stat, writeFile, readFile, mkdir, rename } from "node:fs/promises";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { desktopHarness, sleep } from "./desktop-harness.mjs";
-import { startSegments } from "../fixtures/http/segments.mjs";
+import { expectedHash, startSegments } from "../fixtures/http/segments.mjs";
 const f = await startSegments({ size: 128 * 1024, rate: 512 * 1024 }),
   h = await desktopHarness();
 const library = (operation, id) => h.command({ library: { operation } }, id);
@@ -92,6 +93,11 @@ try {
     1,
     "Private excluded",
   );
+  assert.equal(
+    (await library({ action: "search", query: { text: "private.bin" } })).total,
+    0,
+    "Private jobs are absent from the normal search index",
+  );
   await h.page
     .getByRole("searchbox", { name: "Buscar descargas", exact: true })
     .fill("ÁRBOL [1]");
@@ -124,6 +130,46 @@ try {
   assert.equal(
     (await library({ action: "search", query: { text: "Árbol" } })).total,
     1,
+  );
+  const movedDirectory = path.join(h.dir, "relocated");
+  await mkdir(movedDirectory);
+  const relocated = path.join(movedDirectory, "arbol-recuperado.bin");
+  await rename(path.join(h.files, "Árbol [1].bin"), relocated);
+  await h.page.getByText(/No encontrado en su ubicación/).waitFor();
+  await h.page
+    .locator('summary[aria-label="Acciones de Árbol [1].bin"]')
+    .click();
+  await h.page
+    .getByRole("button", { name: "Localizar archivo", exact: true })
+    .waitFor();
+  const refreshed = await h.command({ list_downloads: { offset: 0 } });
+  const absentAtOrigin = refreshed.jobs.find((job) => job.id === first.id);
+  assert.equal(absentAtOrigin.file_presence, "missing");
+  const located = await library({
+    action: "locate_file",
+    job_id: first.id,
+    path: relocated,
+  });
+  assert.equal(located.kind, "download");
+  assert.equal(located.job.file_presence, "available");
+  assert.equal(
+    h.jobs().filter((job) => job.id === first.id).length,
+    1,
+    "locating updates the existing association instead of creating another job",
+  );
+  assert.equal(h.jobs().find((job) => job.id === first.id).final_path, relocated);
+  const relocatedBytes = await readFile(relocated);
+  assert.equal(relocatedBytes.length, f.size);
+  assert.equal(createHash("sha256").update(relocatedBytes).digest("hex"), expectedHash(f.size));
+  const security = await library({
+    action: "inspect_file_security",
+    job_id: first.id,
+  });
+  assert.equal(security.kind, "file_security");
+  assert.equal(security.info.status, "not_applicable");
+  assert.ok(
+    [true, false, null].includes(security.info.mark_of_web_present),
+    "the Tauri inspection returns an observed Mark-of-the-Web state or unknown",
   );
   await h.org({ action: "clear_statistics" });
   await sleep(1200);
@@ -181,10 +227,12 @@ try {
     h.jobs().some((j) => j.id === second.id),
     "History preserved after disk delete",
   );
+  await h.add("ui-delete.bin", f.url + "/file");
+  await h.waitJob("ui-delete.bin", (job) => job.state === "completed");
   await h.page
     .getByRole("searchbox", { name: "Buscar descargas", exact: true })
-    .fill("private.bin");
-  await h.page.locator('summary[aria-label="Acciones de private.bin"]').click();
+    .fill("ui-delete.bin");
+  await h.page.locator('summary[aria-label="Acciones de ui-delete.bin"]').click();
   await h.page
     .getByRole("button", { name: "Eliminar del disco…", exact: true })
     .click();
@@ -207,9 +255,10 @@ try {
   await deletion
     .getByText("Archivo eliminado del disco.", { exact: false })
     .waitFor();
-  await assert.rejects(stat(path.join(h.files, "private.bin")));
+  await assert.rejects(stat(path.join(h.files, "ui-delete.bin")));
+  await stat(path.join(h.files, "private.bin"));
   console.log(
-    "PASS biblioteca Tauri/IPC: búsqueda Unicode, selección estable, ocultar/restaurar sin borrar, lote parcial y replay, estadísticas opt-in/privadas/borrado, archivo cambiado preservado y eliminación explícita verificada solo de fixture.",
+    "PASS biblioteca Tauri/IPC: búsqueda Unicode, selección estable, ocultar/restaurar sin borrar, lote parcial y replay, estadísticas opt-in/privadas/borrado, mover/detectar/localizar con hash, inspección de seguridad y eliminación explícita verificada solo de fixture.",
   );
 } finally {
   await h.close();

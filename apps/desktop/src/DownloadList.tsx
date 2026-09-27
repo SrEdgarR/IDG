@@ -14,9 +14,12 @@ import {
 import { Icon } from "./ui/Icon";
 import { ConfirmDialog } from "./Dialogs";
 import { DeleteFileDialog } from "./Library";
-export type RowAction = "pause" | "resume" | "cancel" | "folder" | "organize";
+import type { FileSecurityInfo } from "../../../packages/shared-types/protocol";
+export type RowAction = "pause" | "resume" | "cancel" | "folder" | "organize" | "locate";
 export function supports(row: DownloadView, action: RowAction) {
   const state = row.snapshot?.state;
+  if (action === "locate")
+    return ["missing", "inaccessible"].includes(row.snapshot?.file_presence ?? "unknown");
   if (!state) return false;
   if (action === "folder") return true;
   if (action === "organize") return true;
@@ -141,7 +144,6 @@ function RowMenu({
           "Mover a cola",
           "Cambiar categoría",
           "Quitar del historial",
-          ...(row.missing ? ["Localizar archivo", "Descargar de nuevo"] : []),
         ]
           .filter(
             (t) =>
@@ -163,6 +165,16 @@ function RowMenu({
               {t}
             </button>
           ))}
+        {onAction && supports(row, "locate") && (
+          <button
+            onClick={() => {
+              ref.current!.open = false;
+              void onAction(row.id, "locate");
+            }}
+          >
+            Localizar archivo
+          </button>
+        )}
         <button
           className="danger"
           onClick={() => {
@@ -185,6 +197,7 @@ export function DownloadList({
   overrides,
   setOverrides,
   onAction,
+  onInspectFileSecurity,
 }: {
   rows: DownloadView[];
   selected: Set<string>;
@@ -193,9 +206,13 @@ export function DownloadList({
   overrides: Record<string, boolean>;
   setOverrides: Dispatch<SetStateAction<Record<string, boolean>>>;
   onAction?: (id: string, action: RowAction) => Promise<void>;
+  onInspectFileSecurity?: (id: string) => Promise<FileSecurityInfo>;
 }) {
   const [height, setHeight] = useState(() => innerHeight - 300);
   const [deleting, setDeleting] = useState<DownloadView | null>(null);
+  const [securityInfo, setSecurityInfo] = useState<Record<string, FileSecurityInfo>>({});
+  const [securityFailure, setSecurityFailure] = useState<Record<string, string>>({});
+  const [checkingSecurity, setCheckingSecurity] = useState<string | null>(null);
   useEffect(() => {
     const resize = () => setHeight(innerHeight - 300);
     addEventListener("resize", resize);
@@ -259,7 +276,7 @@ export function DownloadList({
                   }
                 >
                   <span
-                    className={row.missing ? "filename missing" : "filename"}
+                    className={row.missing || row.snapshot?.file_presence === "missing" ? "filename missing" : "filename"}
                     title={row.name}
                   >
                     {row.name}
@@ -348,11 +365,55 @@ export function DownloadList({
                     </div>
                   </dl>
                   {row.error && <p className="error-text">{row.error}</p>}
-                  {row.missing && (
+                  {(row.missing || row.snapshot?.file_presence === "missing") && (
                     <p className="error-text">
                       No encontrado en su ubicación. No se puede afirmar que se
-                      haya eliminado.
+                      haya movido o eliminado.
                     </p>
+                  )}
+                  {row.snapshot?.file_presence === "inaccessible" && (
+                    <p className="error-text">
+                      No se pudo comprobar la ruta; el archivo podría estar bloqueado o el acceso no disponible.
+                    </p>
+                  )}
+                  {row.state === "Completed" && row.snapshot && (
+                    <section className="file-security" aria-label={`Seguridad de ${row.name}`}>
+                      <button
+                        type="button"
+                        disabled={!onInspectFileSecurity || checkingSecurity === row.id}
+                        onClick={async () => {
+                          if (!onInspectFileSecurity) return;
+                          setCheckingSecurity(row.id);
+                          setSecurityFailure((current) => ({ ...current, [row.id]: "" }));
+                          try {
+                            const info = await onInspectFileSecurity(row.id);
+                            setSecurityInfo((current) => ({ ...current, [row.id]: info }));
+                          } catch (error) {
+                            setSecurityFailure((current) => ({
+                              ...current,
+                              [row.id]: error instanceof Error ? error.message : String(error),
+                            }));
+                          } finally {
+                            setCheckingSecurity(null);
+                          }
+                        }}
+                      >
+                        {checkingSecurity === row.id ? "Comprobando…" : "Comprobar firma y procedencia"}
+                      </button>
+                      {securityFailure[row.id] && <p className="error-text">{securityFailure[row.id]}</p>}
+                      {securityInfo[row.id] && (
+                        <p>
+                          Firma: {signatureLabels[securityInfo[row.id].status]}.
+                          {securityInfo[row.id].publisher && ` Editor: ${securityInfo[row.id].publisher}.`}
+                          {securityInfo[row.id].mark_of_web_present === true
+                            ? " Marca de procedencia de Windows detectada."
+                            : securityInfo[row.id].mark_of_web_present === false
+                              ? " No se detectó la marca de procedencia de Windows."
+                              : " La marca de procedencia no se pudo comprobar."}
+                          {securityInfo[row.id].status === "valid" && " Una firma válida no garantiza que el archivo sea seguro."}
+                        </p>
+                      )}
+                    </section>
                   )}
                   <details>
                     <summary>Detalles técnicos</summary>
@@ -412,3 +473,10 @@ export function DownloadList({
     </>
   );
 }
+const signatureLabels: Record<FileSecurityInfo["status"], string> = {
+  valid: "válida",
+  unsigned: "sin firma",
+  invalid: "inválida",
+  unavailable: "no comprobable",
+  not_applicable: "no aplicable a este formato",
+};

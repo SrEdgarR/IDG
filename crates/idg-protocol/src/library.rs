@@ -1,5 +1,33 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, TS, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum FilePresence {
+    Available,
+    Missing,
+    Inaccessible,
+    #[default]
+    Unknown,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SignatureStatus {
+    Valid,
+    Unsigned,
+    Invalid,
+    Unavailable,
+    NotApplicable,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
+pub struct FileSecurityInfo {
+    pub status: SignatureStatus,
+    pub publisher: Option<String>,
+    pub mark_of_web_present: Option<bool>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Default)]
 #[serde(default, deny_unknown_fields)]
 pub struct SearchQuery {
@@ -47,6 +75,14 @@ pub enum LibraryCommand {
         path: String,
         sha256: String,
     },
+    LocateFile {
+        job_id: String,
+        path: String,
+    },
+    InspectFileSecurity {
+        job_id: String,
+    },
+    ClearHistoryMetadata,
     Search {
         query: SearchQuery,
     },

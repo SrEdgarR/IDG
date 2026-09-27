@@ -1,5 +1,164 @@
 use super::*;
 impl Downloads {
+    pub(super) fn clear_history_metadata(
+        &self,
+        request: &Request,
+    ) -> Result<Payload, DownloadError> {
+        if !matches!(
+            &request.command,
+            Command::Library {
+                operation: LibraryCommand::ClearHistoryMetadata
+            }
+        ) {
+            return Err(DownloadError::InvalidInput);
+        }
+        let mut inner = self.inner.lock().map_err(|_| DownloadError::Storage)?;
+        if inner.stopping {
+            return Err(DownloadError::Busy);
+        }
+        let ids = inner
+            .jobs
+            .values()
+            .filter(|job| {
+                !inner.active.contains_key(&job.id)
+                    && !inner.file_operations.contains(&job.id)
+                    && matches!(
+                        job.state,
+                        TransferState::Completed | TransferState::Cancelled
+                    )
+            })
+            .map(|job| job.id.clone())
+            .collect::<Vec<_>>();
+        inner.store.delete_history_metadata(&ids)?;
+        for id in &ids {
+            inner.jobs.remove(id);
+        }
+        self.events.send_replace(None);
+        Ok(Payload::HistoryMetadataCleared {
+            records: ids.len().min(u32::MAX as usize) as u32,
+        })
+    }
+
+    pub(super) fn inspect_file_security(
+        &self,
+        request: &Request,
+    ) -> Result<Payload, DownloadError> {
+        let Command::Library {
+            operation: LibraryCommand::InspectFileSecurity { job_id },
+        } = &request.command
+        else {
+            return Err(DownloadError::InvalidInput);
+        };
+        let job = {
+            let mut inner = self.inner.lock().map_err(|_| DownloadError::Storage)?;
+            if inner.stopping {
+                return Err(DownloadError::Busy);
+            }
+            let job = inner
+                .jobs
+                .get(job_id)
+                .ok_or(DownloadError::NotFound)?
+                .clone();
+            if job.state != TransferState::Completed || inner.active.contains_key(job_id) {
+                return Err(DownloadError::InvalidState);
+            }
+            if inner.file_operations.contains(job_id) {
+                return Err(DownloadError::Busy);
+            }
+            inner.file_operations.insert(job_id.clone());
+            job
+        };
+        #[cfg(windows)]
+        let info = job
+            .calculated_sha256
+            .as_deref()
+            .map(|hash| {
+                idg_platform_windows::files::signature(
+                    std::path::Path::new(&job.final_path),
+                    job.durable,
+                    hash,
+                )
+            })
+            .ok_or(DownloadError::InvalidState);
+        #[cfg(not(windows))]
+        let info = Ok(idg_protocol::FileSecurityInfo {
+            status: idg_protocol::SignatureStatus::Unavailable,
+            publisher: None,
+            mark_of_web_present: None,
+        });
+        self.inner
+            .lock()
+            .map_err(|_| DownloadError::Storage)?
+            .file_operations
+            .remove(job_id);
+        Ok(Payload::FileSecurity { info: info? })
+    }
+
+    pub(super) fn locate_file(&self, request: &Request) -> Result<Payload, DownloadError> {
+        let Command::Library {
+            operation: LibraryCommand::LocateFile { job_id, path },
+        } = &request.command
+        else {
+            return Err(DownloadError::InvalidInput);
+        };
+        let original = {
+            let mut inner = self.inner.lock().map_err(|_| DownloadError::Storage)?;
+            if inner.stopping {
+                return Err(DownloadError::Busy);
+            }
+            let job = inner
+                .jobs
+                .get(job_id)
+                .ok_or(DownloadError::NotFound)?
+                .clone();
+            if job.organization.private {
+                return Err(DownloadError::NotFound);
+            }
+            if inner.active.contains_key(job_id) || job.state != TransferState::Completed {
+                return Err(DownloadError::InvalidState);
+            }
+            if inner.file_operations.contains(job_id) {
+                return Err(DownloadError::Busy);
+            }
+            inner.file_operations.insert(job_id.clone());
+            job
+        };
+        #[cfg(windows)]
+        let verified = match original.calculated_sha256.as_deref() {
+            Some(hash) => idg_platform_windows::files::locate_verified(
+                std::path::Path::new(path),
+                original.durable,
+                hash,
+            ),
+            None => Err(DownloadError::InvalidState),
+        };
+        #[cfg(not(windows))]
+        let verified = Err(DownloadError::FileIo);
+        let mut inner = self.inner.lock().map_err(|_| DownloadError::Storage)?;
+        inner.file_operations.remove(job_id);
+        verified?;
+        let mut updated = inner
+            .jobs
+            .get(job_id)
+            .ok_or(DownloadError::NotFound)?
+            .clone();
+        if updated.organization.private
+            || updated.state != TransferState::Completed
+            || updated.durable != original.durable
+            || updated.calculated_sha256 != original.calculated_sha256
+        {
+            return Err(DownloadError::Conflict);
+        }
+        updated.final_path = path.clone();
+        inner.store.save(&updated)?;
+        inner.jobs.insert(job_id.clone(), updated.clone());
+        let mut snapshot = self.snapshot(&updated);
+        snapshot.file_presence = FilePresence::Available;
+        drop(inner);
+        self.emit(&updated);
+        Ok(Payload::Download { job: snapshot })
+    }
+
     pub(super) fn delete_file(&self, request: &Request) -> Result<Payload, DownloadError> {
         let Command::Library {
             operation:
@@ -28,7 +187,8 @@ impl Downloads {
                 .get(job_id)
                 .ok_or(DownloadError::NotFound)?
                 .clone();
-            if inner.active.contains_key(job_id)
+            if job.organization.private
+                || inner.active.contains_key(job_id)
                 || job.state != TransferState::Completed
                 || &job.final_path != path
                 || job.calculated_sha256.as_ref() != Some(sha256)
@@ -90,6 +250,14 @@ impl Downloads {
             }
             if let Some(receipt) = inner.store.receipt(request)? {
                 return Ok(receipt);
+            }
+            if ids.iter().any(|id| {
+                inner
+                    .jobs
+                    .get(id)
+                    .is_some_and(|job| job.organization.private)
+            }) {
+                return Err(DownloadError::NotFound);
             }
             // Claim the complete intent before effects. A crash never replays a resume/GET.
             let state = inner.organization.clone();

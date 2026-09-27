@@ -171,6 +171,9 @@ pub enum Payload {
         sha256: String,
         bytes: String,
     },
+    FileSecurity {
+        info: FileSecurityInfo,
+    },
     SearchResults {
         ids: Vec<String>,
         total: u32,
@@ -178,6 +181,9 @@ pub enum Payload {
     },
     BulkResults {
         items: Vec<BulkItem>,
+    },
+    HistoryMetadataCleared {
+        records: u32,
     },
     Duplicates {
         ids: Vec<String>,

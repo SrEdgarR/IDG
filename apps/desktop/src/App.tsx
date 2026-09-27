@@ -241,12 +241,17 @@ export function App({
     pendingActions.current.add(id);
     try {
       if (command === "folder") await backend.reveal(id);
+      else if (command === "locate") {
+        const located = await backend.locate(id);
+        setActionNotice(located ? "Archivo localizado y verificado por tamaño y SHA-256." : "Acción cancelada.");
+      }
       else await backend.action(id, command);
-      setActionNotice(
-        command === "folder"
-          ? "Windows recibió la carpeta del trabajo."
-          : "Solicitud aceptada. La fila muestra el estado confirmado por el motor.",
-      );
+      if (command !== "locate")
+        setActionNotice(
+          command === "folder"
+            ? "Windows recibió la carpeta del trabajo."
+            : "Solicitud aceptada. La fila muestra el estado confirmado por el motor.",
+        );
     } catch (e) {
       setActionNotice(
         e instanceof Error ? e.message : "No se pudo completar la acción.",
@@ -812,6 +817,7 @@ export function App({
                   overrides={expansions}
                   setOverrides={setExpansions}
                   onAction={backend ? action : undefined}
+                  onInspectFileSecurity={backend?.inspectFileSecurity}
                 />
                 {total > 50 && (
                   <div className="pagination">

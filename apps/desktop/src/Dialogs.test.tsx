@@ -301,6 +301,41 @@ describe("NewDownloadDialog", () => {
     expect(backend.add).toHaveBeenCalledOnce();
   });
 
+  it("sends the explicit private choice and explains its runtime-only lifetime", async () => {
+    const user = userEvent.setup();
+    const backend = makeBackend();
+    render(
+      <NewDownloadDialog
+        backend={backend}
+        onClose={() => {}}
+        initialUrl="https://cdn.example/private.bin"
+        initialName="private.bin"
+      />,
+    );
+    await waitFor(() =>
+      expect((screen.getByLabelText("Carpeta") as HTMLInputElement).value).toBe("C:\\Downloads"),
+    );
+    await user.click(screen.getByRole("checkbox", { name: "Modo privado" }));
+    expect(screen.getByText(/solo mientras el motor siga abierto/)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Descargar ahora" }));
+    await waitFor(() => expect(backend.add).toHaveBeenCalledOnce());
+    expect(vi.mocked(backend.add).mock.calls[0]?.[9]).toBe(true);
+  });
+
+  it("does not offer private mode for a browser capture", async () => {
+    const backend = makeBackend();
+    render(
+      <NewDownloadDialog
+        backend={backend}
+        captureId="capture-id"
+        initialUrl="https://cdn.example/file.bin"
+        initialName="file.bin"
+        onClose={() => {}}
+      />,
+    );
+    expect(screen.queryByRole("checkbox", { name: "Modo privado" })).toBeNull();
+  });
+
   it("keeps the dialog open and reports a failed create instead of confirming success", async () => {
     const user = userEvent.setup();
     const backend = makeBackend({

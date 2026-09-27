@@ -2,7 +2,7 @@
 
 Un proyecto de gestor de descargas **gratuito y open source para Windows 10 y Windows 11**, pensado para descargar y organizar archivos con una interfaz sencilla y moderna.
 
-> **Estado actual: aplicación de desarrollo (fase 11, EN_CURSO).** Multimedia implementada y comprobada en escritorio dentro del subconjunto documentado; integración con navegador pendiente. FTP plano se descargó desde la app con confirmación y hash comprobado en un servidor local; FTPS tiene pruebas del motor, pero no recorrido completo desde la app. Las rutas HTTP/SOCKS se verificaron con proxies locales; el proxy real de Windows y su selección desde la interfaz no se comprobaron. FTP/FTPS no pueden usar proxy. Consulta la [matriz de capacidades por protocolo](docs/PROTOCOL_SUPPORT.md). En Firefox, **Aceptar sigue PENDIENTE** en el diálogo de enlace directo y no hay archivo/hash final comprobado. AutoPick sigue siendo requisito, pero la captura automática está deshabilitada. No se transfieren cookies ni credenciales de sesiones autenticadas. No hay instalador, versión publicada ni extensión en tiendas.
+> **Estado actual: aplicación de desarrollo (fase 12, EN_CURSO).** En Windows 11, el historial detectó un archivo movido y volvió a asociarlo tras comprobar su tamaño y hash en un recorrido automatizado de Tauri; el selector nativo para elegir el archivo sigue pendiente de prueba interactiva. El modo privado mantiene sus metadatos solo mientras vive el runtime: tras reiniciarlo no se puede recuperar ese trabajo, y el archivo guardado permanece en el disco. La exportación de diagnóstico redactada está conectada a Ajustes y compilada; falta probar el diálogo nativo de guardado. Persisten los límites de FTP/FTPS y proxy descritos en la [matriz de capacidades](docs/PROTOCOL_SUPPORT.md), Firefox **Aceptar PENDIENTE**, AutoPick requerido con captura automática deshabilitada y sesiones autenticadas no transferidas. No hay instalador, versión publicada ni extensión en tiendas.
 
 ## ¿Qué es IDG?
 
@@ -41,7 +41,7 @@ Este es el flujo previsto, no una afirmación de que ya esté disponible:
 | Interfaz | Sidebar, temas suaves claro/oscuro/sistema, búsqueda, filtros, acciones masivas y gráficas dentro de las filas | Búsqueda en el motor, acciones masivas con resultados parciales y preferencias persistentes; galería separada |
 | Navegadores | Extensión prevista para Chrome, Edge y Firefox; sin Safari | Chromium: traspaso explícito de enlace público probado con fixture local en fase 07; captura automática deshabilitada. Firefox: build, manifiesto y pruebas unitarias aprobadas; **Aceptar PENDIENTE**, sin archivo/hash. Permisos/gestos normales y Edge pendientes |
 | Multimedia | Detección permitida, selección explícita y procesamiento del subconjunto documentado | HLS VOD sin cifrar y DASH estático tienen pruebas locales con Tauri, archivos y hashes; E2E navegador→archivo/hash y compatibilidad ampliada pendientes |
-| Organización y privacidad | Carpetas y reglas, historial, modo privado y funcionamiento local sin cuenta obligatoria | Reglas, categorías, TXT/CSV, historial reversible y estadísticas locales opcionales; modo privado completo y detección de archivos movidos pendientes |
+| Organización y privacidad | Carpetas y reglas, historial, modo privado y funcionamiento local sin cuenta obligatoria | Retención e historial reversible; presencia de archivo, localización comprobada por hash, metadatos privados solo en sesión y limpieza explícita de registros terminados. La exportación redactada está implementada, con diálogo nativo pendiente de prueba. No es borrado forense. |
 | Distribución | Instalador Windows y actualizaciones verificadas desde GitHub Releases, aceptadas por el usuario | Planificado |
 
 BitTorrent y sincronización entre equipos son ampliaciones opcionales, no requisitos de la primera versión. La compatibilidad definitiva se publicará solo después de probarla.
@@ -56,7 +56,7 @@ La [especificación de interfaz](docs/INTERFAZ.md) explica cada pantalla y su co
 
 El diseño base funciona localmente y sin cuenta obligatoria. No contempla telemetría activa por defecto, ejecución automática de los archivos descargados ni evasión de DRM. Los límites de los servidores, de la sesión del navegador y de Windows deben comunicarse sin ocultarlos.
 
-Estas son decisiones de diseño, no una certificación de seguridad de una aplicación ya construida.
+El modo privado no oculta el archivo descargado ni garantiza que Windows o el almacenamiento no conserven rastros. Los diagnósticos no contienen nombres, rutas, URLs, historial, estadísticas ni credenciales y no se envían a ningún servicio. IDG no escribe logs persistentes; por eso no hay un archivo de log que rotar. La limpieza del historial elimina registros terminados y recibos, no archivos del disco. La información de firma/procedencia no garantiza que un archivo sea seguro.
 
 ## Desarrollo y colaboración
 
