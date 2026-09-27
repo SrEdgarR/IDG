@@ -8,7 +8,11 @@ La fase 00 no incorporó bibliotecas, binarios, tipografías, iconos ni medios d
 
 Antes de incorporar una dependencia o recurso, registrar nombre, versión, procedencia, licencia exacta, avisos y obligaciones de redistribución del artefacto concreto. Revisar compatibilidad con GPL-3.0-only y conservar licencias en la distribución cuando corresponda. Los lockfiles documentarán las versiones realmente resueltas.
 
-FFmpeg/ffprobe aún no se distribuyen. Sus obligaciones y codecs dependen del build elegido; revisar la [documentación oficial de licencias](https://ffmpeg.org/legal.html) en fase 10 y de nuevo antes del empaquetado. No atribuir una licencia única a cualquier build.
+IDG ejecuta un FFmpeg/ffprobe que el usuario selecciona en Ajustes; el repositorio no los descarga, incorpora ni distribuye. Para la E2E local de fase 10 se usó el paquete `ffmpeg-9.0.2-essentials_build-www.gyan.dev` enlazado desde la [página oficial de descargas FFmpeg](https://www.ffmpeg.org/download.html), publicado por [Gyan.dev](https://www.gyan.dev/ffmpeg/builds/). SHA-256 del ZIP de prueba: `60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba`.
+
+La inspección local `ffmpeg -version`, `ffmpeg -L` y `ffmpeg -buildconf` identificó FFmpeg 9.0.2, aviso GPL versión 3 o posterior, `--enable-gpl --enable-version3`, build estático y bibliotecas externas como `libx264`, `libx265` y `libmp3lame`. El encoder MP3 estuvo disponible. El build y el ZIP permanecen en `.local/` excluidos de Git y solo son herramientas de prueba; el hash y la licencia no se atribuyen a otros builds elegidos por usuarios.
+
+La licencia y obligaciones del binario varían con sus opciones y dependencias, como explica la [documentación oficial de licencias FFmpeg](https://ffmpeg.org/legal.html). Antes de distribuir FFmpeg junto a IDG habría que elegir y auditar un build concreto, conservar avisos, configuración/fuentes correspondientes y comprobar las obligaciones de cada biblioteca. Esta revisión no autoriza ni prepara una distribución de FFmpeg.
 
 ## Dependencias de fase 01
 

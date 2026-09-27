@@ -1,6 +1,6 @@
 # Desarrollo de IDG
 
-**Estado actual: fase 09, EN_CURSO, dependiente de fase 08.** Esta guía describe compilación y carga local de extensiones de desarrollo; no hay instalador, extensión publicada ni enlace de tienda para usuarios finales. AutoPick se conserva como requisito del producto, pero la captura automática está deshabilitada. Los medios directos seleccionados requieren confirmación en IDG; el flujo multimedia extensión→archivo/hash aún no está verificado de extremo a extremo. Las sesiones autenticadas no son compatibles: no se transfieren cookies ni credenciales.
+**Estado actual: fase 10, EN_CURSO, dependiente de fase 09.** Esta guía describe compilación y carga local de extensiones de desarrollo; no hay instalador, extensión publicada ni enlace de tienda para usuarios finales. AutoPick se conserva como requisito del producto, pero la captura automática está deshabilitada. El escritorio procesa el subconjunto HLS/DASH de [alcance multimedia](MEDIA_SUPPORT.md) mediante FFmpeg externo elegido por el usuario; la transferencia multimedia iniciada desde el navegador hasta archivo/hash aún no está verificada. Las sesiones autenticadas no son compatibles: no se transfieren cookies ni credenciales.
 
 La organización de fase 06 se prueba mediante el [recorrido aislado](FASE06_PRUEBA_MANUAL.md). Comprobaciones nuevas: `node --test scripts/test-import-parser.mjs`, `node scripts/test-organization.mjs`, `node scripts/test-rules.mjs`, `node scripts/test-library.mjs`, `node scripts/test-import.mjs` y `node scripts/test-queue-limits.mjs`. Las últimas cinco abren Tauri real y requieren binarios recién compilados y ningún runtime previo. `scripts/Check.ps1 -Integration` las incorpora; `Check.ps1` sin ese parámetro no acredita la matriz gráfica o navegadores.
 
@@ -192,3 +192,26 @@ El host de Native Messaging no tiene permiso de iniciar ni consultar trabajos. E
 [Guía completa](APP_DEVELOPMENT.md) y [ADR-013](decisions/013-aplicacion-y-ciclo-de-vida.md). `test-desktop.mjs` ejecuta descarga desde Tauri, ciclo de vida, recuperación, preferencias, mini/drop y fallo de arranque. `Check.ps1 -Integration` conserva las regresiones anteriores y agrega estas pruebas; CI no ejecuta esa matriz gráfica ni navegadores. El selector nativo, clic físico de X, menú de bandeja y entrega visual del toast tienen checklist manual. El test usa mensaje nativo SC_CLOSE, no una revisión humana.
 
 Migración 003 conserva trabajos y añade preferencias protegidas. No borres la base para actualizar. Inventario de dependencias regenerado en DEPENDENCIES.json; no hay instalador ni release. La galería anterior sigue aislada; capturas reales de 05 en screenshots/fase05.
+
+## Procesamiento HLS/DASH (fase 10, desarrollo)
+
+Para probar desde el escritorio, compila el runtime **después** del build de Tauri: son ejecutables distintos. En PowerShell desde la raíz del checkout:
+
+```powershell
+$env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
+cargo build --locked -p idg-runtime
+pnpm desktop:build
+```
+
+Inicia `target/debug/idg-desktop.exe`, abre Ajustes → Video y audio y selecciona `ffmpeg.exe` de un build que hayas revisado. `ffprobe.exe` debe estar junto a él. En Nueva descarga pega el URL explícito de un manifiesto HTTP(S) permitido, pulsa **Analizar HLS/DASH**, elige variante/pista/salida y confirma el trabajo. Esto prueba entrada directa en el escritorio, no el flujo navegador→extensión→archivo.
+
+Reproducción automatizada aislada en Windows (fixtures HTTP locales y carpeta temporal, sin cuentas ni medios externos):
+
+```powershell
+$env:IDG_MEDIA_FFMPEG = (Resolve-Path 'RUTA_LOCAL\ffmpeg.exe').Path
+pnpm test:media:e2e
+```
+
+La ruta es una elección local y no se guarda en el repositorio. La prueba requiere `ffprobe.exe` hermano y binarios debug recién compilados (`cargo build --locked -p idg-runtime`, `pnpm desktop:build`); configura `IDG_MEDIA_FFMPEG` antes de correrla. El build FFmpeg 9.0.2 usado para la evidencia quedó en `.local`, está excluido de Git y no forma parte del producto.
+
+Para revisar el subconjunto exacto y lo que se rechaza, consulta [MEDIA_SUPPORT.md](MEDIA_SUPPORT.md). Para cambios del parser/transferencia ejecuta además `cargo test -p idg-media --locked --offline`, `cargo test --workspace --locked --offline` y Clippy; `scripts/Check.ps1` no incluye `test:media:e2e`. La evidencia de esta fase distingue explícitamente Windows/Tauri real, suites automatizadas y navegadores pendientes en [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md).

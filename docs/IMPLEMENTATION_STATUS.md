@@ -1,6 +1,6 @@
 # Estado de implementación
 
-Estado actual (2026-09-26): **fase 09 EN_CURSO** en `feat/09-deteccion-multimedia`, dependiente de `feat/08-firefox-y-navegadores`. [PR #10](https://github.com/SrEdgarR/IDG/pull/10) está en borrador contra fase 08 y depende de [PR #9](https://github.com/SrEdgarR/IDG/pull/9), que sigue en borrador contra fase 07; [PR #7](https://github.com/SrEdgarR/IDG/pull/7) sigue en borrador contra fase 06; [PR #8](https://github.com/SrEdgarR/IDG/pull/8) está integrada en fase 07. Fases 07/08 conservan sus pendientes de permisos/gestos normales y transferencia/hash real de Firefox. AutoPick sigue pendiente con captura automática deshabilitada; las sesiones autenticadas no se transfieren. La cancelación de energía simulada de fase 06 sigue **BLOQUEADA / PENDIENTE** y no se repitió. Las secciones anteriores son evidencia histórica; el último bloque de fase 09 refleja el estado actual.
+Estado actual (2026-09-26): **fase 10 EN_CURSO** en `feat/10-hls-dash-ffmpeg`, basada en `feat/09-deteccion-multimedia`; fase 09 sigue en [PR #10](https://github.com/SrEdgarR/IDG/pull/10), borrador contra fase 08. Fase 08 sigue en [PR #9](https://github.com/SrEdgarR/IDG/pull/9), borrador contra fase 07. Fases 07/08 conservan pendientes de permisos/gestos normales y transferencia/hash de Firefox. AutoPick sigue pendiente con captura automática deshabilitada; las sesiones autenticadas no se transfieren. La cancelación de energía simulada de fase 06 sigue **BLOQUEADA / PENDIENTE** y no se repitió. Las secciones anteriores son evidencia histórica; el bloque de fase 10 es el registro vigente.
 No marcar una fila completada solo por generar archivos. Completar evidencia conforme se ejecute cada fase.
 
 Estados: PLANIFICADO, EN_CURSO, IMPLEMENTADO_NO_VERIFICADO, VERIFICADO, BLOQUEADO, DIFERIDO.
@@ -23,8 +23,8 @@ Estados: PLANIFICADO, EN_CURSO, IMPLEMENTADO_NO_VERIFICADO, VERIFICADO, BLOQUEAD
 | ORG-04 | 06, 12 | EN_CURSO | Retención/historial restaurable; presencia/identificación general de archivos en 12. |
 | ORG-05 a ORG-06 | 06, 12 | IMPLEMENTADO; ver cierre 06 y límites | URL/contexto/hash, estadísticas locales opt-in con método documentado. Modo privado completo en 12. |
 | EXT-01 a EXT-08 | 01, 07, 08 | EN_CURSO | Chromium: enlace directo explícito verificado en fase 07; captura automática deshabilitada. Firefox: build/manifiesto/popup y unitarias; último arnés llegó al diálogo real, que no cerró tras aceptar; sin archivo/hash. Registro propio de este checkout retirado. AutoPick requerido; sesiones autenticadas no soportadas; gestos del manifiesto normal pendientes. |
-| MEDIA-01 a MEDIA-03 | 09, 10 | IMPLEMENTADO_NO_VERIFICADO (E2E) | Modelo acotado, detección opt-in DOM y metadatos de respuesta en el origen autorizado de Chrome, popup y diálogo de aceptación; audio/video directos seleccionan el original. Unitarias y WAV real por runtime/hash pasan. Extensión→Tauri→archivo/hash pendiente; Firefox solo DOM/metadatos declarados. HLS/DASH identificados, no procesados. |
-| MEDIA-04 a MEDIA-07 | 10 | PLANIFICADO | Resolver variantes HLS/DASH, selección de pistas/calidad, conversión y otros procesamientos siguen para fase 10; sin soporte de evasión DRM. |
+| MEDIA-01 a MEDIA-03 | 09, 10 | EN_CURSO; escritorio local VERIFICADO para entrada explícita | Detección opt-in y metadatos permitidos en fase 09; HLS VOD y DASH estático se aceptan desde la ventana de escritorio. E2E local Tauri con archivos/hash y ffprobe pasa. Flujo desde el reproductor/extensión hasta el archivo final sigue pendiente. |
+| MEDIA-04 a MEDIA-07 | 10 | IMPLEMENTADO; verificado localmente en Tauri, fase EN_CURSO | `idg-media` resuelve el subconjunto [documentado](MEDIA_SUPPORT.md), descarga segmentos con checkpoints y límites, selecciona pistas, remuxea y convierte audio mediante FFmpeg/ffprobe configurado. Regresión por duración y audio HLS incluida. Navegadores, matriz ampliada, codec ausente, disco lleno y otras salidas no tienen E2E aprobado. No se implementa DRM/live/auth. |
 | SEC-01 a SEC-06 | Todas; revisión 12, 15 | PLANIFICADO | — |
 | SEC-07 sincronización | Opcional 17 | DIFERIDO | No forma parte de la entrega base. |
 | SEC-08 BitTorrent | Opcional 16 | DIFERIDO | No forma parte de la entrega base. |
@@ -567,4 +567,51 @@ No hubo prueba manual humana ni captura visual real de reproductor. Ninguna prue
 - Chrome/Edge/Firefox aún necesitan E2E de selección multimedia desde reproductor y transferencia de archivo/hash. HLS/DASH solo se identifican, su resolución pertenece a fase 10. Windows 10, accesibilidad exhaustiva y navegadores adicionales siguen pendientes.
 - Cancelación de energía simulada de fase 06: **BLOQUEADA / PENDIENTE**, no repetida. No se modificaron preferencias de energía ni se activaron acciones.
 
-**SIGUIENTE_PASO:** consultar el CI del HEAD de PR #10 y revisar la implementación multimedia; mantenerla en borrador mientras falte el E2E navegador→archivo/hash. Mantener PR #9 en borrador por transferencia Firefox/permisos pendientes. No fusionar PR #6, #7, #9 o #10; no publicar extensiones ni releases y no avanzar a fase 10.
+**SIGUIENTE_PASO de fase 09 (supersedido por la autorización de fase 10):** consultar CI y revisar la PR #10 de detección multimedia; no atribuirle resultados de fase 10.
+
+## Fase 10 — HLS/DASH y FFmpeg (2026-09-26)
+
+**Estado: EN_CURSO; escritorio local probado, integración desde navegador pendiente.** Rama `feat/10-hls-dash-ffmpeg`, basada en el HEAD de fase 09 `5cc58d72601445d84b8fcf04b55d67592de73cbd`. Depende de `feat/09-deteccion-multimedia` y PR #10, que sigue en borrador contra fase 08. No se fusionaron PRs ni se publicaron paquetes.
+
+### Implementado y verificado
+
+- `crates/idg-media` resuelve HLS VOD sin cifrar y DASH estático en el subconjunto [documentado](MEDIA_SUPPORT.md). Runtime descarga solo las variantes/pistas elegidas, guarda segmentos con hash/checkpoints, limita bytes, redirects y duración y pasa a FFmpeg únicamente archivos locales. Se valida la salida con ffprobe antes de publicarla.
+- La ventana Tauri permite introducir un URL explícito, analizar el manifiesto, elegir variante/pista y salida, y confirmar el trabajo. Incluye estados de descarga, combinación y verificación, cancelación y reanudación. No acredita detección/selección desde un reproductor del navegador.
+- Regresiones corregidas en esta tarea: el cierre de audio solo evaluaba una referencia a video aun cuando debía ser perezosa; el sync de salida abría el archivo con acceso insuficiente en Windows; el contador de redirects de segmentos se reiniciaba por salto; ffprobe no fijaba el formato de `.idgpart`; HLS directo podía omitir el audio integrado; y el runtime no comparaba duración de salida con el manifiesto. Cada corrección tiene prueba unitaria o E2E local.
+- Al detectar salida de duración fuera de la tolerancia de 50 ms–1 s respecto al manifiesto, elimina solo el temporal generado sin publicarlo; conserva checkpoints de segmentos. La prueba HLS truncada confirma este resultado.
+
+### Evidencia automatizada local
+
+La suite `pnpm test:media:e2e` abrió la aplicación Tauri/WebView2 y el runtime de este worktree en Windows, usó HTTP local y FFmpeg 9.0.2 y completó:
+
+- HLS con audio/video separado y redirect del manifiesto: SHA-256 `460ca6c5dc7cad75e3ee639ece024f257947208f9eda9ba8cb91757183276b9d`.
+- Playlist HLS directo con audio integrado: SHA-256 `430047bd7feb32a130b2f8260172a7cbe126270d35c6953862692ca8097a1cb9`.
+- DASH con inicializaciones y pistas separadas: SHA-256 `f93a52d104c5c3275e1197e5aa986fc3966e136560f89e1601447c892279dda2`.
+- Extracción de rendición HLS a MP3: SHA-256 `ef2d03bf0eb207e69939224ff1e9c167c266086f66b6b321618841f8aea45bfd`.
+- Rechazo de playlist cifrada, segmento ausente, más de cinco redirects, duración truncada sin archivo final ni temporal generado, pausa con segmento persistido y reanudación, y cancelación durante FFmpeg. Los archivos completados pasaron ffprobe y sus hashes coincidieron con referencias locales.
+
+Comprobación del build de prueba: archivo `ffmpeg-9.0.2-essentials_build-www.gyan.dev`, obtenido para el entorno local; SHA-256 del ZIP `60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba`. `ffmpeg -version`, `-L` y `-buildconf` confirmaron versión 9.0.2, licencia GPL versión 3 o posterior, `--enable-gpl --enable-version3`, y el encoder `libmp3lame`. Solo se usó para pruebas: FFmpeg/ffprobe no se incluyen ni se suben al repositorio.
+
+Pruebas focalizadas: `cargo test -p idg-media --locked --offline` (31 pruebas), el E2E anterior, `cargo build --locked --offline -p idg-runtime`, `pnpm desktop:build` y `node --check scripts/test-media-e2e.mjs`. El arnés real debe ejecutarse **después de reconstruir** el escritorio y runtime; `desktop:build` no compila el ejecutable runtime separado. La matriz general final y CI se registran con el commit publicado.
+
+### Firefox y pendientes
+
+La interacción Firefox de fase 09 había llegado al diálogo real de IDG, pero no produjo trabajo completado ni archivo/hash. En este worktree el registro del host generado para esta copia **no existe** (comprobación HKCU de solo lectura). El arnés detiene la ejecución si host/runtime/escritorio no son hermanos; según la instrucción no se volvió a registrar el host ni se abrió otro perfil. Por eso no se pudo observar el valor del formulario, la respuesta del comando, el estado del motor ni el trabajo después de aquel clic. La causa del timeout permanece **DESCONOCIDA**, no se atribuye a validación, comando o runtime.
+
+| Comprobación | Estado | Límite |
+|---|---|---|
+| Tauri + runtime + HTTP local + archivos y hashes | VERIFICADO automáticamente en Windows 11 | Solo URL explícita desde el escritorio, fixtures públicos locales y build FFmpeg elegido para la prueba. |
+| HLS VOD sin cifrar / DASH estático | VERIFICADO en el subconjunto documentado | No equivale a todo HLS/DASH, live, DRM, perfiles privados o contenido autenticado. |
+| Chrome, Edge y Firefox: selección multimedia y archivo/hash | PENDIENTE | La prueba de fase 09 no obtuvo archivo/hash; el registro Firefox de este checkout está ausente. |
+| Permisos/gestos con manifiesto normal | PENDIENTE | Requiere interacción autorizada; no se preconcedieron permisos. |
+| FFmpeg/encoder ausente, disco lleno, codec incompatible con MP4 y salidas Matroska/AAC/FLAC por E2E | PENDIENTE | Hay validaciones unitarias; el arnés Tauri actual no cubre estos recorridos. |
+| Selección E2E de idioma/resolución y rechazo de manifiesto malformado a través de Tauri | PENDIENTE | El parser tiene pruebas unitarias de estructuras inválidas; el E2E valida transferencia de pistas separadas pero no esta matriz de selección. |
+| AutoPick | PENDIENTE; captura automática deshabilitada | Sigue siendo requisito del producto; fase 10 no cambia la política. |
+| Sesiones autenticadas | NO SOPORTADO | No se transfieren credenciales ni cookies; se conserva la alternativa segura. |
+| Contextos privados y Firefox Containers | PENDIENTE / NO IMPLEMENTADO | Manifiestos de desarrollo deniegan incógnito; Containers no está adaptado; no se mezclan contextos. |
+| Windows 10 y navegadores adicionales | PENDIENTE | No forman parte de esta comprobación en Windows 11. |
+| Cancelación de energía simulada de fase 06 | BLOQUEADA / PENDIENTE | No se repitió ni se cambió energía. |
+
+La validación Tauri es interacción automatizada real, no una revisión manual humana. GitHub Actions no ejecuta este arnés gráfico; el resultado de CI se informará por SHA exacto después del push.
+
+**SIGUIENTE_PASO vigente:** revisar el CI del HEAD publicado y la PR dependiente de fase 10; mantenerla en borrador mientras el E2E navegador→archivo/hash y las verificaciones de compatibilidad pendientes no estén probadas. Mantener PR #9 y #10 en borrador. No integrar PR #6, #7 ni las PR multimedia, no publicar instaladores/extensiones y no avanzar a fase 11.

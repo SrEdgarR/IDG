@@ -16,6 +16,8 @@
 | Revisar qué funciona realmente | [Estado de implementación](IMPLEMENTATION_STATUS.md) |
 | Saber cómo verificar cada fase | [Plan de pruebas](TEST_PLAN.md) |
 | Ejecutar las pruebas y leer la cobertura actual | [Pruebas y cobertura](TESTING.md) |
+| Ver el subconjunto HLS/DASH que realmente se procesa | [Alcance multimedia](MEDIA_SUPPORT.md) |
+| Ver el subconjunto HLS/DASH que realmente se procesa | [Alcance multimedia](MEDIA_SUPPORT.md) |
 | Consultar las referencias técnicas | [Fuentes](SOURCES.md) |
 | Entender decisiones y pruebas pendientes de arquitectura | [ADR](decisions/README.md) |
 | Relacionar requisitos, pantallas y fases | [Trazabilidad](TRACEABILITY.md) |
