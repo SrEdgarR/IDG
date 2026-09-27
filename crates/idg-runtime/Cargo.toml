@@ -14,3 +14,4 @@ serde_json.workspace = true
 idg-storage = { path = "../idg-storage" }
 idg-media = { path = "../idg-media" }
 reqwest.workspace = true
+notify = "=8.2.0"

@@ -82,6 +82,7 @@ export function NewDownloadDialog({
   const [conflictOpen, setConflictOpen] = useState(false);
   const [recoverable, setRecoverable] = useState<string | null>(null);
   const [pendingStart, setPendingStart] = useState<StartPolicy>("now");
+  const [privateMode, setPrivateMode] = useState(false);
   useEffect(() => {
     if (backend)
       void backend
@@ -243,7 +244,7 @@ export function NewDownloadDialog({
         apply_rules: applyRules,
         rule_overrides: ruleOverrides,
         context: captureId ? `extension:${captureId}` : "",
-        private: false,
+        private: privateMode && !captureId,
       };
       const result = mediaPlan
         ? await backend.addMedia(id, draft, mediaPlan.fingerprint, {
@@ -264,6 +265,7 @@ export function NewDownloadDialog({
             applyRules,
             ruleOverrides,
             captureId ? `extension:${captureId}` : "",
+            privateMode && !captureId,
           );
       if (result.kind !== "download")
         throw new Error("El motor no confirmó el trabajo.");
@@ -557,6 +559,23 @@ export function NewDownloadDialog({
             </select>
           </label>
         </div>
+        {!captureId && backend && (
+          <section className="privacy-choice">
+            <label className="check-field">
+              <input
+                type="checkbox"
+                checked={privateMode}
+                onChange={(event) => setPrivateMode(event.target.checked)}
+              />
+              Modo privado
+            </label>
+            {privateMode && (
+              <p className="muted">
+                Los metadatos de esta descarga se conservan solo mientras el motor siga abierto; no se recuperarán tras salir o reiniciarlo. El archivo y las marcas de seguridad de Windows permanecen. No es anonimato ni borrado forense.
+              </p>
+            )}
+          </section>
+        )}
         <button
           type="button"
           disabled={!backend || busy}

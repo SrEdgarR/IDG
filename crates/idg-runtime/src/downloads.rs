@@ -1,15 +1,35 @@
 use idg_core::download::{self, Checkpoint, Control, Job};
 use idg_protocol::*;
 use idg_storage::Store;
+use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::{
     collections::BTreeMap,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, Weak},
 };
 use tokio::sync::watch;
 mod library;
 mod organization;
 mod rules;
+
+fn file_presence(path: &std::path::Path) -> FilePresence {
+    #[cfg(windows)]
+    {
+        idg_platform_windows::files::presence(path)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        FilePresence::Unknown
+    }
+}
+
+fn attachment_source_origin(raw: &str) -> Option<String> {
+    let url = reqwest::Url::parse(raw).ok()?;
+    matches!(url.scheme(), "http" | "https" | "ftp" | "ftps")
+        .then(|| url.origin().ascii_serialization())
+        .filter(|origin| origin != "null")
+}
 
 struct Inner {
     store: Store,
@@ -27,6 +47,10 @@ struct Inner {
     captures: BTreeMap<String, (CaptureProposal, std::time::Instant)>,
     pending_media: BTreeMap<String, idg_core::download::MediaTask>,
 }
+struct FileWatcherState {
+    watcher: Option<RecommendedWatcher>,
+    directories: std::collections::BTreeSet<PathBuf>,
+}
 #[derive(Clone)]
 pub struct Downloads {
     inner: Arc<Mutex<Inner>>,
@@ -34,6 +58,113 @@ pub struct Downloads {
     sequence: Arc<std::sync::atomic::AtomicU32>,
     resources: Arc<download::resources::Resources>,
     capture_events: watch::Sender<Option<String>>,
+    file_watcher: Arc<Mutex<FileWatcherState>>,
+}
+
+fn publish_snapshot(
+    events: &watch::Sender<Option<(u32, DownloadSnapshot)>>,
+    sequence: &std::sync::atomic::AtomicU32,
+    snapshot: DownloadSnapshot,
+) {
+    let sequence = sequence
+        .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        .wrapping_add(1);
+    events.send_replace(Some((sequence, snapshot)));
+}
+
+fn same_path(left: &std::path::Path, right: &std::path::Path) -> bool {
+    fn normalized(path: &std::path::Path) -> String {
+        let value = path.to_string_lossy().replace('/', "\\");
+        let Some(rest) = value.strip_prefix(r"\\?\") else {
+            return value;
+        };
+        let bytes = rest.as_bytes();
+        if bytes.len() >= 3
+            && bytes[0].is_ascii_alphabetic()
+            && bytes[1] == b':'
+            && bytes[2] == b'\\'
+        {
+            rest.to_owned()
+        } else {
+            value
+        }
+    }
+    normalized(left).eq_ignore_ascii_case(&normalized(right))
+}
+
+fn same_path_or_parent(event_path: &std::path::Path, job_path: &std::path::Path) -> bool {
+    same_path(event_path, job_path)
+        || job_path
+            .parent()
+            .is_some_and(|parent| same_path(event_path, parent))
+        || event_path
+            .parent()
+            .zip(job_path.parent())
+            .is_some_and(|(event_parent, job_parent)| same_path(event_parent, job_parent))
+}
+
+#[cfg(test)]
+mod file_watcher_tests {
+    use super::{same_path, same_path_or_parent};
+    use std::path::Path;
+
+    #[test]
+    fn watcher_paths_match_extended_and_regular_local_drive_names() {
+        assert!(same_path(
+            Path::new(r"\\?\C:\Downloads\file.bin"),
+            Path::new(r"c:\downloads\file.bin")
+        ));
+        assert!(same_path(
+            Path::new(r"C:/Downloads/file.bin"),
+            Path::new(r"c:\downloads\file.bin")
+        ));
+        assert!(same_path_or_parent(
+            Path::new(r"C:\Downloads\another-file.bin"),
+            Path::new(r"\\?\c:\downloads\file.bin")
+        ));
+        assert!(!same_path_or_parent(
+            Path::new(r"C:\Other\another-file.bin"),
+            Path::new(r"\\?\c:\downloads\file.bin")
+        ));
+    }
+}
+
+fn new_file_watcher(
+    inner: Weak<Mutex<Inner>>,
+    events: watch::Sender<Option<(u32, DownloadSnapshot)>>,
+    sequence: Arc<std::sync::atomic::AtomicU32>,
+) -> FileWatcherState {
+    let watcher = notify::recommended_watcher(move |result: notify::Result<notify::Event>| {
+        let Ok(event) = result else { return };
+        if matches!(event.kind, EventKind::Access(_)) || event.paths.is_empty() {
+            return;
+        }
+        let Some(inner) = inner.upgrade() else { return };
+        let jobs = {
+            let Ok(inner) = inner.lock() else { return };
+            inner
+                .jobs
+                .values()
+                .filter(|job| {
+                    !job.organization.private
+                        && job.state == TransferState::Completed
+                        && event.paths.iter().any(|path| {
+                            same_path_or_parent(path, std::path::Path::new(&job.final_path))
+                        })
+                })
+                .cloned()
+                .collect::<Vec<_>>()
+        };
+        for job in jobs {
+            let mut snapshot = job.snapshot();
+            snapshot.file_presence = file_presence(std::path::Path::new(&job.final_path));
+            publish_snapshot(&events, &sequence, snapshot);
+        }
+    });
+    FileWatcherState {
+        watcher: watcher.ok(),
+        directories: Default::default(),
+    }
 }
 impl Downloads {
     pub fn open() -> Result<Self, DownloadError> {
@@ -75,28 +206,57 @@ impl Downloads {
         }
         let (events, _) = watch::channel(None);
         let (capture_events, _) = watch::channel(None);
+        let inner = Arc::new(Mutex::new(Inner {
+            store,
+            jobs,
+            active: BTreeMap::new(),
+            stopping: false,
+            preferences,
+            organization,
+            queue_cursor: 0,
+            power_countdown: None,
+            clock_origin: std::time::Instant::now(),
+            clipboard: Default::default(),
+            file_operations: Default::default(),
+            unavailable: loaded.unavailable.into_iter().collect(),
+            captures: BTreeMap::new(),
+            pending_media: BTreeMap::new(),
+        }));
+        let sequence = Arc::new(std::sync::atomic::AtomicU32::new(0));
+        let file_watcher = Arc::new(Mutex::new(new_file_watcher(
+            Arc::downgrade(&inner),
+            events.clone(),
+            sequence.clone(),
+        )));
         let this = Self {
-            inner: Arc::new(Mutex::new(Inner {
-                store,
-                jobs,
-                active: BTreeMap::new(),
-                stopping: false,
-                preferences,
-                organization,
-                queue_cursor: 0,
-                power_countdown: None,
-                clock_origin: std::time::Instant::now(),
-                clipboard: Default::default(),
-                file_operations: Default::default(),
-                unavailable: loaded.unavailable.into_iter().collect(),
-                captures: BTreeMap::new(),
-                pending_media: BTreeMap::new(),
-            })),
+            inner,
             events,
             resources,
             capture_events,
-            sequence: Arc::new(std::sync::atomic::AtomicU32::new(0)),
+            sequence,
+            file_watcher,
         };
+        let watch_directories = this
+            .inner
+            .lock()
+            .map(|inner| {
+                inner
+                    .jobs
+                    .values()
+                    .filter(|job| {
+                        !job.organization.private && job.state == TransferState::Completed
+                    })
+                    .filter_map(|job| {
+                        std::path::Path::new(&job.final_path)
+                            .parent()
+                            .map(PathBuf::from)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        for directory in watch_directories {
+            this.watch_directory(&directory);
+        }
         {
             let mut inner = this.inner.lock().map_err(|_| DownloadError::Storage)?;
             this.pump(&mut inner);
@@ -106,15 +266,47 @@ impl Downloads {
     fn snapshot(&self, job: &Job) -> DownloadSnapshot {
         let mut snapshot = job.snapshot();
         snapshot.active_requests = self.resources.active_for(&job.id);
+        if !job.organization.private && job.state == TransferState::Completed {
+            snapshot.file_presence = file_presence(std::path::Path::new(&job.final_path));
+        }
         snapshot
     }
+    fn watch_directory(&self, directory: &std::path::Path) {
+        const MAX_WATCHED_DIRECTORIES: usize = 64;
+        #[cfg(windows)]
+        let safe = idg_platform_windows::files::watchable_directory(directory);
+        #[cfg(not(windows))]
+        let safe = false;
+        if !safe {
+            return;
+        }
+        let Ok(directory) = std::fs::canonicalize(directory) else {
+            return;
+        };
+        let Ok(mut state) = self.file_watcher.lock() else {
+            return;
+        };
+        if state.directories.contains(&directory)
+            || state.directories.len() >= MAX_WATCHED_DIRECTORIES
+        {
+            return;
+        }
+        if state.watcher.as_mut().is_some_and(|watcher| {
+            watcher
+                .watch(&directory, RecursiveMode::NonRecursive)
+                .is_ok()
+        }) {
+            state.directories.insert(directory);
+        }
+    }
     fn emit(&self, job: &Job) {
-        let sequence = self
-            .sequence
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-            .wrapping_add(1);
-        self.events
-            .send_replace(Some((sequence, self.snapshot(job))));
+        if !job.organization.private
+            && job.state == TransferState::Completed
+            && let Some(directory) = std::path::Path::new(&job.final_path).parent()
+        {
+            self.watch_directory(directory);
+        }
+        publish_snapshot(&self.events, &self.sequence, self.snapshot(job));
     }
     pub fn subscribe(&self) -> watch::Receiver<Option<(u32, DownloadSnapshot)>> {
         self.events.subscribe()
@@ -329,6 +521,30 @@ impl Downloads {
             }
         ) {
             return self.delete_file(&request);
+        }
+        if matches!(
+            &request.command,
+            Command::Library {
+                operation: LibraryCommand::LocateFile { .. }
+            }
+        ) {
+            return self.locate_file(&request);
+        }
+        if matches!(
+            &request.command,
+            Command::Library {
+                operation: LibraryCommand::InspectFileSecurity { .. }
+            }
+        ) {
+            return self.inspect_file_security(&request);
+        }
+        if matches!(
+            &request.command,
+            Command::Library {
+                operation: LibraryCommand::ClearHistoryMetadata
+            }
+        ) {
+            return self.clear_history_metadata(&request);
         }
         if let Command::Library {
             operation: LibraryCommand::Bulk { ids, operation },
@@ -608,7 +824,10 @@ impl Downloads {
                 operation: LibraryCommand::PreviewDelete { job_id },
             } => {
                 let job = inner.jobs.get(&job_id).ok_or(DownloadError::NotFound)?;
-                if inner.active.contains_key(&job_id) || job.state != TransferState::Completed {
+                if job.organization.private
+                    || inner.active.contains_key(&job_id)
+                    || job.state != TransferState::Completed
+                {
                     return Err(DownloadError::InvalidState);
                 }
                 Ok(Payload::FileDeletionPreview {
@@ -641,6 +860,7 @@ impl Downloads {
                 let ids = inner
                     .jobs
                     .values()
+                    .filter(|job| !job.organization.private)
                     .filter(|j| idg_core::library::duplicate(j, &input, &context))
                     .take(100)
                     .map(|j| j.id.clone())
@@ -655,6 +875,7 @@ impl Downloads {
                         .values()
                         .find(|job| {
                             !inner.active.contains_key(&job.id)
+                                && !job.organization.private
                                 && download::recoverable_matches(job, &input)
                         })
                         .map(|job| job.id.clone()),
@@ -684,6 +905,9 @@ impl Downloads {
             }
             Command::CreateDownload { mut draft } => {
                 draft.validate()?;
+                if inner.unavailable.contains_key(&request.id) {
+                    return Err(DownloadError::Conflict);
+                }
                 if let Some(job) = inner.jobs.get(&request.id).cloned() {
                     let pending_media = inner.pending_media.remove(&request.id);
                     return if job.creation.as_ref() == Some(&draft)
@@ -1135,6 +1359,14 @@ impl Downloads {
                             ))
                         }
                     });
+                #[cfg(windows)]
+                if result.is_ok() && job.state == TransferState::Completed {
+                    let source = attachment_source_origin(&job.input.url);
+                    let _ = idg_platform_windows::files::apply_attachment_mark(
+                        std::path::Path::new(&job.final_path),
+                        source.as_deref(),
+                    );
+                }
                 if let Err(error) = result {
                     if job.state != TransferState::PublishPending {
                         job.state = TransferState::Failed;
@@ -1208,6 +1440,15 @@ mod capture_tests {
         sync::atomic::{AtomicU64, Ordering},
     };
 
+    #[test]
+    fn attachment_source_omits_path_query_and_credentials() {
+        assert_eq!(
+            attachment_source_origin("https://user:pass@example.test:8443/file?token=secret#part"),
+            Some("https://example.test:8443".into())
+        );
+        assert_eq!(attachment_source_origin("file:///C:/secret"), None);
+    }
+
     struct TestDirectory(PathBuf);
 
     impl TestDirectory {
@@ -1264,6 +1505,55 @@ mod capture_tests {
             category: "Otros".into(),
             start,
         }
+    }
+
+    #[tokio::test]
+    async fn watcher_publishes_missing_state_after_a_completed_file_moves() {
+        let directory = TestDirectory::new();
+        let files = directory.path().join("files");
+        std::fs::create_dir(&files).unwrap();
+        let moved_directory = directory.path().join("relocated");
+        std::fs::create_dir(&moved_directory).unwrap();
+        let runtime = Downloads::open_at(directory.path().to_path_buf()).unwrap();
+        let content = b"watcher reconciliation fixture";
+        let mut job = download::create_job(
+            "watcher-reconcile",
+            NewDownload {
+                url: "http://127.0.0.1/file.bin".into(),
+                name: "file.bin".into(),
+                directory: files.to_string_lossy().into_owned(),
+                expected_sha256: None,
+                conflict: ConflictPolicy::Reject,
+                auth: None,
+                allow_cleartext_ftp: false,
+            },
+        )
+        .unwrap();
+        std::fs::write(&job.final_path, content).unwrap();
+        job.state = TransferState::Completed;
+        job.received = content.len() as u64;
+        job.durable = content.len() as u64;
+        job.transferred = content.len() as u64;
+        job.total = Some(content.len() as u64);
+        let original = Path::new(&job.final_path).to_path_buf();
+        {
+            let mut inner = runtime.inner.lock().unwrap();
+            inner.store.save(&job).unwrap();
+            inner.jobs.insert(job.id.clone(), job.clone());
+        }
+        runtime.watch_directory(original.parent().unwrap());
+        let mut events = runtime.subscribe();
+        std::fs::rename(&original, moved_directory.join("file.bin")).unwrap();
+
+        tokio::time::timeout(std::time::Duration::from_secs(3), events.changed())
+            .await
+            .expect("file watcher did not publish the rename")
+            .unwrap();
+        let (sequence, snapshot) = events.borrow_and_update().clone().unwrap();
+        assert!(sequence > 0);
+        assert_eq!(snapshot.id, job.id);
+        assert_eq!(snapshot.file_presence, FilePresence::Missing);
+        runtime.shutdown().await;
     }
 
     #[tokio::test]
@@ -1650,6 +1940,11 @@ mod capture_tests {
             Command::ResumeDownload {
                 job_id: "private-job".into(),
             },
+            Command::Library {
+                operation: LibraryCommand::InspectFileSecurity {
+                    job_id: "private-job".into(),
+                },
+            },
         ] {
             assert!(matches!(
                 runtime.handle_with_role(req("private-access", command), true),
@@ -1660,6 +1955,205 @@ mod capture_tests {
             runtime.handle_with_role(req("history", Command::ListDownloads { offset: 0 }), true),
             Err(DownloadError::NotFound)
         ));
+    }
+
+    #[test]
+    fn private_download_is_session_only_and_excluded_from_search_and_receipts() {
+        let directory = TestDirectory::new();
+        let runtime = Downloads::open_at(directory.path().to_path_buf()).unwrap();
+        runtime
+            .handle(req(
+                "private-session-job",
+                Command::CreateDownload {
+                    draft: create_draft(directory.path(), true, StartPolicy::Later),
+                },
+            ))
+            .unwrap();
+        assert!(matches!(
+            runtime.handle(req(
+                "private-list",
+                Command::ListDownloads { offset: 0 }
+            )),
+            Ok(Payload::Downloads { jobs, .. }) if jobs.len() == 1 && jobs[0].private
+        ));
+        let recoverable = runtime
+            .handle(req(
+                "private-recovery-query",
+                Command::FindRecoverableDownload {
+                    input: create_draft(directory.path(), false, StartPolicy::Later).input,
+                },
+            ))
+            .unwrap();
+        assert!(matches!(
+            recoverable,
+            Payload::RecoverableDownload { job_id: None }
+        ));
+        let hidden = runtime.handle(req(
+            "private-search",
+            Command::Library {
+                operation: LibraryCommand::Search {
+                    query: SearchQuery {
+                        text: "private.bin".into(),
+                        ..Default::default()
+                    },
+                },
+            },
+        ));
+        assert!(matches!(
+            hidden,
+            Ok(Payload::SearchResults { total: 0, .. })
+        ));
+        let bulk = req(
+            "private-bulk",
+            Command::Library {
+                operation: LibraryCommand::Bulk {
+                    ids: vec!["private-session-job".into()],
+                    operation: BulkAction::Hide,
+                },
+            },
+        );
+        assert!(matches!(
+            runtime.handle(bulk.clone()),
+            Err(DownloadError::NotFound)
+        ));
+        assert!(
+            runtime
+                .inner
+                .lock()
+                .unwrap()
+                .store
+                .receipt(&bulk)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            runtime
+                .inner
+                .lock()
+                .unwrap()
+                .store
+                .load()
+                .unwrap()
+                .jobs
+                .is_empty()
+        );
+        drop(runtime);
+        let reopened = Downloads::open_at(directory.path().to_path_buf()).unwrap();
+        assert!(matches!(
+            reopened.handle(req("after-restart", Command::ListDownloads { offset: 0 })),
+            Ok(Payload::Downloads { jobs, .. }) if jobs.is_empty()
+        ));
+    }
+
+    #[tokio::test]
+    async fn history_metadata_cleanup_removes_only_terminal_records_and_keeps_files() {
+        let directory = TestDirectory::new();
+        let files = directory.path().join("files");
+        std::fs::create_dir(&files).unwrap();
+        let runtime = Downloads::open_at(directory.path().to_path_buf()).unwrap();
+        let completed_file = files.join("completed.bin");
+        let mut completed = download::create_job(
+            "completed-history",
+            NewDownload {
+                url: "https://example.test/completed".into(),
+                directory: files.to_string_lossy().into_owned(),
+                name: "completed.bin".into(),
+                expected_sha256: None,
+                conflict: ConflictPolicy::Reject,
+                auth: None,
+                allow_cleartext_ftp: false,
+            },
+        )
+        .unwrap();
+        std::fs::write(&completed_file, b"keep the downloaded file").unwrap();
+        completed.state = TransferState::Completed;
+        completed.received = 24;
+        completed.durable = 24;
+        completed.transferred = 24;
+        completed.total = Some(24);
+        let mut cancelled = download::create_job(
+            "cancelled-history",
+            NewDownload {
+                url: "https://example.test/cancelled".into(),
+                name: "cancelled.bin".into(),
+                ..completed.input.clone()
+            },
+        )
+        .unwrap();
+        cancelled.state = TransferState::Cancelled;
+        let mut failed = download::create_job(
+            "failed-history",
+            NewDownload {
+                url: "https://example.test/failed".into(),
+                name: "failed.bin".into(),
+                ..completed.input.clone()
+            },
+        )
+        .unwrap();
+        failed.state = TransferState::Failed;
+        let mut paused = download::create_job(
+            "paused-history",
+            NewDownload {
+                url: "https://example.test/paused".into(),
+                name: "paused.bin".into(),
+                ..completed.input.clone()
+            },
+        )
+        .unwrap();
+        paused.state = TransferState::Paused;
+        let mut private = download::create_job(
+            "private-history",
+            NewDownload {
+                url: "https://example.test/private".into(),
+                name: "private.bin".into(),
+                ..completed.input.clone()
+            },
+        )
+        .unwrap();
+        private.organization.private = true;
+        private.state = TransferState::Completed;
+        {
+            let mut inner = runtime.inner.lock().unwrap();
+            for job in [completed, cancelled, failed, paused, private] {
+                inner.store.save(&job).unwrap();
+                inner.jobs.insert(job.id.clone(), job);
+            }
+        }
+
+        let cleanup = req(
+            "clear-history-metadata",
+            Command::Library {
+                operation: LibraryCommand::ClearHistoryMetadata,
+            },
+        );
+        assert!(matches!(
+            runtime.handle_with_role(cleanup.clone(), true),
+            Err(DownloadError::NotFound)
+        ));
+        assert!(matches!(
+            runtime.handle(cleanup),
+            Ok(Payload::HistoryMetadataCleared { records: 3 })
+        ));
+        assert!(completed_file.exists());
+        assert_eq!(
+            std::fs::read(&completed_file).unwrap(),
+            b"keep the downloaded file"
+        );
+        assert!(matches!(
+            runtime.handle(req("history-after-cleanup", Command::ListDownloads { offset: 0 })),
+            Ok(Payload::Downloads { jobs, .. })
+                if jobs.iter().map(|job| job.id.as_str()).collect::<std::collections::BTreeSet<_>>()
+                    == ["failed-history", "paused-history"].into_iter().collect()
+        ));
+        let stored = runtime.inner.lock().unwrap().store.load().unwrap().jobs;
+        assert_eq!(
+            stored
+                .iter()
+                .map(|job| job.id.as_str())
+                .collect::<std::collections::BTreeSet<_>>(),
+            ["failed-history", "paused-history"].into_iter().collect()
+        );
+        runtime.shutdown().await;
     }
 
     #[test]

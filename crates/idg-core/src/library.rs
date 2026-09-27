@@ -139,6 +139,7 @@ pub fn search<'a>(
         .map(str::to_lowercase)
         .collect();
     let mut hits: Vec<_> = jobs
+        .filter(|job| !job.organization.private)
         .filter(|job| {
             let snapshot = job.snapshot();
             let label = state_label(&job.state);
@@ -275,6 +276,11 @@ mod tests {
             job.organization.category = Some("Lecturas".into());
             jobs.push(job);
         }
+        let mut private = jobs[0].clone();
+        private.id = "private-job".into();
+        private.input.name = "private-marker-name.bin".into();
+        private.organization.private = true;
+        jobs.push(private);
         let mut query = SearchQuery {
             text: "ÁRBOL site:example.org type:txt".into(),
             ..Default::default()
@@ -297,6 +303,8 @@ mod tests {
         }
         query.text = "Lecturas".into();
         assert_eq!(search(jobs.iter(), &query).unwrap().1, 61);
+        query.text = "private-marker".into();
+        assert_eq!(search(jobs.iter(), &query).unwrap().1, 0);
     }
     #[test]
     fn duplicates_keep_full_tokens_and_context_separate() {

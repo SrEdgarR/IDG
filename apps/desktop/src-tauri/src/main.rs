@@ -248,6 +248,132 @@ async fn read_runtime_state(window: tauri::Window) -> Result<Payload, String> {
     lifecycle::call(Command::GetSnapshot).await
 }
 
+fn diagnostics_report(runtime_connected: bool) -> Result<String, String> {
+    let report = serde_json::json!({
+        "format": "idg-diagnostics-v1",
+        "applicationVersion": env!("CARGO_PKG_VERSION"),
+        "platform": std::env::consts::OS,
+        "architecture": std::env::consts::ARCH,
+        "runtimeConnected": runtime_connected,
+        "persistentLogsPresent": false,
+        "redactions": [
+            "URLs, nombres de archivo y rutas",
+            "cookies, cabeceras y credenciales",
+            "IDs de trabajos y contenido descargado",
+            "historial, estadísticas y reglas",
+            "logs persistentes: IDG no los crea",
+        ],
+    });
+    serde_json::to_string_pretty(&report).map_err(|_| "No se pudo preparar el diagnóstico".into())
+}
+
+async fn current_diagnostics_report() -> Result<String, String> {
+    let runtime_connected = matches!(
+        lifecycle::call(Command::GetSnapshot).await,
+        Ok(Payload::Snapshot { snapshot }) if !snapshot.stopping
+    );
+    diagnostics_report(runtime_connected)
+}
+
+#[tauri::command]
+async fn diagnostics_preview(window: tauri::Window) -> Result<String, String> {
+    if window.label() != "main" {
+        return Err("Ventana no autorizada".into());
+    }
+    current_diagnostics_report().await
+}
+
+fn write_diagnostics_file(path: &std::path::Path, report: &str) -> Result<(), String> {
+    use std::io::Write;
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                String::from("Ese archivo ya existe; elige un nombre distinto. No se sobrescribió.")
+            } else {
+                String::from("No se pudo crear el archivo de diagnóstico")
+            }
+        })?;
+    file.write_all(report.as_bytes())
+        .and_then(|()| file.sync_all())
+        .map_err(|_| "No se pudo escribir el diagnóstico".into())
+}
+
+#[tauri::command]
+async fn export_diagnostics(app: tauri::AppHandle, window: tauri::Window) -> Result<bool, String> {
+    use tauri_plugin_dialog::DialogExt;
+    if window.label() != "main" {
+        return Err("Ventana no autorizada".into());
+    }
+    let (send, receive) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .set_parent(&window)
+        .set_title("Guardar diagnóstico de IDG")
+        .set_file_name("IDG-diagnostico.json")
+        .add_filter("JSON", &["json"])
+        .save_file(move |file| {
+            let _ = send.send(file.and_then(|file| file.into_path().ok()));
+        });
+    let Some(path) = receive
+        .await
+        .map_err(|_| "No se pudo elegir el archivo de diagnóstico".to_string())?
+    else {
+        return Ok(false);
+    };
+    let report = current_diagnostics_report().await?;
+    write_diagnostics_file(&path, &report)?;
+    Ok(true)
+}
+
+#[cfg(test)]
+mod diagnostics_tests {
+    use super::{diagnostics_report, write_diagnostics_file};
+
+    #[test]
+    fn diagnostics_report_contains_only_minimal_state_and_redaction_rules() {
+        let json: serde_json::Value =
+            serde_json::from_str(&diagnostics_report(false).unwrap()).unwrap();
+        let object = json.as_object().unwrap();
+        assert_eq!(object["runtimeConnected"], false);
+        assert_eq!(object["persistentLogsPresent"], false);
+        assert_eq!(object["redactions"].as_array().unwrap().len(), 5);
+        for field in [
+            "downloads",
+            "jobs",
+            "urls",
+            "paths",
+            "credentials",
+            "history",
+        ] {
+            assert!(
+                !object.contains_key(field),
+                "unexpected diagnostic field: {field}"
+            );
+        }
+    }
+
+    #[test]
+    fn diagnostics_export_never_overwrites_an_existing_file() {
+        let directory = std::env::temp_dir().join(format!(
+            "idg-diagnostics-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir(&directory).unwrap();
+        let path = directory.join("existing.json");
+        std::fs::write(&path, b"preserve").unwrap();
+        assert!(write_diagnostics_file(&path, "replacement").is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), b"preserve");
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+}
+
 #[tauri::command]
 async fn choose_download_folder(
     app: tauri::AppHandle,
@@ -290,6 +416,27 @@ async fn choose_ffmpeg_file(
             );
         });
     receive.await.map_err(|_| "No se pudo elegir FFmpeg".into())
+}
+
+#[tauri::command]
+async fn choose_download_file(
+    app: tauri::AppHandle,
+    window: tauri::Window,
+) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    if window.label() != "main" {
+        return Err("Ventana no autorizada".into());
+    }
+    let (send, receive) = tokio::sync::oneshot::channel();
+    app.dialog().file().pick_file(move |file| {
+        let _ = send.send(
+            file.and_then(|file| file.into_path().ok())
+                .map(|path| path.to_string_lossy().into_owned()),
+        );
+    });
+    receive
+        .await
+        .map_err(|_| "No se pudo elegir el archivo".into())
 }
 
 #[tauri::command]
@@ -376,6 +523,7 @@ fn main() {
             shutdown_runtime,
             download_command,
             choose_download_folder,
+            choose_download_file,
             choose_ffmpeg_file,
             reveal_download,
             start_runtime,
@@ -389,7 +537,9 @@ fn main() {
             request_desktop_exit,
             set_drop_window,
             review_dropped_url,
-            notify_download
+            notify_download,
+            diagnostics_preview,
+            export_diagnostics
         ])
         .run(tauri::generate_context!())
         .expect("No se pudo iniciar IDG Desktop");

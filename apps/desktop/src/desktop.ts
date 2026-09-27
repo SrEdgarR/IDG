@@ -11,6 +11,7 @@ import type {
   StartPolicy,
   AppPreferences,
   CaptureProposal,
+  FileSecurityInfo,
 } from "../../../packages/shared-types/protocol";
 import type { DownloadView } from "./model";
 
@@ -43,6 +44,26 @@ export const desktop = {
   },
   reveal: (jobId: string) => invoke<void>("reveal_download", { jobId }),
   chooseFolder: () => invoke<string | null>("choose_download_folder"),
+  locate: async (jobId: string) => {
+    const path = await invoke<string | null>("choose_download_file");
+    if (!path) return null;
+    const result = await execute({
+      library: { operation: { action: "locate_file", job_id: jobId, path } },
+    });
+    if (result.kind !== "download")
+      throw new Error("El motor no confirmó la nueva ubicación del archivo.");
+    return result.job;
+  },
+  inspectFileSecurity: async (jobId: string): Promise<FileSecurityInfo> => {
+    const result = await execute({
+      library: {
+        operation: { action: "inspect_file_security", job_id: jobId },
+      },
+    });
+    if (result.kind !== "file_security")
+      throw new Error("No se pudo comprobar firma o procedencia del archivo.");
+    return result.info;
+  },
   chooseFfmpeg: () => invoke<string | null>("choose_ffmpeg_file"),
   inspectMedia: async (url: string) => {
     const result = await execute({ inspect_media_manifest: { url } });
@@ -82,6 +103,7 @@ export const desktop = {
     applyRules = true,
     ruleOverrides: string[] = [],
     context = "",
+    privateMode = false,
   ) =>
     execute(
       {
@@ -95,7 +117,7 @@ export const desktop = {
             apply_rules: applyRules,
             rule_overrides: ruleOverrides,
             context,
-            private: false,
+            private: privateMode,
           },
         },
       },
@@ -109,7 +131,8 @@ export const desktop = {
   },
   captureRequests: async (): Promise<CaptureProposal[]> => {
     const result = await execute("get_capture_requests");
-    if (result.kind !== "capture_requests") throw Error("No se pudieron leer las solicitudes de Chromium.");
+    if (result.kind !== "capture_requests")
+      throw Error("No se pudieron leer las solicitudes de Chromium.");
     return result.proposals;
   },
   rejectCapture: async (captureId: string) => {
@@ -322,6 +345,8 @@ export function useDownloads(mini = false) {
           }
           if (connected && runtime === currentRuntime && !stopped) {
             for (const [id, job] of duringRefresh) all.set(id, job);
+            for (const id of measurements.current.keys())
+              if (!all.has(id)) measurements.current.delete(id);
             jobs.current = all;
             setError(
               unavailable
@@ -418,10 +443,15 @@ export function useDownloads(mini = false) {
         if (connected) void refresh();
       }
     };
+    const libraryChanged = () => {
+      if (connected) void refresh();
+    };
     document.addEventListener("visibilitychange", visible);
+    addEventListener("idg-library-changed", libraryChanged);
     return () => {
       stopped = true;
       document.removeEventListener("visibilitychange", visible);
+      removeEventListener("idg-library-changed", libraryChanged);
       if (timer) clearTimeout(timer);
       releases.forEach((off) => off());
     };

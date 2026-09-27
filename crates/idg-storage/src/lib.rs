@@ -33,6 +33,60 @@ impl Store {
             .map_err(|_| DownloadError::Storage)?;
         Ok(())
     }
+    pub fn delete_history_metadata(&mut self, ids: &[String]) -> Result<(), DownloadError> {
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let ids = ids
+            .iter()
+            .map(String::as_str)
+            .collect::<std::collections::BTreeSet<_>>();
+        let mut statement = self
+            .connection
+            .prepare("SELECT id, protected_value FROM operation_receipts")
+            .map_err(|_| DownloadError::Storage)?;
+        let receipts = statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, Vec<u8>>(1)?))
+            })
+            .map_err(|_| DownloadError::Storage)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| DownloadError::Storage)?;
+        drop(statement);
+        let mut receipt_ids = Vec::new();
+        for (receipt_id, encrypted) in receipts {
+            let mut clear = protection::decrypt(&encrypted)?;
+            let references_job = ids.iter().any(|id| {
+                let mut needle = Vec::with_capacity(id.len() + 2);
+                needle.push(b'"');
+                needle.extend_from_slice(id.as_bytes());
+                needle.push(b'"');
+                clear.windows(needle.len()).any(|part| part == needle)
+            });
+            clear.fill(0);
+            if references_job {
+                receipt_ids.push(receipt_id);
+            }
+        }
+        let transaction = self
+            .connection
+            .transaction()
+            .map_err(|_| DownloadError::Storage)?;
+        for id in ids {
+            transaction
+                .execute("DELETE FROM downloads WHERE id=?1", [id])
+                .map_err(|_| DownloadError::Storage)?;
+        }
+        for id in receipt_ids {
+            transaction
+                .execute("DELETE FROM operation_receipts WHERE id=?1", [&id])
+                .map_err(|_| DownloadError::Storage)?;
+        }
+        transaction.commit().map_err(|_| DownloadError::Storage)?;
+        self.connection
+            .execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
+            .map_err(|_| DownloadError::Storage)
+    }
     pub fn open(path: &Path) -> Result<Self, DownloadError> {
         let mut connection = Connection::open(path).map_err(|_| DownloadError::Storage)?;
         connection
@@ -43,6 +97,9 @@ impl Store {
             .map_err(|_| DownloadError::Storage)?;
         connection
             .pragma_update(None, "synchronous", "FULL")
+            .map_err(|_| DownloadError::Storage)?;
+        connection
+            .pragma_update(None, "secure_delete", true)
             .map_err(|_| DownloadError::Storage)?;
         let tx = connection
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
@@ -115,8 +172,14 @@ impl Store {
             sealed
         }
         let value = seal(state)?;
+        let private_ids = jobs
+            .iter()
+            .filter(|job| job.organization.private)
+            .map(|job| job.id.as_str())
+            .collect::<Vec<_>>();
         let records = jobs
             .iter()
+            .filter(|job| !job.organization.private)
             .map(|j| Ok((j.id.clone(), seal(j)?)))
             .collect::<Result<Vec<_>, DownloadError>>()?;
         let prefs = preferences.map(seal).transpose()?;
@@ -128,6 +191,10 @@ impl Store {
             .transaction()
             .map_err(|_| DownloadError::Storage)?;
         tx.execute("INSERT INTO organization VALUES(1,?1) ON CONFLICT(id) DO UPDATE SET protected_value=excluded.protected_value",params![value]).map_err(|_|DownloadError::Storage)?;
+        for id in private_ids {
+            tx.execute("DELETE FROM downloads WHERE id=?1", params![id])
+                .map_err(|_| DownloadError::Storage)?;
+        }
         for (id, blob) in records {
             tx.execute("INSERT INTO downloads(id,protected_job) VALUES(?1,?2) ON CONFLICT(id) DO UPDATE SET protected_job=excluded.protected_job",params![id,blob]).map_err(|_|DownloadError::Storage)?;
         }
@@ -251,6 +318,7 @@ impl Store {
             .map_err(|_| DownloadError::Storage)?;
         let mut jobs = Vec::new();
         let mut unavailable = Vec::new();
+        let mut private_ids = Vec::new();
         for blob in blobs {
             let (id, blob) = blob.map_err(|_| DownloadError::Storage)?;
             let result = protection::decrypt(&blob).and_then(|mut clear| {
@@ -266,15 +334,59 @@ impl Store {
                 })
             });
             match result {
+                Ok(job) if job.organization.private => private_ids.push(id),
                 Ok(job) => jobs.push(job),
                 Err(error) => unavailable.push((id, error)),
             }
+        }
+        drop(statement);
+        if !private_ids.is_empty() {
+            for id in &private_ids {
+                self.connection
+                    .execute("DELETE FROM downloads WHERE id=?1", params![id])
+                    .map_err(|_| DownloadError::Storage)?;
+            }
+            let mut statement = self
+                .connection
+                .prepare("SELECT id, protected_value FROM operation_receipts")
+                .map_err(|_| DownloadError::Storage)?;
+            let receipts = statement
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, Vec<u8>>(1)?))
+                })
+                .map_err(|_| DownloadError::Storage)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|_| DownloadError::Storage)?;
+            drop(statement);
+            for (receipt_id, encrypted) in receipts {
+                let references_private = protection::decrypt(&encrypted).is_ok_and(|mut clear| {
+                    let found = private_ids.iter().any(|id| {
+                        !id.is_empty() && clear.windows(id.len()).any(|part| part == id.as_bytes())
+                    });
+                    clear.fill(0);
+                    found
+                });
+                if references_private {
+                    self.connection
+                        .execute(
+                            "DELETE FROM operation_receipts WHERE id=?1",
+                            params![receipt_id],
+                        )
+                        .map_err(|_| DownloadError::Storage)?;
+                }
+            }
+            self.connection
+                .execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
+                .map_err(|_| DownloadError::Storage)?;
         }
         Ok(LoadedJobs { jobs, unavailable })
     }
 }
 impl Checkpoint for Store {
     fn save(&mut self, job: &Job) -> Result<(), DownloadError> {
+        if job.organization.private {
+            return Ok(());
+        }
         let mut bytes = serde_json::to_vec(job).map_err(|_| DownloadError::Storage)?;
         let encrypted = protection::encrypt(&bytes);
         bytes.fill(0);
@@ -412,6 +524,265 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM schema_migrations", [], |r| r.get(0))
             .unwrap();
         assert_eq!(n, 4);
+    }
+
+    #[test]
+    fn private_checkpoints_leave_no_download_row() {
+        use idg_protocol::{ConflictPolicy, NewDownload};
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = Store::open(Path::new(":memory:")).unwrap();
+        let mut job = idg_core::download::create_job(
+            "private-checkpoint-id",
+            NewDownload {
+                url: "https://example.org/private-checkpoint-url".into(),
+                directory: dir.path().to_string_lossy().into(),
+                name: "private-checkpoint-name.bin".into(),
+                expected_sha256: None,
+                conflict: ConflictPolicy::Reject,
+                auth: None,
+                allow_cleartext_ftp: false,
+            },
+        )
+        .unwrap();
+        job.organization.private = true;
+        store.save(&job).unwrap();
+        let rows: u32 = store
+            .connection
+            .query_row("SELECT COUNT(*) FROM downloads", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(rows, 0);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn organization_saves_leave_no_private_download_row() {
+        use idg_protocol::*;
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = Store::open(Path::new(":memory:")).unwrap();
+        let mut job = idg_core::download::create_job(
+            "private-marker-id",
+            NewDownload {
+                url: "https://example.org/private-marker-url".into(),
+                directory: dir.path().to_string_lossy().into(),
+                name: "private-marker-name.bin".into(),
+                expected_sha256: None,
+                conflict: ConflictPolicy::Reject,
+                auth: None,
+                allow_cleartext_ftp: false,
+            },
+        )
+        .unwrap();
+        job.organization.private = true;
+        let organization = OrganizationState::default();
+        store
+            .save_organization(&organization, &[job], None, None)
+            .unwrap();
+        assert_eq!(store.organization().unwrap(), Some(organization));
+        let rows: u32 = store
+            .connection
+            .query_row("SELECT COUNT(*) FROM downloads", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(rows, 0);
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn unavailable_protection_rejects_normal_storage_without_plaintext_rows() {
+        use idg_protocol::*;
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = Store::open(Path::new(":memory:")).unwrap();
+        let job = idg_core::download::create_job(
+            "normal-without-protection",
+            NewDownload {
+                url: "https://example.org/protection-required".into(),
+                directory: dir.path().to_string_lossy().into(),
+                name: "protected.bin".into(),
+                expected_sha256: None,
+                conflict: ConflictPolicy::Reject,
+                auth: None,
+                allow_cleartext_ftp: false,
+            },
+        )
+        .unwrap();
+        assert!(matches!(
+            store.save(&job),
+            Err(DownloadError::SecretUnavailable)
+        ));
+        assert!(matches!(
+            store.save_organization(&OrganizationState::default(), &[job], None, None),
+            Err(DownloadError::SecretUnavailable)
+        ));
+        let downloads: u32 = store
+            .connection
+            .query_row("SELECT COUNT(*) FROM downloads", [], |row| row.get(0))
+            .unwrap();
+        let organizations: u32 = store
+            .connection
+            .query_row("SELECT COUNT(*) FROM organization", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(downloads, 0);
+        assert_eq!(organizations, 0);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn explicit_history_cleanup_removes_job_and_receipts_without_touching_other_jobs() {
+        use idg_protocol::*;
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = Store::open(Path::new(":memory:")).unwrap();
+        let make_job = |id: &str, name: &str| {
+            idg_core::download::create_job(
+                id,
+                NewDownload {
+                    url: format!("https://example.org/{name}"),
+                    directory: dir.path().to_string_lossy().into_owned(),
+                    name: name.into(),
+                    expected_sha256: None,
+                    conflict: ConflictPolicy::Reject,
+                    auth: None,
+                    allow_cleartext_ftp: false,
+                },
+            )
+            .unwrap()
+        };
+        store.save(&make_job("remove-me", "remove.bin")).unwrap();
+        store.save(&make_job("keep-me", "keep.bin")).unwrap();
+        let associated = Request {
+            version: VERSION,
+            id: "pause-receipt".into(),
+            command: Command::PauseDownload {
+                job_id: "remove-me".into(),
+            },
+        };
+        let associated_result = Payload::BulkResults {
+            items: vec![BulkItem {
+                id: "remove-me".into(),
+                outcome: "accepted".into(),
+                message: "fixture".into(),
+            }],
+        };
+        store
+            .save_organization(
+                &OrganizationState::default(),
+                &[],
+                None,
+                Some((&associated, &associated_result)),
+            )
+            .unwrap();
+        let unrelated = Request {
+            version: VERSION,
+            id: "unrelated-receipt".into(),
+            command: Command::Ping,
+        };
+        store
+            .save_organization(
+                &OrganizationState::default(),
+                &[],
+                None,
+                Some((&unrelated, &Payload::Pong)),
+            )
+            .unwrap();
+
+        store
+            .delete_history_metadata(&["remove-me".into()])
+            .unwrap();
+
+        assert!(store.receipt(&associated).unwrap().is_none());
+        assert!(matches!(
+            store.receipt(&unrelated).unwrap(),
+            Some(Payload::Pong)
+        ));
+        assert_eq!(
+            store
+                .load()
+                .unwrap()
+                .jobs
+                .iter()
+                .map(|job| job.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["keep-me"]
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn startup_removes_legacy_private_rows_and_receipts_that_reference_them() {
+        use idg_protocol::*;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("legacy-private.sqlite3");
+        let store = Store::open(&path).unwrap();
+        let mut job = idg_core::download::create_job(
+            "legacy-private-id",
+            NewDownload {
+                url: "https://example.org/private-marker-secret".into(),
+                directory: dir.path().to_string_lossy().into(),
+                name: "private-marker.bin".into(),
+                expected_sha256: None,
+                conflict: ConflictPolicy::Reject,
+                auth: None,
+                allow_cleartext_ftp: false,
+            },
+        )
+        .unwrap();
+        job.organization.private = true;
+        let encrypted = protection::encrypt(&serde_json::to_vec(&job).unwrap()).unwrap();
+        store
+            .connection
+            .execute(
+                "INSERT INTO downloads(id,protected_job) VALUES(?1,?2)",
+                params![job.id, encrypted],
+            )
+            .unwrap();
+        let command = Command::Library {
+            operation: LibraryCommand::Bulk {
+                ids: vec![job.id.clone()],
+                operation: BulkAction::Hide,
+            },
+        };
+        let receipt = protection::encrypt(
+            &serde_json::to_vec(&(
+                command,
+                Payload::BulkResults {
+                    items: vec![BulkItem {
+                        id: job.id.clone(),
+                        outcome: "accepted".into(),
+                        message: "fixture".into(),
+                    }],
+                },
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        store
+            .connection
+            .execute(
+                "INSERT INTO operation_receipts(id,protected_value) VALUES('legacy-receipt',?1)",
+                params![receipt],
+            )
+            .unwrap();
+        let loaded = store.load().unwrap();
+        assert!(loaded.jobs.is_empty());
+        assert!(loaded.unavailable.is_empty());
+        let rows: u32 = store
+            .connection
+            .query_row("SELECT COUNT(*) FROM downloads", [], |row| row.get(0))
+            .unwrap();
+        let receipts: u32 = store
+            .connection
+            .query_row("SELECT COUNT(*) FROM operation_receipts", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(rows, 0);
+        assert_eq!(receipts, 0);
+        drop(store);
+        let raw = std::fs::read(path).unwrap();
+        for marker in ["private-marker-secret", "private-marker.bin"] {
+            assert!(
+                !raw.windows(marker.len())
+                    .any(|part| part == marker.as_bytes())
+            );
+        }
     }
 
     #[test]

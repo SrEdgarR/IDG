@@ -34,8 +34,8 @@ try{
  await stop(true);
  await sleep(100);
  const events=watched.trim().split('\n').filter(Boolean).map(JSON.parse);
- assert.ok(events.length>0&&events.every(e=>e.kind==='download_changed'&&e.job.id==='crash'));
- assert.ok(events.some(e=>Number(e.job.received_bytes)>0));
+ assert.ok(events.length>0&&events.every(e=>e.kind==='download_changed'&&['crash','media-audio'].includes(e.job.id)));
+ assert.ok(events.some(e=>e.job.id==='crash'&&Number(e.job.received_bytes)>0));
  assert.ok(events.every((e,i)=>i===0||e.sequence>events[i-1].sequence));
  await start();const recovered=(await probe(['status','crash'])).job;
  assert.equal(recovered.state,'paused');assert.ok(Number(recovered.durable_bytes)>0&&Number(recovered.durable_bytes)<SIZE);

@@ -60,6 +60,7 @@ impl Job {
             queue_id: self.organization.queue_id.clone(),
             queue_order: self.organization.order,
             private: self.organization.private,
+            file_presence: idg_protocol::FilePresence::Unknown,
             category: self.organization.category.clone().unwrap_or_else(|| {
                 self.creation
                     .as_ref()

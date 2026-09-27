@@ -5,7 +5,7 @@ import net from "node:net";
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-export async function desktopHarness() {
+export async function desktopHarness({ tempRoot } = {}) {
   const root = process.cwd(),
     exe = (name) => path.join(root, `target/debug/${name}.exe`);
   const probe = (args) =>
@@ -16,14 +16,20 @@ export async function desktopHarness() {
         stdio: ["ignore", "pipe", "ignore"],
       }),
     );
+  const shutdown = () =>
+    execFileSync(exe("idg-probe"), ["shutdown"], {
+      windowsHide: true,
+      stdio: "ignore",
+    });
   let existing = false;
   try {
     probe(["ping"]);
     existing = true;
   } catch {}
   if (existing) throw Error("Runtime previo activo; esta prueba no lo cierra.");
-  await mkdir(".local", { recursive: true });
-  const dir = await mkdtemp(path.join(root, ".local/organization-"));
+  const fixtureRoot = tempRoot ?? path.join(root, ".local");
+  await mkdir(fixtureRoot, { recursive: true });
+  const dir = await mkdtemp(path.join(fixtureRoot, "organization-"));
   const files = path.join(dir, "files");
   await mkdir(files);
   const socket = net.createServer();
@@ -46,7 +52,7 @@ export async function desktopHarness() {
   let browser, pid;
   const close = async () => {
     try {
-      if (pid && probe(["ping"]).process_id === pid) probe(["shutdown"]);
+      if (pid && probe(["ping"]).process_id === pid) shutdown();
     } catch {}
     child.kill();
     await browser?.close().catch(() => {});
@@ -162,7 +168,7 @@ export async function desktopHarness() {
         "Only this fixture runtime may be stopped",
       );
       if (crash) process.kill(pid);
-      else probe(["shutdown"]);
+      else shutdown();
       for (let i = 0; i < 100; i++) {
         let alive = true;
         try {

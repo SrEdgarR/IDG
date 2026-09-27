@@ -353,6 +353,9 @@ export function LibraryPreferences() {
   const { state, error, accept } = useOrganization();
   const [failure, setFailure] = useState("");
   const [saving, setSaving] = useState(false);
+  const [confirmCleanup, setConfirmCleanup] = useState(false);
+  const [cleanupBusy, setCleanupBusy] = useState(false);
+  const [cleanupMessage, setCleanupMessage] = useState("");
   const sending = useRef(false);
   if (!state) return <p role="status">Leyendo organización… {error}</p>;
   const save = (change: Partial<typeof state.library>) => {
@@ -371,6 +374,27 @@ export function LibraryPreferences() {
         setSaving(false);
       });
   };
+  async function clearHistoryMetadata() {
+    setCleanupBusy(true);
+    setFailure("");
+    setCleanupMessage("");
+    try {
+      const result = await execute({
+        library: { operation: { action: "clear_history_metadata" } },
+      });
+      if (result.kind !== "history_metadata_cleared")
+        throw Error("El motor no confirmó la limpieza del historial.");
+      setCleanupMessage(
+        `Se quitaron ${result.records} ${result.records === 1 ? "registro" : "registros"} terminados. Los archivos no se modificaron.`,
+      );
+      setConfirmCleanup(false);
+      dispatchEvent(new Event("idg-library-changed"));
+    } catch (e) {
+      setFailure(String(e));
+    } finally {
+      setCleanupBusy(false);
+    }
+  }
   return (
     <section aria-label="Historial y estadísticas" aria-busy={saving}>
       {saving && <p role="status">Guardando en el motor…</p>}
@@ -463,6 +487,30 @@ export function LibraryPreferences() {
       >
         Borrar estadísticas locales
       </button>
+      <h4>Limpieza del historial</h4>
+      <p>
+        Quita solo los registros completados o cancelados y sus recibos de
+        operación. Conserva las descargas en disco y los trabajos activos,
+        pausados o fallidos que aún puedan recuperarse. No es un borrado
+        forense.
+      </p>
+      <label>
+        <input
+          type="checkbox"
+          checked={confirmCleanup}
+          disabled={cleanupBusy}
+          onChange={(e) => setConfirmCleanup(e.target.checked)}
+        />{" "}
+        Confirmo quitar los metadatos terminados del historial
+      </label>
+      <button
+        className="danger"
+        disabled={!confirmCleanup || cleanupBusy}
+        onClick={() => void clearHistoryMetadata()}
+      >
+        {cleanupBusy ? "Limpiando…" : "Eliminar metadatos terminados"}
+      </button>
+      {cleanupMessage && <p role="status">{cleanupMessage}</p>}
       {failure && <p role="alert">{failure}</p>}
     </section>
   );
