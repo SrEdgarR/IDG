@@ -1,5 +1,5 @@
 [package]
-name = "idg-runtime"
+name = "idg-media"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,9 +8,12 @@ license.workspace = true
 [dependencies]
 idg-core = { path = "../idg-core" }
 idg-protocol.workspace = true
-idg-platform-windows.workspace = true
+reqwest.workspace = true
 tokio.workspace = true
 serde_json.workspace = true
-idg-storage = { path = "../idg-storage" }
-idg-media = { path = "../idg-media" }
-reqwest.workspace = true
+sha2.workspace = true
+quick-xml.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+tempfile = "=3.27.0"

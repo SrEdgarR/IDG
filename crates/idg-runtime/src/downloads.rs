@@ -25,6 +25,7 @@ struct Inner {
     file_operations: std::collections::BTreeSet<String>,
     unavailable: BTreeMap<String, DownloadError>,
     captures: BTreeMap<String, (CaptureProposal, std::time::Instant)>,
+    pending_media: BTreeMap<String, idg_core::download::MediaTask>,
 }
 #[derive(Clone)]
 pub struct Downloads {
@@ -89,6 +90,7 @@ impl Downloads {
                 file_operations: Default::default(),
                 unavailable: loaded.unavailable.into_iter().collect(),
                 captures: BTreeMap::new(),
+                pending_media: BTreeMap::new(),
             })),
             events,
             resources,
@@ -130,6 +132,7 @@ impl Downloads {
                         job.state,
                         TransferState::Probing
                             | TransferState::Downloading
+                            | TransferState::Processing
                             | TransferState::Verifying
                             | TransferState::PublishPending
                             | TransferState::Paused
@@ -144,6 +147,7 @@ impl Downloads {
                     job.state,
                     TransferState::Probing
                         | TransferState::Downloading
+                        | TransferState::Processing
                         | TransferState::Verifying
                         | TransferState::PublishPending
                 )
@@ -167,6 +171,18 @@ impl Downloads {
         self.execute_with_role(request, true).await
     }
     async fn execute_with_role(&self, request: Request, extension: bool) -> Payload {
+        if matches!(
+            request.command,
+            Command::InspectMediaManifest { .. } | Command::CreateMediaDownload { .. }
+        ) {
+            return match self.execute_media_command(request, extension).await {
+                Ok(payload) => payload,
+                Err(code) => Payload::DownloadFailure {
+                    message: code.message().into(),
+                    code,
+                },
+            };
+        }
         let this = self.clone();
         match tokio::task::spawn_blocking(move || this.handle_with_role(request, extension)).await {
             Ok(Ok(p)) => p,
@@ -178,6 +194,94 @@ impl Downloads {
                 code: DownloadError::Storage,
                 message: DownloadError::Storage.message().into(),
             },
+        }
+    }
+    async fn execute_media_command(
+        &self,
+        request: Request,
+        extension: bool,
+    ) -> Result<Payload, DownloadError> {
+        if extension || request.version != VERSION {
+            return Err(DownloadError::NotFound);
+        }
+        match request.command {
+            Command::InspectMediaManifest { url } => {
+                let client = download::client()?;
+                let plan = idg_media::inspect_manifest(&client, &url, &self.resources, &request.id)
+                    .await?;
+                Ok(Payload::MediaPlan { plan })
+            }
+            Command::CreateMediaDownload {
+                draft,
+                fingerprint,
+                selection,
+            } => {
+                draft.validate()?;
+                let existing = (|| {
+                    let inner = self.inner.lock().map_err(|_| DownloadError::Storage)?;
+                    if inner.preferences.media_ffmpeg_path.is_none() {
+                        return Err(DownloadError::MediaToolUnavailable);
+                    }
+                    if let Some(job) = inner.jobs.get(&request.id) {
+                        let same = job.creation.as_ref() == Some(&draft)
+                            && job.media.as_ref().is_some_and(|task| {
+                                task.fingerprint == fingerprint && task.selection == selection
+                            });
+                        return if same {
+                            Ok(Some(Payload::Download {
+                                job: self.snapshot(job),
+                            }))
+                        } else {
+                            Err(DownloadError::Conflict)
+                        };
+                    }
+                    Ok(None)
+                })()?;
+                if let Some(payload) = existing {
+                    return Ok(payload);
+                }
+                let client = download::client()?;
+                let media = idg_media::prepare_selection(
+                    &client,
+                    &draft.input.url,
+                    &fingerprint,
+                    &selection,
+                    &self.resources,
+                    &request.id,
+                )
+                .await?;
+                {
+                    let mut inner = self.inner.lock().map_err(|_| DownloadError::Storage)?;
+                    if inner.stopping {
+                        return Err(DownloadError::Busy);
+                    }
+                    if let Some(existing) = inner.pending_media.get(&request.id) {
+                        if existing.fingerprint != media.fingerprint
+                            || existing.selection != media.selection
+                        {
+                            return Err(DownloadError::Conflict);
+                        }
+                    } else {
+                        inner.pending_media.insert(request.id.clone(), media);
+                    }
+                }
+                let this = self.clone();
+                let request_id = request.id.clone();
+                let command = Request {
+                    version: request.version,
+                    id: request.id,
+                    command: Command::CreateDownload { draft },
+                };
+                let result = match tokio::task::spawn_blocking(move || this.handle(command)).await {
+                    Ok(result) => result,
+                    Err(_) => Err(DownloadError::Storage),
+                };
+                if let Ok(mut inner) = self.inner.lock() {
+                    inner.pending_media.remove(&request_id);
+                }
+                result
+            }
+            _ => Err(DownloadError::InvalidInput),
         }
     }
     fn handle(&self, request: Request) -> Result<Payload, DownloadError> {
@@ -556,10 +660,18 @@ impl Downloads {
             }
             Command::CreateDownload { mut draft } => {
                 draft.validate()?;
-                if let Some(job) = inner.jobs.get(&request.id) {
-                    return if job.creation.as_ref() == Some(&draft) {
+                if let Some(job) = inner.jobs.get(&request.id).cloned() {
+                    let pending_media = inner.pending_media.remove(&request.id);
+                    return if job.creation.as_ref() == Some(&draft)
+                        && match pending_media.as_ref() {
+                            Some(media) => job.media.as_ref().is_some_and(|saved| {
+                                saved.fingerprint == media.fingerprint
+                                    && saved.selection == media.selection
+                            }),
+                            None => job.media.is_none(),
+                        } {
                         Ok(Payload::Download {
-                            job: self.snapshot(job),
+                            job: self.snapshot(&job),
                         })
                     } else {
                         Err(DownloadError::Conflict)
@@ -629,6 +741,7 @@ impl Downloads {
                     return Err(DownloadError::Busy);
                 }
                 let mut job = download::create_job(&request.id, draft.input.clone())?;
+                job.media = inner.pending_media.remove(&request.id);
                 if let Some(capture_id) = draft.context.strip_prefix("extension:") {
                     job.organization.media = inner
                         .captures
@@ -904,6 +1017,25 @@ impl Downloads {
         {
             return Err(DownloadError::Busy);
         }
+        let media_tools = if job.media.is_some() {
+            let ffmpeg = inner
+                .preferences
+                .media_ffmpeg_path
+                .as_ref()
+                .map(PathBuf::from)
+                .ok_or(DownloadError::MediaToolUnavailable)?;
+            let ffprobe_name = if cfg!(windows) {
+                "ffprobe.exe"
+            } else {
+                "ffprobe"
+            };
+            Some(idg_media::ffmpeg::Tools {
+                ffprobe: ffmpeg.with_file_name(ffprobe_name),
+                ffmpeg,
+            })
+        } else {
+            None
+        };
         // Persist the transition before any GET. After a crash, an already-started
         // queued job must recover paused instead of silently replaying its URL.
         if matches!(job.state, TransferState::Queued | TransferState::Deferred) {
@@ -921,19 +1053,32 @@ impl Downloads {
             .name("idg-transfer".into())
             .spawn(move || {
                 let mut sink = Sink(this.clone());
+                let media_tools = media_tools;
                 let result = tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()
                     .map_err(|_| DownloadError::Network)
                     .and_then(|rt| {
                         let client = download::client()?;
-                        rt.block_on(download::transfer_managed(
-                            &client,
-                            &mut job,
-                            &mut commands,
-                            &mut sink,
-                            this.resources.clone(),
-                        ))
+                        if job.media.is_some() {
+                            let tools = media_tools.ok_or(DownloadError::MediaToolUnavailable)?;
+                            rt.block_on(idg_media::transfer_media(
+                                &client,
+                                &mut job,
+                                &mut commands,
+                                &mut sink,
+                                this.resources.clone(),
+                                &tools,
+                            ))
+                        } else {
+                            rt.block_on(download::transfer_managed(
+                                &client,
+                                &mut job,
+                                &mut commands,
+                                &mut sink,
+                                this.resources.clone(),
+                            ))
+                        }
                     });
                 if let Err(error) = result {
                     if job.state != TransferState::PublishPending {

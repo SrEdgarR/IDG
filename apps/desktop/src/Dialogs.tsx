@@ -8,6 +8,8 @@ import type {
   StartPolicy,
   ConflictPolicy,
   MediaMetadata,
+  MediaOutput,
+  MediaPlan,
 } from "../../../packages/shared-types/protocol";
 import { Modal, Pending } from "./ui/Modal";
 import { validateDraft } from "./model";
@@ -21,6 +23,29 @@ function describeMediaMetadata(media: MediaMetadata): string {
     media.audio_tracks ? `${media.audio_tracks} pista(s) de audio` : null,
   ].filter((value): value is string => value !== null);
   return details.length ? details.join(" · ") : "Desconocidos; no se deducen";
+}
+
+function manifestUrl(url: string): boolean {
+  try {
+    return /\.(m3u8|mpd)$/i.test(new URL(url).pathname);
+  } catch {
+    return false;
+  }
+}
+
+function mediaExtension(output: MediaOutput): string {
+  return ({
+    mp4: "mp4",
+    matroska: "mkv",
+    audio_original: "mka",
+    mp3: "mp3",
+    aac: "aac",
+    flac: "flac",
+  } as const)[output];
+}
+
+function audioOnly(output: MediaOutput): boolean {
+  return ["audio_original", "mp3", "aac", "flac"].includes(output);
 }
 export function NewDownloadDialog({
   onClose,
@@ -61,6 +86,7 @@ export function NewDownloadDialog({
         .preferences()
         .then((p) => {
           if (!directoryEdited.current) setDirectory(p.directory);
+          setFfmpegConfigured(Boolean(p.media_ffmpeg_path));
         })
         .catch(() => {});
   }, [backend]);
@@ -70,6 +96,12 @@ export function NewDownloadDialog({
   const [priority, setPriority] = useState<"normal" | "high" | "low">("normal");
   const [failure, setFailure] = useState("");
   const [busy, setBusy] = useState(false);
+  const [mediaPlan, setMediaPlan] = useState<MediaPlan | null>(null);
+  const [mediaVariant, setMediaVariant] = useState<number | null>(null);
+  const [mediaAudio, setMediaAudio] = useState<number | null>(null);
+  const [mediaOutput, setMediaOutput] = useState<MediaOutput>("mp4");
+  const [analyzingMedia, setAnalyzingMedia] = useState(false);
+  const [ffmpegConfigured, setFfmpegConfigured] = useState(false);
   const sending = useRef(false);
   const requestId = useRef(crypto.randomUUID());
   async function submit(
@@ -81,6 +113,38 @@ export function NewDownloadDialog({
     setFailure("");
     if (Object.keys(validateDraft(name, url)).length || !directory) {
       setFailure("Revisa URL, nombre y carpeta.");
+      return;
+    }
+    const isManifest =
+      media?.manifest_kind === "hls" ||
+      media?.manifest_kind === "dash" ||
+      manifestUrl(url);
+    if (isManifest && !mediaPlan) {
+      setFailure("Analiza el manifiesto antes de crear el trabajo multimedia.");
+      return;
+    }
+    if (mediaPlan && mediaVariant === null && mediaAudio === null) {
+      setFailure("Selecciona una variante o una pista de audio disponible.");
+      return;
+    }
+    const selectedVariant = mediaPlan?.variants.find((variant) => variant.index === mediaVariant);
+    if (mediaPlan && !audioOnly(mediaOutput) && mediaVariant === null) {
+      setFailure("Selecciona una variante de video disponible.");
+      return;
+    }
+    if (mediaPlan && !ffmpegConfigured) {
+      setFailure("Configura FFmpeg y ffprobe en Ajustes → Video y audio antes de crear el trabajo.");
+      return;
+    }
+    if (mediaPlan?.kind === "hls" && !audioOnly(mediaOutput) && selectedVariant?.audio_group && mediaAudio === null) {
+      setFailure("Selecciona la pista de audio vinculada a esta variante.");
+      return;
+    }
+    const selectedAudio = mediaPlan?.audio_tracks.find(
+      (track) => track.index === mediaAudio,
+    );
+    if (mediaPlan && audioOnly(mediaOutput) && !selectedAudio?.external) {
+      setFailure("La conversión de audio requiere una pista separada y seleccionable.");
       return;
     }
     if (captureId && !replaySafe) {
@@ -106,10 +170,9 @@ export function NewDownloadDialog({
           return;
         }
       }
-      const result = await backend.add(
-        captureId ?? requestId.current,
-        { url, directory, name, expected_sha256: null, conflict: policy },
-        {
+      const id = captureId ?? requestId.current;
+      const newInput = { url, directory, name, expected_sha256: null, conflict: policy };
+      const transferOptions = {
           mode:
             requests === "automatic"
               ? "automatic"
@@ -117,14 +180,38 @@ export function NewDownloadDialog({
           replay_safe: replaySafe,
           bytes_per_second: limit ? Number(limit) * 1024 : null,
           priority,
-        },
+        } as const;
+      const draft = {
+        input: newInput,
+        options: transferOptions,
         category,
-        captureId ? "later" : start,
-        queueId,
-        applyRules,
-        ruleOverrides,
-        captureId ? `extension:${captureId}` : "",
-      );
+        start: captureId ? "later" as const : start,
+        queue_id: queueId,
+        apply_rules: applyRules,
+        rule_overrides: ruleOverrides,
+        context: captureId ? `extension:${captureId}` : "",
+        private: false,
+      };
+      const result = mediaPlan
+        ? await backend.addMedia(id, draft, mediaPlan.fingerprint, {
+            variant_index:
+              mediaPlan.kind === "dash" && audioOnly(mediaOutput)
+                ? null
+                : mediaVariant,
+            audio_track_index: mediaAudio,
+            output: mediaOutput,
+          })
+        : await backend.add(
+            id,
+            newInput,
+            transferOptions,
+            category,
+            captureId ? "later" : start,
+            queueId,
+            applyRules,
+            ruleOverrides,
+            captureId ? `extension:${captureId}` : "",
+          );
       if (result.kind !== "download")
         throw new Error("El motor no confirmó el trabajo.");
       if (captureId) onAccepted?.();
@@ -142,6 +229,52 @@ export function NewDownloadDialog({
   }
   const [name, setName] = useState(initialName);
   const [url, setUrl] = useState(initialUrl);
+  const isManifest =
+    media?.manifest_kind === "hls" ||
+    media?.manifest_kind === "dash" ||
+    manifestUrl(url);
+  async function analyzeMedia() {
+    if (!backend || !url || analyzingMedia) return;
+    setAnalyzingMedia(true);
+    setFailure("");
+    try {
+      const plan = await backend.inspectMedia(url);
+      setMediaPlan(plan);
+      setMediaVariant(plan.variants[0]?.index ?? null);
+      setMediaAudio(
+        plan.audio_tracks.find((track) => track.is_default)?.index ??
+          plan.audio_tracks[0]?.index ??
+          null,
+      );
+      chooseOutput(plan.variants.length ? "mp4" : "audio_original");
+      setCategory(plan.variants.length ? "Videos" : "Música");
+    } catch (e) {
+      setMediaPlan(null);
+      setFailure(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAnalyzingMedia(false);
+    }
+  }
+  const compatibleAudio = mediaPlan?.audio_tracks.filter(
+    (track) =>
+      !track.group ||
+      !mediaPlan.variants.find((variant) => variant.index === mediaVariant)
+        ?.audio_group ||
+      track.group ===
+        mediaPlan.variants.find((variant) => variant.index === mediaVariant)
+          ?.audio_group,
+  ) ?? [];
+  const chosenAudio = compatibleAudio.find((track) => track.index === mediaAudio);
+  const canConvertAudio = Boolean(chosenAudio?.external);
+  function chooseOutput(output: MediaOutput) {
+    setMediaOutput(output);
+    const extension = mediaExtension(output);
+    setName((current) => {
+      const dot = current.lastIndexOf(".");
+      const stem = dot > 0 ? current.slice(0, dot) : current;
+      return `${stem}.${extension}`;
+    });
+  }
   const [reveal, setReveal] = useState(false);
   const [checked, setChecked] = useState(false);
   const errors = checked ? validateDraft(name, url) : {};
@@ -159,7 +292,7 @@ export function NewDownloadDialog({
           ? "Revisa el destino. No se consulta el enlace hasta aceptar la descarga."
           : "Prepara los datos del archivo. Todavía no se enviarán al motor."}
       </p>
-      {media && (
+      {media && !isManifest && (
         <section className="media-capture-summary" aria-label="Medio seleccionado">
           <h3>{media.title || (media.kind === "video" ? "Video seleccionado" : "Audio seleccionado")}</h3>
           <dl>
@@ -170,15 +303,61 @@ export function NewDownloadDialog({
             <div><dt>Duración</dt><dd>{media.duration_ms ? `${Math.floor(Number(media.duration_ms) / 60000)}:${String(Math.floor(Number(media.duration_ms) / 1000) % 60).padStart(2, "0")}` : "Desconocida"}</dd></div>
             <div><dt>Tamaño</dt><dd>{media.size_bytes ? `${media.size_bytes} bytes · ${media.size_kind === "exact" ? "respuesta HTTP" : "estimado"}` : "Desconocido"}</dd></div>
           </dl>
-          <label className="field">
-            Archivo multimedia
-            <select value="original" disabled aria-label="Archivo original seleccionado">
-              <option value="original">Conservar archivo original{media.width && media.height ? ` · ${media.width} × ${media.height}` : ""}</option>
-              <option value="video-only" disabled>Solo video · no disponible en fase 09</option>
-              <option value="audio-only" disabled>Solo audio · no disponible en fase 09</option>
-            </select>
-          </label>
-          <p className="muted">Esta fase transfiere únicamente el archivo directo original. No separa pistas, no convierte y no asigna una calidad que el reproductor no haya declarado.</p>
+          <p className="muted">El archivo directo conserva su contenido original. Las pistas y conversiones se ofrecen solo al analizar un manifiesto HLS o DASH compatible.</p>
+        </section>
+      )}
+      {isManifest && (
+        <section className="media-capture-summary" aria-label="Procesamiento HLS y DASH">
+          <h3>{mediaPlan ? `Manifiesto ${mediaPlan.kind.toUpperCase()}` : "Procesar manifiesto multimedia"}</h3>
+          <p className="muted">IDG analiza manifiestos públicos HLS VOD sin cifrar y DASH estáticos sin DRM. No transfiere cookies o sesiones, no procesa emisiones en directo y rechaza estructuras o referencias que no admite.</p>
+          {!mediaPlan ? (
+            <button type="button" disabled={!backend || analyzingMedia || busy} onClick={() => void analyzeMedia()}>
+              {analyzingMedia ? "Analizando manifiesto…" : "Analizar HLS/DASH"}
+            </button>
+          ) : (
+            <>
+              <p>{mediaPlan.variants.length} variante(s) de video · {mediaPlan.audio_tracks.length} pista(s) de audio · duración {mediaPlan.duration_ms ? `${Math.floor(Number(mediaPlan.duration_ms) / 60000)}:${String(Math.floor(Number(mediaPlan.duration_ms) / 1000) % 60).padStart(2, "0")}` : "desconocida"}</p>
+              {mediaPlan.variants.length > 0 && (
+                <label className="field">
+                  Variante de video
+                  <select aria-label="Variante de video" value={mediaVariant ?? ""} onChange={(event) => setMediaVariant(event.target.value === "" ? null : Number(event.target.value))}>
+                    <option value="">Selecciona una variante</option>
+                    {mediaPlan.variants.map((variant) => (
+                      <option key={variant.index} value={variant.index}>
+                        {variant.label}{variant.bandwidth_bps ? ` · ${Math.round(Number(variant.bandwidth_bps) / 1000)} kb/s` : ""}{variant.codecs.length ? ` · ${variant.codecs.join(", ")}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {compatibleAudio.length > 0 && (
+                <label className="field">
+                  Pista de audio
+                  <select aria-label="Pista de audio" value={mediaAudio ?? ""} onChange={(event) => setMediaAudio(event.target.value === "" ? null : Number(event.target.value))}>
+                    <option value="">Sin seleccionar una pista externa (puede conservar audio integrado)</option>
+                    {compatibleAudio.map((track) => (
+                      <option key={track.index} value={track.index}>
+                        {track.label}{track.language ? ` · ${track.language}` : ""}{track.channels ? ` · ${track.channels}` : ""}{track.is_default ? " · predeterminada" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <label className="field">
+                Salida
+                <select aria-label="Salida multimedia" value={mediaOutput} onChange={(event) => chooseOutput(event.target.value as MediaOutput)}>
+                  <option value="mp4" disabled={mediaPlan.variants.length === 0}>MP4 · conservar codecs compatibles</option>
+                  <option value="matroska" disabled={mediaPlan.variants.length === 0}>Matroska · conservar codecs</option>
+                  <option value="audio_original" disabled={!canConvertAudio}>Solo audio original · Matroska</option>
+                  <option value="mp3" disabled={!canConvertAudio}>Convertir audio a MP3</option>
+                  <option value="aac" disabled={!canConvertAudio}>Convertir audio a AAC</option>
+                  <option value="flac" disabled={!canConvertAudio}>Convertir audio a FLAC</option>
+                </select>
+              </label>
+              <p className="muted">La copia/remultiplexado no recodifica video. MP3, AAC y FLAC recodifican audio y pueden cambiar calidad; FLAC no recupera calidad perdida. La salida y codecs se verifican antes de publicar el archivo.</p>
+              {!ffmpegConfigured && <p className="error-text">Configura FFmpeg y ffprobe en Ajustes → Video y audio para procesar este manifiesto.</p>}
+            </>
+          )}
         </section>
       )}
       <form
@@ -199,11 +378,11 @@ export function NewDownloadDialog({
             required
             aria-invalid={!!errors.url}
             aria-describedby="url-help url-error"
-            onChange={(e) => setUrl(e.target.value)}
+            onChange={(e) => { setUrl(e.target.value); setMediaPlan(null); }}
           />
         </label>
         <small id="url-help" className="muted">
-          Se oculta para proteger enlaces privados. No se consulta la red.
+          Se oculta para proteger enlaces privados. Al analizar HLS/DASH se consulta solo el manifiesto y las referencias seleccionadas.
         </small>
         <label className="check-field">
           <input

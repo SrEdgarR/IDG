@@ -74,6 +74,7 @@ pub enum TransferState {
     Queued,
     Probing,
     Downloading,
+    Processing,
     Paused,
     Verifying,
     PublishPending,
@@ -110,6 +111,7 @@ pub enum DownloadError {
     FileIo,
     PublishBlocked,
     SecretUnavailable,
+    MediaToolUnavailable,
 }
 impl DownloadError {
     pub fn message(&self) -> &'static str {
@@ -155,6 +157,9 @@ impl DownloadError {
             Self::SecretUnavailable => {
                 "No se pudo recuperar el recurso protegido para este usuario."
             }
+            Self::MediaToolUnavailable => {
+                "Configura una copia local de FFmpeg y ffprobe en Configuración > Video y audio."
+            }
         }
     }
 }
@@ -187,6 +192,7 @@ pub struct DownloadSnapshot {
     pub resume: String,
     pub calculated_sha256: Option<String>,
     pub verified_against_reference: bool,
+    pub media_stage: Option<crate::MediaStage>,
     pub error: Option<DownloadError>,
     pub message: Option<String>,
     pub retry_after_seconds: Option<u32>,

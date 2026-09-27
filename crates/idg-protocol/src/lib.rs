@@ -15,6 +15,8 @@ mod rules;
 pub use rules::*;
 mod library;
 pub use library::*;
+mod media;
+pub use media::*;
 
 use serde::{Deserialize, Serialize};
 use std::{io, time::Duration};
@@ -37,6 +39,14 @@ pub enum Command {
     },
     CreateDownload {
         draft: CreateDownload,
+    },
+    InspectMediaManifest {
+        url: String,
+    },
+    CreateMediaDownload {
+        draft: CreateDownload,
+        fingerprint: String,
+        selection: MediaSelection,
     },
     GetAppPreferences,
     GetExtensionState,
@@ -183,6 +193,9 @@ pub enum Payload {
     },
     DownloadDirectory {
         directory: String,
+    },
+    MediaPlan {
+        plan: MediaPlan,
     },
     AppPreferences {
         preferences: AppPreferences,

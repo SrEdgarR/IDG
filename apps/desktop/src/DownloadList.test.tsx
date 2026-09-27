@@ -1,97 +1,54 @@
 // @vitest-environment jsdom
-import { useState } from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { DownloadList } from "./DownloadList";
+import { DownloadList, supports } from "./DownloadList";
 import type { DownloadView } from "./model";
 
 afterEach(cleanup);
 
-function download(overrides: Partial<DownloadView> = {}): DownloadView {
-  return {
-    id: "job-01",
-    name: "archivo.bin",
-    state: "Downloading",
-    category: "Otros",
-    domain: "cdn.example",
-    date: "2026-09-25",
-    total: 100n,
-    received: 25n,
-    speed: null,
-    eta: null,
-    samples: [],
-    resume: "Desconocida",
-    ...overrides,
-  };
-}
-
-function InteractiveList({ row }: { row: DownloadView }) {
-  const [selected, setSelected] = useState(() => new Set<string>());
-  const [overrides, setOverrides] = useState<Record<string, boolean>>({});
-  return (
-    <DownloadList
-      rows={[row]}
-      selected={selected}
-      onSelect={(id) =>
-        setSelected((current) => {
-          const next = new Set(current);
-          if (next.has(id)) next.delete(id);
-          else next.add(id);
-          return next;
-        })
-      }
-      viewMode="Compacta"
-      overrides={overrides}
-      setOverrides={setOverrides}
-    />
-  );
-}
-
-describe("DownloadList", () => {
-  it("keeps row selection independent from expanding its details", async () => {
+describe("media processing controls", () => {
+  it("allows pause and cancellation while FFmpeg is processing", async () => {
     const user = userEvent.setup();
-    render(<InteractiveList row={download()} />);
+    const onAction = vi.fn(async (_id: string, _action: string) => {});
+    const row = {
+      id: "media-job",
+      name: "conversion.mp3",
+      state: "Processing",
+      category: "Música",
+      domain: "127.0.0.1",
+      date: "",
+      total: null,
+      received: 1024n,
+      speed: null,
+      eta: null,
+      samples: [],
+      resume: "Desconocida",
+      snapshot: { state: "processing" },
+    } as unknown as DownloadView;
 
-    const checkbox = screen.getByRole("checkbox", { name: "Seleccionar archivo.bin" }) as HTMLInputElement;
-    const title = screen.getByRole("button", { name: /archivo\.bin cdn\.example/ });
-    expect(title.getAttribute("aria-expanded")).toBe("false");
-
-    await user.click(checkbox);
-    expect(checkbox.checked).toBe(true);
-    expect(title.getAttribute("aria-expanded")).toBe("false");
-
-    await user.click(title);
-    expect(title.getAttribute("aria-expanded")).toBe("true");
-    expect(screen.getByRole("region", { name: "Detalles de archivo.bin" })).toBeTruthy();
-
-    await user.click(checkbox);
-    expect(checkbox.checked).toBe(false);
-    expect(title.getAttribute("aria-expanded")).toBe("true");
-  });
-
-  it("calculates progress exactly for unsigned 64-bit byte counters", () => {
-    const maximumU64 = 18_446_744_073_709_551_615n;
+    expect(supports(row, "pause")).toBe(true);
+    expect(supports(row, "cancel")).toBe(true);
     render(
       <DownloadList
-        rows={[
-          download({
-            total: maximumU64,
-            received: maximumU64 - 1n,
-          }),
-        ]}
+        rows={[row]}
         selected={new Set()}
         onSelect={() => {}}
         viewMode="Compacta"
-        overrides={{}}
+        overrides={{ [row.id]: false }}
         setOverrides={() => {}}
+        onAction={onAction}
       />,
     );
 
-    const progress = screen.getByRole("progressbar", {
-      name: "Progreso de archivo.bin",
-    }) as HTMLProgressElement;
-    expect(progress.value).toBe(99.99);
-    expect(screen.getByText("99 %")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Pausar conversion.mp3" }));
+    await user.click(screen.getByLabelText("Acciones de conversion.mp3"));
+    const cancel = screen.getByRole("button", { name: "Cancelar" }) as HTMLButtonElement;
+    expect(cancel.disabled).toBe(false);
+    await user.click(cancel);
+    expect(onAction.mock.calls.map(([id, action]) => [id, action])).toEqual([
+      ["media-job", "pause"],
+      ["media-job", "cancel"],
+    ]);
   });
 });

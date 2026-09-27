@@ -18,7 +18,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { NewDownloadDialog } from "./Dialogs";
 import type { DesktopApi } from "./desktop";
-import type { AppPreferences, MediaMetadata, Payload } from "../../../packages/shared-types/protocol";
+import type { AppPreferences, MediaMetadata, MediaPlan, MediaSelection, Payload } from "../../../packages/shared-types/protocol";
 
 vi.mock("./Organization", () => ({
   useOrganization: () => ({ state: null, error: "" }),
@@ -122,12 +122,113 @@ describe("NewDownloadDialog", () => {
     expect(summary.getByText("Desconocida")).toBeTruthy();
     expect(summary.getByText("Desconocido")).toBeTruthy();
     expect(summary.getByText("Desconocidos; no se deducen")).toBeTruthy();
-    expect(screen.getByText(/no separa pistas, no convierte/i)).toBeTruthy();
+    expect(screen.getByText(/solo al analizar un manifiesto HLS o DASH compatible/i)).toBeTruthy();
     expect(document.querySelector(".media-capture-summary img")).toBeNull();
     expect(document.querySelector<HTMLInputElement>("input[value='Videos']")).toBeNull();
     expect(screen.getByLabelText("Categoría")).toHaveProperty("value", "Videos");
   });
 
+  it("analyzes an HLS manifest and creates the selected real media job", async () => {
+    const user = userEvent.setup();
+    const preferences = deferred<AppPreferences>();
+    const plan: MediaPlan = {
+      kind: "hls",
+      fingerprint: "a".repeat(64),
+      variants: [{
+        index: 0,
+        label: "720p · 1280×720",
+        bandwidth_bps: 1_200_000n,
+        width: 1280,
+        height: 720,
+        codecs: ["avc1.64001f", "mp4a.40.2"],
+        audio_group: "audio",
+        has_video: true,
+      }],
+      audio_tracks: [{
+        index: 0,
+        group: "audio",
+        label: "Español",
+        language: "es",
+        is_default: true,
+        channels: null,
+        external: true,
+      }],
+      duration_ms: 5_000n,
+    };
+    const addMedia = vi.fn(async () => ({ kind: "download" }) as Payload);
+    const backend = makeBackend({
+      preferences: vi.fn(() => preferences.promise),
+      inspectMedia: vi.fn(async () => plan),
+      addMedia,
+      recoverable: vi.fn(async () => null),
+    });
+    const onClose = vi.fn();
+    render(
+      <NewDownloadDialog
+        backend={backend}
+        onClose={onClose}
+        initialUrl="http://127.0.0.1:8788/master.m3u8"
+        initialName="master.m3u8"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Analizar HLS/DASH" }));
+    await screen.findByRole("combobox", { name: "Variante de video" });
+    expect((screen.getByLabelText("Nombre del archivo") as HTMLInputElement).value).toBe("master.mp4");
+    expect(screen.getByText(/Configura FFmpeg y ffprobe/)).toBeTruthy();
+    expect(backend.inspectMedia).toHaveBeenCalledWith("http://127.0.0.1:8788/master.m3u8");
+
+    preferences.resolve({ directory: "C:\\Downloads", media_ffmpeg_path: "C:\\tools\\ffmpeg.exe" } as AppPreferences);
+    await waitFor(() => expect(screen.queryByText(/Configura FFmpeg y ffprobe/)).toBeNull());
+    await user.click(screen.getByRole("button", { name: "Descargar ahora" }));
+    await waitFor(() => expect(addMedia).toHaveBeenCalledOnce());
+    const mediaCall = addMedia.mock.calls[0] as unknown as [string, unknown, string, MediaSelection];
+    expect(mediaCall[2]).toBe("a".repeat(64));
+    expect(mediaCall[3]).toEqual({
+      variant_index: 0,
+      audio_track_index: 0,
+      output: "mp4",
+    });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("does not create a media job when FFmpeg is not configured", async () => {
+    const user = userEvent.setup();
+    const plan: MediaPlan = {
+      kind: "dash",
+      fingerprint: "b".repeat(64),
+      variants: [],
+      audio_tracks: [{
+        index: 0,
+        group: null,
+        label: "Audio 1",
+        language: null,
+        is_default: true,
+        channels: null,
+        external: true,
+      }],
+      duration_ms: 2_000n,
+    };
+    const addMedia = vi.fn(async () => ({ kind: "download" }) as Payload);
+    const backend = makeBackend({
+      inspectMedia: vi.fn(async () => plan),
+      addMedia,
+      recoverable: vi.fn(async () => null),
+    });
+    render(
+      <NewDownloadDialog
+        backend={backend}
+        onClose={() => {}}
+        initialUrl="http://127.0.0.1:8788/audio.mpd"
+        initialName="audio.mpd"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Analizar HLS/DASH" }));
+    await user.click(screen.getByRole("button", { name: "Descargar ahora" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Configura FFmpeg y ffprobe");
+    expect(addMedia).not.toHaveBeenCalled();
+  });
   it("does not let a late preference response replace a folder the user started editing", async () => {
     const user = userEvent.setup();
     const preferences = deferred<AppPreferences>();

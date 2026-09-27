@@ -69,6 +69,8 @@ pub struct AppPreferences {
     pub mini_window: bool,
     pub drop_target: bool,
     pub queue_running: bool,
+    #[serde(default)]
+    pub media_ffmpeg_path: Option<String>,
 }
 impl Default for AppPreferences {
     fn default() -> Self {
@@ -84,6 +86,7 @@ impl Default for AppPreferences {
             mini_window: false,
             drop_target: false,
             queue_running: false,
+            media_ffmpeg_path: None,
         }
     }
 }
@@ -94,6 +97,10 @@ impl AppPreferences {
             || !["hide", "exit", "ask"].contains(&self.close_action.as_str())
             || !["always", "ask", "browser"].contains(&self.autopick_mode.as_str())
             || self.directory.len() > 4096
+            || self
+                .media_ffmpeg_path
+                .as_ref()
+                .is_some_and(|path| path.len() > 4096 || !std::path::Path::new(path).is_absolute())
             || (!self.directory.is_empty()
                 && (!std::path::Path::new(&self.directory).is_absolute()
                     || self.directory.starts_with("\\\\")))

@@ -178,6 +178,7 @@ pub fn create_job(id: &str, input: NewDownload) -> Result<Job, DownloadError> {
             ..Default::default()
         },
         creation: None,
+        media: None,
         options: TransferOptions::default(),
         ranges: Vec::new(),
         transferred: 0,
@@ -264,7 +265,7 @@ pub fn recover(job: &mut Job) {
     job.received = job.durable;
     if matches!(
         job.state,
-        TransferState::Probing | TransferState::Downloading
+        TransferState::Probing | TransferState::Downloading | TransferState::Processing
     ) {
         job.state = TransferState::Paused;
     }
