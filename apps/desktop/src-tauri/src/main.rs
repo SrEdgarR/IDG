@@ -111,6 +111,8 @@ async fn download_command(
                 | Command::Library { .. }
                 | Command::FindRecoverableDownload { .. }
                 | Command::CreateDownload { .. }
+                | Command::InspectMediaManifest { .. }
+                | Command::CreateMediaDownload { .. }
                 | Command::GetCaptureRequests
                 | Command::RejectCapture { .. }
                 | Command::GetAppPreferences
@@ -269,6 +271,28 @@ async fn choose_download_folder(
 }
 
 #[tauri::command]
+async fn choose_ffmpeg_file(
+    app: tauri::AppHandle,
+    window: tauri::Window,
+) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    if window.label() != "main" {
+        return Err("Ventana no autorizada".into());
+    }
+    let (send, receive) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .add_filter("FFmpeg para Windows", &["exe"])
+        .pick_file(move |file| {
+            let _ = send.send(
+                file.and_then(|file| file.into_path().ok())
+                    .map(|path| path.to_string_lossy().into_owned()),
+            );
+        });
+    receive.await.map_err(|_| "No se pudo elegir FFmpeg".into())
+}
+
+#[tauri::command]
 async fn reveal_download(job_id: String, window: tauri::Window) -> Result<(), String> {
     if window.label() != "main" {
         return Err("Ventana no autorizada".into());
@@ -352,6 +376,7 @@ fn main() {
             shutdown_runtime,
             download_command,
             choose_download_folder,
+            choose_ffmpeg_file,
             reveal_download,
             start_runtime,
             default_download_directory,

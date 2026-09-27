@@ -1887,6 +1887,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "idg-media"
+version = "0.1.0"
+dependencies = [
+ "idg-core",
+ "idg-protocol",
+ "quick-xml",
+ "reqwest",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "idg-native-host"
 version = "0.1.0"
 dependencies = [
@@ -1923,6 +1938,7 @@ name = "idg-runtime"
 version = "0.1.0"
 dependencies = [
  "idg-core",
+ "idg-media",
  "idg-platform-windows",
  "idg-protocol",
  "idg-storage",

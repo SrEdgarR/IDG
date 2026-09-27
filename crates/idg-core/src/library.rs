@@ -66,6 +66,7 @@ pub fn state_label(state: &TransferState) -> &'static str {
         TransferState::Queued => "En cola",
         TransferState::Probing => "Comprobando",
         TransferState::Downloading => "Descargando",
+        TransferState::Processing => "Procesando",
         TransferState::Paused => "Pausadas",
         TransferState::Verifying | TransferState::PublishPending => "Procesando",
         TransferState::Completed => "Completadas",

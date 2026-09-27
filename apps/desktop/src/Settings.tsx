@@ -266,6 +266,36 @@ export function Settings({
                 la futura instalación.
               </p>
             </>
+          ) : backend && preferences && section === "Video y audio" ? (
+            <>
+              <label className="field">
+                Ejecutable FFmpeg
+                <input readOnly value={preferences.media_ffmpeg_path ?? "No configurado"} />
+              </label>
+              <button
+                type="button"
+                onClick={() =>
+                  void backend
+                    .chooseFfmpeg()
+                    .then((path) => {
+                      if (path) save({ media_ffmpeg_path: path });
+                    })
+                    .catch((e) => setError(String(e)))
+                }
+              >
+                Elegir ffmpeg.exe…
+              </button>
+              <p className="muted">
+                Se necesita ffprobe.exe junto al ejecutable. IDG no descarga ni
+                incluye FFmpeg; revisa la versión, el origen y la licencia del
+                paquete antes de seleccionarlo.
+              </p>
+              <p>
+                Los manifiestos aceptados, la calidad y las pistas se muestran
+                al analizar cada enlace. MP4 y Matroska usan copia de streams;
+                la conversión de audio se elige por trabajo.
+              </p>
+            </>
           ) : backend && preferences && section === "Navegadores" ? (
             <>
               <BrowserStatus />

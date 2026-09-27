@@ -21,10 +21,11 @@ export function supports(row: DownloadView, action: RowAction) {
   if (action === "folder") return true;
   if (action === "organize") return true;
   if (action === "pause")
-    return ["downloading", "probing", "queued"].includes(state);
+    return ["downloading", "processing", "probing", "queued"].includes(state);
   if (action === "cancel")
     return [
       "downloading",
+      "processing",
       "probing",
       "queued",
       "deferred",
@@ -222,7 +223,7 @@ export function DownloadList({
                     ) / 100,
                   );
           const primary: RowAction =
-            row.state === "Downloading" || row.state === "Probing"
+            row.state === "Downloading" || row.state === "Processing" || row.state === "Probing"
               ? "pause"
               : row.state === "Completed"
                 ? "folder"
@@ -292,7 +293,7 @@ export function DownloadList({
                 </span>
                 <button
                   className="row-action"
-                  aria-label={`${row.state === "Downloading" ? "Pausar" : row.state === "Completed" ? "Abrir carpeta" : row.snapshot?.state === "publish_pending" ? "Reintentar publicación" : row.state === "Failed" ? "Reintentar" : row.state === "Paused" ? "Reanudar" : "Iniciar"} ${row.name}`}
+                  aria-label={`${row.state === "Downloading" || row.state === "Processing" || row.state === "Probing" ? "Pausar" : row.state === "Completed" ? "Abrir carpeta" : row.snapshot?.state === "publish_pending" ? "Reintentar publicación" : row.state === "Failed" ? "Reintentar" : row.state === "Paused" ? "Reanudar" : "Iniciar"} ${row.name}`}
                   title={
                     onAction
                       ? "Solicitar al motor; el estado cambia al confirmarse"

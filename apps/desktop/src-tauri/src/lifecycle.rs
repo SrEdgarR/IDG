@@ -421,6 +421,7 @@ pub async fn request_exit(app: &tauri::AppHandle, ask: bool) {
                     if matches!(
                         j.state,
                         TransferState::Downloading
+                            | TransferState::Processing
                             | TransferState::Probing
                             | TransferState::Verifying
                             | TransferState::PublishPending
@@ -609,7 +610,10 @@ async fn tray_batch(pause: bool) -> Result<(), String> {
             let applicable = if pause {
                 matches!(
                     job.state,
-                    TransferState::Downloading | TransferState::Probing | TransferState::Queued
+                    TransferState::Downloading
+                        | TransferState::Processing
+                        | TransferState::Probing
+                        | TransferState::Queued
                 )
             } else {
                 job.state == TransferState::Paused

@@ -43,6 +43,35 @@ export const desktop = {
   },
   reveal: (jobId: string) => invoke<void>("reveal_download", { jobId }),
   chooseFolder: () => invoke<string | null>("choose_download_folder"),
+  chooseFfmpeg: () => invoke<string | null>("choose_ffmpeg_file"),
+  inspectMedia: async (url: string) => {
+    const result = await execute({ inspect_media_manifest: { url } });
+    if (result.kind !== "media_plan")
+      throw new Error("No se pudo analizar el manifiesto multimedia.");
+    return result.plan;
+  },
+  addMedia: (
+    id: string,
+    draft: {
+      input: NewDownload;
+      options: TransferOptions;
+      category: string;
+      start: StartPolicy;
+      queue_id: string;
+      apply_rules: boolean;
+      rule_overrides: string[];
+      context: string;
+      private: boolean;
+    },
+    fingerprint: string,
+    selection: import("../../../packages/shared-types/protocol").MediaSelection,
+  ) =>
+    execute(
+      {
+        create_media_download: { draft, fingerprint, selection },
+      },
+      id,
+    ),
   add: (
     id: string,
     input: NewDownload,

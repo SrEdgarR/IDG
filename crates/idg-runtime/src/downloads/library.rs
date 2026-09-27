@@ -142,7 +142,10 @@ impl Downloads {
                 inner.jobs.get(id).map(|j| match operation {
                     BulkAction::Pause => matches!(
                         j.state,
-                        TransferState::Downloading | TransferState::Probing | TransferState::Queued
+                        TransferState::Downloading
+                            | TransferState::Processing
+                            | TransferState::Probing
+                            | TransferState::Queued
                     ),
                     BulkAction::Resume => matches!(
                         j.state,
